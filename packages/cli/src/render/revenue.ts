@@ -16,7 +16,7 @@
 import { formatInr, formatInrCompact } from '../money.js';
 import type { CapacityPoint, Evaluation } from '../revenue/evaluate.js';
 import type { StressReport } from '../revenue/stress.js';
-import { note, padVisible, table, truncate, visibleWidth } from '../ui/kit.js';
+import { note, padVisible, table, truncate, visibleWidth, plural } from '../ui/kit.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
@@ -188,7 +188,7 @@ function describe(record: RiskRecord): string {
   if (record.kind === 'checkout') {
     return `abandoned at ${record.drop_off_stage}`;
   }
-  return `${record.days_overdue}d overdue${record.broken_promises ? ` · ${record.broken_promises} broken promise(s)` : ''}${
+  return `${record.days_overdue}d overdue${record.broken_promises ? ` · ${plural(record.broken_promises, 'broken promise')}` : ''}${
     record.promise_to_pay_at ? ' · PTP on file' : ''
   }`;
 }

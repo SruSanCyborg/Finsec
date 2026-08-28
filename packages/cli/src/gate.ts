@@ -14,6 +14,7 @@
 
 import { ExitCode, meetsThreshold } from './domain.js';
 import type { ExitCodeValue, FailOn, Finding, Severity } from './domain.js';
+import { plural } from './ui/kit.js';
 
 /** Server-side quality-gate policy, as stored in the `policies` table. */
 export interface Policy {
@@ -103,14 +104,14 @@ export function evaluateGate(input: GateInput): GateResult {
     if (policy.fail_on_severity) {
       const overPolicyBar = active.filter((f) => meetsThreshold(f.severity, policy.fail_on_severity!));
       if (overPolicyBar.length > 0 && triggering.length === 0) {
-        reasons.push(`policy: ${overPolicyBar.length} finding(s) at or above ${policy.fail_on_severity}`);
+        reasons.push(`policy: ${plural(overPolicyBar.length, 'finding')} at or above ${policy.fail_on_severity}`);
       }
     }
 
     if (policy.require_no_verified_secrets) {
       const live = active.filter((f) => f.validity === 'verified_live');
       if (live.length > 0 && failOn !== 'verified-secrets') {
-        reasons.push(`policy: ${live.length} verified-live secret(s)`);
+        reasons.push(`policy: ${plural(live.length, 'verified-live secret')}`);
       }
     }
 

@@ -21,6 +21,7 @@ import { SEVERITY_ORDER } from '../domain.js';
 import type { Finding, Severity } from '../domain.js';
 import type { GateResult } from '../gate.js';
 import type { ScanOutcome } from '../ui/ScanView.js';
+import { plural } from '../ui/kit.js';
 
 // Design tokens, duplicated as ANSI because this renderer writes strings rather
 // than Ink elements. Kept in sync with ui/theme.ts by hand — there are five.
@@ -396,7 +397,7 @@ export function renderPlainReport({
   }
 
   if (outcome.errors.length > 0) {
-    lines.push(` ${paint('Skipped'.padEnd(11), DIM, color)}${paint(`${outcome.errors.length} file(s) unparsed`, DIM, color)}`);
+    lines.push(` ${paint('Skipped'.padEnd(11), DIM, color)}${paint(`${plural(outcome.errors.length, 'file')} unparsed`, DIM, color)}`);
   }
 
   // Say plainly what was examined and where the findings came from. Without

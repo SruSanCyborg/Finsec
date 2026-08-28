@@ -283,3 +283,17 @@ export function toAscii(text: string): string {
 export function asciiRequested(env: NodeJS.ProcessEnv = process.env): boolean {
   return env.SIRIUS_ASCII === '1' || env.SIRIUS_ASCII === 'true';
 }
+
+/**
+ * `1 finding`, `6 findings` — never `6 finding(s)`.
+ *
+ * The `(s)` spelling was in a dozen places, and it is the one piece of writing
+ * in the output that admits nobody looked at the sentence. The prose everywhere
+ * else in this tool is careful; this undercut it for the sake of a branch.
+ *
+ * Irregular plurals are passed explicitly rather than guessed, because guessing
+ * gets `entrys` and there is no rule that would not.
+ */
+export function plural(count: number, one: string, many = `${one}s`): string {
+  return `${count} ${count === 1 ? one : many}`;
+}

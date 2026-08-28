@@ -28,7 +28,7 @@ import { renderFinding, renderFindingDetail, renderFindingList, renderPlainRepor
 import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
-import { asciiRequested, toAscii } from '../ui/kit.js';
+import { asciiRequested, plural, toAscii } from '../ui/kit.js';
 import { ScanView, countBySeverity } from '../ui/ScanView.js';
 import { detectCapabilities, glyphsFor } from '../ui/theme.js';
 import type { ScanOutcome } from '../ui/ScanView.js';
@@ -434,7 +434,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     }
     if (policy.suppressed.length > 0) {
       const rules = [...new Set(policy.suppressed.map((s) => s.rule_id))].join(', ');
-      process.stdout.write(` ${'Suppressed'.padEnd(11)}${policy.suppressed.length} finding(s) — ${rules}\n`);
+      process.stdout.write(` ${'Suppressed'.padEnd(11)}${plural(policy.suppressed.length, 'finding')} — ${rules}\n`);
     }
     for (const entry of policy.expired) {
       process.stdout.write(

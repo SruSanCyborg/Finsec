@@ -1844,3 +1844,14 @@ authority.
 
 The test recomputes the score from the printed terms rather than trusting the
 prose: a worked example that disagrees with the footer is worse than none.
+
+## D-055 — `6 findings`, not `6 finding(s)`
+
+`(s)` appeared in a dozen places: `1 report(s)`, `6 finding(s)`, `1 broken
+promise(s)`, `at most 2 message(s)`. It is the one piece of writing in the
+output that admits nobody read the sentence, and it sat inside prose that is
+otherwise careful enough to distinguish *considered and left alone* from *never
+looked*. A reader who notices it starts wondering what else was not read.
+
+One `plural(count, one, many?)` in `kit.ts`, with irregulars passed explicitly
+rather than guessed — a guess produces `entrys`, and no rule would not.

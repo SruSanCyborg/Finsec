@@ -20,7 +20,7 @@ import type { BankLine, LedgerEntry, LedgerLinks, SettlementLine } from '../reve
 import { reconcile } from '../revenue/reconcile.js';
 import type { Exception, ReconcileResult, Tier } from '../revenue/reconcile.js';
 import { detectCapabilities } from '../ui/theme.js';
-import { note, padVisible, truncate, visibleWidth } from '../ui/kit.js';
+import { note, padVisible, plural, truncate, visibleWidth } from '../ui/kit.js';
 
 interface ReconcileFlags {
   gen?: boolean;
@@ -281,7 +281,7 @@ function render(
     const value = items.reduce((sum, item) => sum + Math.abs(item.amount_paise), 0);
     lines.push(
       `  ${palette.amber(palette.glyph('warn'))} ${palette.bold(kind.replace(/_/g, ' '))}  ` +
-        `${palette.dim(`${items.length} line(s)`)} · ${palette.bold(palette.rupee(value))}`,
+        `${palette.dim(plural(items.length, 'line'))} · ${palette.bold(palette.rupee(value))}`,
     );
     // The next step is a full sentence and belongs wrapped, not spilling past
     // the terminal — it is the part of an exception a person actually acts on.

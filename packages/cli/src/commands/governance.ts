@@ -18,6 +18,7 @@ import { loadConfig, findProjectRoot } from '../config/load.js';
 import { loadLastScan, locateLastScan } from '../session.js';
 import type { LastScan } from '../session.js';
 import { VERSION } from '../branding.js';
+import { padVisible, plural } from '../ui/kit.js';
 
 interface GlobalFlags {
   apiUrl?: string;
@@ -221,7 +222,7 @@ async function localBadge(flags: { markdown?: boolean; output?: string; target?:
   process.stdout.write(`![sirius compliance](${relative})\n\n`);
   process.stdout.write(`<img src="${relative}" alt="sirius compliance" />\n\n`);
   process.stdout.write(
-    `Built from the scan of ${found.cache.scanned_at.slice(0, 10)} — ${found.cache.findings.length} finding(s).\n` +
+    `Built from the scan of ${found.cache.scanned_at.slice(0, 10)} — ${plural(found.cache.findings.length, 'finding')}.\n` +
       `It changes when you re-scan and commit, so it never claims a score for unscanned code.\n`,
   );
 }
@@ -570,7 +571,7 @@ async function localBaseline(
       return;
     }
     const where = baseline.commit_sha ? baseline.commit_sha.slice(0, 12) : 'no commit';
-    process.stdout.write(`${where.padEnd(14)} ${baseline.fingerprints.length} finding(s)  ${baseline.created_at}\n`);
+    process.stdout.write(`${where.padEnd(14)} ${plural(baseline.fingerprints.length, 'finding')}  ${baseline.created_at}\n`);
     process.stdout.write(`${baselinePath(root)}\n`);
     return;
   }
@@ -606,7 +607,7 @@ async function localBaseline(
     `Baseline set${baseline.commit_sha ? ` at ${baseline.commit_sha.slice(0, 12)}` : ''} ` +
       `(${baseline.fingerprints.length} finding${baseline.fingerprints.length === 1 ? '' : 's'})\n`,
   );
-  if (missing > 0) process.stdout.write(`  ${missing} finding(s) had no fingerprint and were skipped\n`);
+  if (missing > 0) process.stdout.write(`  ${plural(missing, 'finding')} had no fingerprint and were skipped\n`);
   process.stdout.write(`  ${baselinePath(found.root)}\n`);
   process.stdout.write('Findings present here now report baseline_state=unchanged.\n');
   process.stdout.write('Gate only on what is new with:  sirius scan . --fail-on new\n');
@@ -693,11 +694,11 @@ export async function runLedger(
   }
 
   if ((subcommand ?? 'show') === 'show') {
-    process.stdout.write(`\n  ${ledger.entries.length} report(s) · root ${ledger.root}\n\n`);
+    process.stdout.write(`\n  ${plural(ledger.entries.length, 'report')} · root ${ledger.root}\n\n`);
     for (const [index, entry] of ledger.entries.entries()) {
       process.stdout.write(
         `  ${String(index + 1).padStart(3)}  ${entry.recorded_at}  ${entry.scan_id.padEnd(22)}` +
-          `${String(entry.findings).padStart(4)} finding(s)  ${entry.digest.slice(0, 16)}…\n`,
+          `${padVisible(plural(entry.findings, 'finding'), 12)} ${entry.digest.slice(0, 16)}…\n`,
       );
     }
     process.stdout.write(`\n  Prove the history with:  sirius ledger verify\n\n`);

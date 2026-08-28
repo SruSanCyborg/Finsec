@@ -12,6 +12,7 @@ import type { AttackPath, Provenance } from '../engine/threat.js';
 import type { Finding, Severity } from '../domain.js';
 import type { RenderOptions } from './plain.js';
 import { wrapText } from '../wrap.js';
+import { plural } from '../ui/kit.js';
 
 const SEVERITY_ANSI: Record<Severity, string> = {
   critical: '\u001b[38;5;203m',
@@ -107,7 +108,7 @@ export function renderThreatReport(
       const where =
         group.length === 1
           ? `${first.finding.file}:${first.finding.line}`
-          : `${group.length} secrets across ${new Set(group.map((g) => g.finding.file)).size} file(s)`;
+          : `${group.length} secrets across ${plural(new Set(group.map((g) => g.finding.file)).size, 'file')}`;
 
       lines.push(
         ` ${paint('in history', DIM, color)} ${paint(where, DIM, color)}`,

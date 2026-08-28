@@ -17,6 +17,7 @@ import { ExitCode } from '../domain.js';
 import { SEVERITY_COLOR, detectCapabilities } from '../ui/theme.js';
 import { VERSION } from '../branding.js';
 import type { Rule } from '../domain.js';
+import { plural } from '../ui/kit.js';
 
 interface RulesFlags {
   category?: string;
@@ -290,7 +291,7 @@ async function validateRule(path: string | undefined, globals: GlobalFlags): Pro
   // itself failing, and a pipeline that cannot tell those apart will treat a
   // typo in a rule file as a broken build agent.
   if (errors.length > 0) {
-    out.write(`\n${errors.length} error(s)${warnings.length > 0 ? `, ${warnings.length} warning(s)` : ''}.\n`);
+    out.write(`\n${plural(errors.length, 'error')}${warnings.length > 0 ? `, ${plural(warnings.length, 'warning')}` : ''}.\n`);
     process.exitCode = ExitCode.FINDINGS;
   }
 }

@@ -40,7 +40,7 @@ import {
   withAlternateScreenSuspended,
 } from '../ui/screen.js';
 import { renderWordmark } from '../ui/wordmark.js';
-import { note, truncate } from '../ui/kit.js';
+import { note, plural, truncate } from '../ui/kit.js';
 import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import type { Finding } from '../domain.js';
@@ -489,7 +489,7 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           const open = queue.length - verdicts.size;
 
           append(
-            `triaging ${queue.length} finding(s), ${open} still open — ` +
+            `triaging ${plural(queue.length, 'finding')}, ${open} still open — ` +
               `a accept · d dismiss · s suppress · u undo · j/k move · q done`,
             'note',
           );
