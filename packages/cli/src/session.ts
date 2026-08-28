@@ -42,8 +42,21 @@ export interface CachedFinding {
   validity?: string;
 }
 
+/** The headline numbers, exactly as the scan reported them. */
+export interface CachedSummary {
+  counts: Record<string, number>;
+  money_at_risk_inr: number;
+  /**
+   * Nullable because a hosted scan may not send one. Cached rather than
+   * recomputed: the figure a badge or a signed report shows must be the figure
+   * the developer saw, not one derived later from a subset of the inputs.
+   */
+  compliance_score: number | null;
+  files_scanned: number | null;
+}
+
 export interface LastScan {
-  schema_version: 2;
+  schema_version: 3;
   scan_id: string;
   project_id: string | null;
   scanned_at: string;
@@ -54,6 +67,7 @@ export interface LastScan {
    * while a replayed fixture cannot be fixed at all.
    */
   source?: 'api' | 'local' | 'replay';
+  summary?: CachedSummary;
   findings: CachedFinding[];
 }
 
@@ -64,7 +78,7 @@ export function lastScanPath(root: string): string {
 export function saveLastScan(root: string, scan: Omit<LastScan, 'schema_version' | 'scanned_at'>): void {
   const path = lastScanPath(root);
   const payload: LastScan = {
-    schema_version: 2,
+    schema_version: 3,
     scanned_at: new Date().toISOString(),
     ...scan,
   };
@@ -77,11 +91,13 @@ export function loadLastScan(root: string): LastScan | undefined {
   if (!existsSync(path)) return undefined;
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as LastScan;
-    // A cache from another version is not worth guessing at. A v1 cache in
-    // particular holds only what `fix` needed — no message, no clause
-    // references, no figures — so a report built from it would be silently
-    // stripped of everything that makes it a compliance document.
-    if (parsed.schema_version !== 2) return undefined;
+    // A cache from another version is not worth guessing at. A v1 cache holds
+    // only what `fix` needed — no message, no clause references, no figures —
+    // so a report built from it is silently stripped of everything that makes
+    // it a compliance document. A v2 cache has those but no summary, so the
+    // score a badge would show would have to be invented. Re-scanning is cheap;
+    // publishing a number nobody computed is not.
+    if (parsed.schema_version !== 3) return undefined;
     return parsed;
   } catch {
     // A corrupt cache is a nuisance, not an error — the user can re-scan.

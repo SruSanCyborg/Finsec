@@ -62,6 +62,8 @@ What this means in practice:
 
 **Rule IDs** are `SIR-SEC-NNN`, numbered in blocks of ten by category: `00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain.
 
+**Rulesets** (D-022, decided here — the PRD names them but never defines membership): `p/fintech-core` is the whole catalogue; `p/<category>` is one category. Any other name is an error, never a silent full scan.
+
 **Suppression**, three layers: inline `# sirius-ignore: SIR-SEC-010` (Bandit `# nosec` lineage) · `.siriusignore` path globs · server-side `suppressions` rows with a mandatory `reason` and ISO-8601 `expires_at`.
 
 **`compliance_ref`** is a JSON string array with colon namespacing: `["PCI-DSS:8.6.2","RBI-DPSC","DPDP:8"]`. Use **v4.0** PCI numbers — injection is `6.2.4` (not v3.2.1's `6.5.1`), MFA into the CDE is `8.4.2` (not `8.3.x`), hardcoded keys is `8.6.2`.
@@ -116,17 +118,19 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
-| `rules list\|show` | Done, from the compiled catalogue. `validate`/`test` still need the API |
+| `rules list\|show\|validate` | Done, from the compiled catalogue. `validate` checks the schema, the vocabularies and the clause numbers offline; `test` still needs a rule engine |
 | `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
-| `report` | Done — ed25519-signed JSON, `--verify` gates on 0/1/2 |
+| `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2 |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
 | `triage` | Done both ways — decisions to `.sirius/`, or PATCHed to the API. Driven in a pty |
 | `doctor` | Done — reports against the mode the scan will actually run in, and self-tests the engine |
-| `watch`, `badge`, `explain` | Done |
-| Tests | 363 passing |
+| `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
+| `watch`, `explain` | Done |
+| Tests | 394 passing |
 
-**Where the API is still required:** `rules validate`, `rules test`, `badge`,
-PDF reports. Everything on the demo path runs with no backend at all.
+**Where the API is still required:** `rules test` (needs a YAML rule
+interpreter, not just an endpoint) and PDF reports. Everything else runs with no
+backend at all.
 
 **"Implemented" is not "works".** Seven features were listed Done here while
 being unreachable in the configuration everything defaults to — `fix` rejected

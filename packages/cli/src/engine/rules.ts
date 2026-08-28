@@ -575,10 +575,10 @@ export const RULES: Rule[] = [
   missingIdempotency,
 ];
 
-/** Runs every applicable rule over one parsed file. */
-export function runRules(file: ParsedFile): RawFinding[] {
+/** Runs every applicable rule over one parsed file, or just the ones given. */
+export function runRules(file: ParsedFile, rules: readonly Rule[] = RULES): RawFinding[] {
   const findings: RawFinding[] = [];
-  for (const rule of RULES) {
+  for (const rule of rules) {
     try {
       findings.push(...rule.run(file));
     } catch {

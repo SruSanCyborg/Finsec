@@ -150,7 +150,28 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       !flags.sarif &&
       (process.env.SIRIUS_STREAM_PLAIN === '1' || Boolean(process.stdout.isTTY));
 
-    let source: AsyncIterable<WsFrame> = scanDirectory(target, { ignorePatterns: config.exclude });
+    // `rulesets:` was written into every scaffolded sirius.yaml and read by
+    // nobody: the engine ran all twelve rules whatever it said. Narrowing a
+    // scan and getting the full catalogue anyway is a quiet way to mistrust the
+    // config file.
+    const { rulesFor } = await import('../engine/catalog.js');
+    let rules;
+    try {
+      rules = rulesFor(config.rulesets);
+    } catch (failure) {
+      throw new CliError(failure instanceof Error ? failure.message : String(failure), {
+        hint: 'Set `rulesets:` in sirius.yaml, or pass --ruleset.',
+      });
+    }
+
+    if (rules.length < 12 && !machineMode) {
+      process.stderr.write(`note: ${config.rulesets.join(', ')} — ${rules.length} of 12 rules\n`);
+    }
+
+    let source: AsyncIterable<WsFrame> = scanDirectory(target, {
+      ignorePatterns: config.exclude,
+      rules,
+    });
 
     // Probing happens before the finding is rendered, so a live credential is
     // announced on its own line rather than in a footnote after every finding
@@ -403,6 +424,15 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         source: flags.replay ? 'replay' : useLocalEngine ? 'local' : 'api',
         project_id: config.projectId ?? null,
         root,
+        // The headline numbers as this scan reported them, so a badge or a
+        // signed report shows what the developer saw rather than a figure
+        // re-derived later from a subset of the inputs.
+        summary: {
+          counts: outcome.counts as Record<string, number>,
+          money_at_risk_inr: outcome.moneyAtRisk ?? 0,
+          compliance_score: outcome.complianceScore,
+          files_scanned: outcome.filesScanned ?? null,
+        },
         findings: outcome.findings.map(toCached),
       });
     } catch {

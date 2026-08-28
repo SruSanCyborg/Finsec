@@ -50,7 +50,8 @@ function projectTemplate(name: string, projectId: string | undefined): string {
 # Project this repo reports to. Get one with \`sirius login\` or from the dashboard.
 ${projectId ? `project_id: ${projectId}` : '# project_id: 00000000-0000-0000-0000-000000000000'}
 
-# Rulesets to run. p/fintech-core is the full fintech catalogue.
+# Rulesets to run. p/fintech-core is the full catalogue; p/<category> narrows to
+# one — p/secrets, p/injection, p/auth, p/pii, p/crypto, p/ratelimit, p/logging.
 rulesets:
   - ${DEFAULTS.rulesets[0]}
   # - p/secrets
@@ -129,12 +130,16 @@ export async function runInit(flags: InitFlags, globals: GlobalFlags): Promise<v
   process.stdout.write(`Initialized sirius for "${name}"\n`);
   process.stdout.write(`  sirius.yaml\n  .siriusignore\n\n`);
 
-  if (projectId) {
-    process.stdout.write('Next:  sirius scan .\n');
-  } else {
-    // Without a project id `scan` cannot create a scan, so say so now rather
-    // than letting the next command fail.
-    process.stdout.write('Next:  set project_id in sirius.yaml, then  sirius scan .\n');
-    process.stdout.write('       (or run: sirius scan . --project <id>)\n');
+  process.stdout.write('Next:  sirius scan .\n');
+
+  if (!projectId) {
+    // This used to read "set project_id in sirius.yaml, then sirius scan ." —
+    // written when a scan meant a call to the API. It no longer does, and
+    // telling someone to go get an account before their first scan is the
+    // opposite of what this tool should ask for.
+    process.stdout.write(
+      '       Scans run locally. Set project_id later if you want hosted\n' +
+        '       history, policy and the team dashboard.\n',
+    );
   }
 }

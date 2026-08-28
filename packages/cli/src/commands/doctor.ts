@@ -167,7 +167,7 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
       status: 'info',
       label: 'api',
       detail: 'not contacted — nothing here needs it',
-      hint: `\`rules validate\`, \`rules test\`, \`badge\` and PDF reports still do. ${config.apiUrl} is where they would go.`,
+      hint: `\`rules test\` and PDF reports still do. ${config.apiUrl} is where they would go.`,
     });
   }
 

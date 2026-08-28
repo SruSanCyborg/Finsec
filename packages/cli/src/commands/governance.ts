@@ -152,12 +152,19 @@ export async function runReport(
 
 // ---- badge ----------------------------------------------------------------
 
-export async function runBadge(flags: { markdown?: boolean }, globals: GlobalFlags): Promise<void> {
+export async function runBadge(
+  flags: { markdown?: boolean; output?: string; target?: string },
+  globals: GlobalFlags,
+): Promise<void> {
   const { config } = resolved(globals);
-  const projectId = requireProject(config);
+
+  // With no project there is no hosted badge — but there is a score, sitting in
+  // the last scan. Draw it. A README badge is the cheapest thing a security
+  // tool can give a team, and requiring an account for it is backwards.
+  if (!config.projectId) return localBadge(flags);
 
   // The badge endpoint is public, so this is pure string assembly — no request.
-  const url = `${config.apiUrl.replace(/\/+$/, '')}/projects/${projectId}/badge.svg`;
+  const url = `${config.apiUrl.replace(/\/+$/, '')}/projects/${config.projectId}/badge.svg`;
 
   if (flags.markdown === false) {
     process.stdout.write(`${url}\n`);
@@ -167,6 +174,56 @@ export async function runBadge(flags: { markdown?: boolean }, globals: GlobalFla
   process.stdout.write(`${url}\n\n`);
   process.stdout.write(`![sirius compliance](${url})\n\n`);
   process.stdout.write(`<img src="${url}" alt="sirius compliance" />\n`);
+}
+
+/**
+ * Writes an SVG built from the last scan, plus the Shields endpoint payload.
+ *
+ * The file goes next to the code and is committed like any other asset, which
+ * also makes the badge honest in a way a hosted one is not: it changes only
+ * when someone runs a scan and commits the result, so it cannot claim a score
+ * for code that was never scanned.
+ */
+async function localBadge(flags: { markdown?: boolean; output?: string; target?: string }): Promise<void> {
+  const found = locateLastScan(process.cwd(), flags.target);
+  if (!found) {
+    throw new CliError('No scan to build a badge from.', {
+      hint: 'Run `sirius scan .` first, or pass --project <id> for the hosted badge.',
+    });
+  }
+
+  const score = found.cache.summary?.compliance_score ?? null;
+  if (score === null) {
+    throw new CliError('The last scan recorded no compliance score.', {
+      hint: 'Re-run `sirius scan .` — the score is written into .sirius/last-scan.json.',
+    });
+  }
+
+  const { renderBadge, shieldsEndpoint, colorForScore } = await import('../engine/badge.js');
+  const input = { label: 'sirius', message: `${Math.round(score)}/100`, color: colorForScore(score) };
+
+  const svgPath = flags.output
+    ? isAbsolute(flags.output)
+      ? flags.output
+      : resolve(process.cwd(), flags.output)
+    : resolve(found.root, '.sirius', 'badge.svg');
+  const jsonPath = svgPath.replace(/\.svg$/, '') + '.json';
+
+  writeFileSync(svgPath, renderBadge(input), 'utf8');
+  writeFileSync(jsonPath, shieldsEndpoint(input), 'utf8');
+
+  const relative = svgPath.startsWith(found.root) ? svgPath.slice(found.root.length + 1) : svgPath;
+
+  process.stdout.write(`${svgPath}\n`);
+  if (flags.markdown === false) return;
+
+  process.stdout.write(`${jsonPath}  (shields.io endpoint payload)\n\n`);
+  process.stdout.write(`![sirius compliance](${relative})\n\n`);
+  process.stdout.write(`<img src="${relative}" alt="sirius compliance" />\n\n`);
+  process.stdout.write(
+    `Built from the scan of ${found.cache.scanned_at.slice(0, 10)} — ${found.cache.findings.length} finding(s).\n` +
+      `It changes when you re-scan and commit, so it never claims a score for unscanned code.\n`,
+  );
 }
 
 // ---- suppress -------------------------------------------------------------
@@ -331,6 +388,11 @@ async function writeLocalReport(
       findings: cache.findings.length,
       counts,
       money_at_risk_inr: money,
+      // The score the scan reported, not one re-derived here. A compliance
+      // report that omits the compliance score is an odd document, and one that
+      // recomputes it is a second opinion nobody asked for.
+      compliance_score: cache.summary?.compliance_score ?? null,
+      files_scanned: cache.summary?.files_scanned ?? null,
     },
     // The clauses are why this is a compliance report and not a bug list.
     compliance_refs: [...new Set(cache.findings.flatMap((f) => f.compliance_ref ?? []))].sort(),

@@ -165,8 +165,10 @@ export function buildProgram(): Command {
 
   program
     .command('badge')
-    .description('Print the compliance badge URL and embed snippets')
-    .option('--no-markdown', 'print only the URL')
+    .description('Write the compliance badge, or print the hosted URL')
+    .option('--no-markdown', 'print only the path or URL')
+    .option('--output <file>', 'where to write the SVG (default .sirius/badge.svg)')
+    .option('--target <dir>', 'the directory that was scanned, when it was not this one')
     .action(async (options: Record<string, unknown>, command: Command) => {
       const { runBadge } = await import('./commands/governance.js');
       await runBadge(options, command.parent?.opts() ?? {});
@@ -263,7 +265,27 @@ function assertWorkingDirectory(): void {
   }
 }
 
+/**
+ * `sirius rules list | head -1` used to end in a Node stack trace.
+ *
+ * When the reader closes the pipe early — `head`, `grep -q`, quitting `less` —
+ * the next write fails with EPIPE, and an unhandled stream error takes the
+ * process down loudly. Every command here writes more than a screenful of
+ * something, so this was reachable from almost all of them. Reading part of the
+ * output is a normal thing to do; stop writing and leave quietly, which is what
+ * every other CLI in the pipeline does.
+ */
+function exitQuietlyOnClosedPipe(): void {
+  for (const stream of [process.stdout, process.stderr]) {
+    stream.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code === 'EPIPE') process.exit(0);
+      throw error;
+    });
+  }
+}
+
 export async function main(argv: string[] = process.argv): Promise<void> {
+  exitQuietlyOnClosedPipe();
   assertWorkingDirectory();
 
   const program = buildProgram();

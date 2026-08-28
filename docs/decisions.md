@@ -510,6 +510,64 @@ nothing is configured also took the command from 13s to 0.08s.
 
 ---
 
+## D-022 — Authoring a rule, and publishing a badge, without a backend
+
+The three commands left over from the sweep, plus the config knob that turned
+out to be wired to nothing.
+
+**`rules validate` posted the file to the API** to be told whether
+`severity: hgih` is a typo. Almost everything worth checking about a rule is a
+convention this repo owns: the `SIR-SEC-NNN` numbering blocks, the category and
+severity vocabularies, the fix-action list, and the PCI-DSS clause numbers v4.0
+retired. `engine/rule-schema.ts` checks those here, in the same second the file
+is saved. Two checks are not conventions but safety: a `validity_check` must be
+`GET`/`HEAD` over TLS, because it calls a third party with someone's leaked
+credential and a `POST` could move money with the key it is testing.
+
+Invalid now exits **1**, not 2. A rule file with a typo is the answer to the
+question asked, the same way findings are; exit 2 is the CLI itself failing, and
+a pipeline that cannot tell those apart treats a typo as a broken agent. The
+output states what was checked and what was not: whether a pattern matches what
+its author thinks is semantics, and that still needs a rule engine. When a
+project is configured the server is asked as well and its errors are merged.
+
+**`badge` required an account** for the one artefact a README wants. It now
+draws the SVG from the last scan's score — Shields' flat style, written out by
+hand because a badge is forty lines of markup, plus the Shields endpoint JSON so
+a team can get Shields' own rendering of the same three fields. A committed
+badge is also more honest than a hosted one: it changes only when someone scans
+and commits, so it cannot claim a score for code that was never scanned.
+
+That needed the score, which the cache did not hold — so `schema_version` is now
+**3** with a `summary` block: counts, money, compliance score, files scanned, as
+the scan reported them. Cached rather than recomputed, so the badge and the
+signed report show the figure the developer saw. Which also closed a hole: the
+signed compliance report had no compliance score in it at all.
+
+**`rulesets:` was scaffolded into every `sirius.yaml` and read by nobody.** The
+local engine ran all twelve rules whatever it said, and `--ruleset` was accepted
+and dropped on the floor by both `scan` and `rules list` (literally
+`(!flags.ruleset || true)`). It errs toward noise rather than silence, which is
+why no missing finding ever caught it. The PRD names `p/fintech-core` and
+`p/secrets` without defining membership, so: the core set is everything, and
+`p/<category>` selects one category. An unknown name is an error listing what
+exists — a ruleset that quietly means "all rules" is how a team believes it
+narrowed a scan it did not.
+
+**`sirius init` no longer tells you to go get a project id** before your first
+scan. Scans run locally; hosted history is a later choice.
+
+**And one found by the sweep itself: `sirius rules list | head -1` ended in a
+Node stack trace.** The reader closes the pipe, the next write fails with
+EPIPE, and an unhandled stream error takes the process down loudly — reachable
+from nearly every command, since they all write more than one line. Handled at
+the entry point now. The test drives a real shell pipeline, because building
+one inside the test process proves nothing: the test process then holds the
+CLI's stdout open and EPIPE never happens. It was written passing against the
+broken code before it was written passing against the fix.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch
