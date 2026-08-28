@@ -27,15 +27,15 @@ const ahead = (d: number) => new Date(now + d * 86_400_000).toISOString();
 // ── Team ─────────────────────────────────────────────────────────────────────
 
 export const seedMembers: TeamMember[] = [
-  { id: "u_1", name: "Aarav Mehta", email: "demo@siriusline.io", role: "owner", color: "#22d3ee", mfa: true, title: "Founder / CTO", phone: "+91 98200 11223", status: "active", joinedAt: daysAgo(320), onCall: false },
-  { id: "u_2", name: "Priya Sharma", email: "priya@siriusline.io", role: "admin", color: "#a78bfa", mfa: true, title: "Head of Security", phone: "+91 98200 44556", status: "active", joinedAt: daysAgo(210), onCall: true },
-  { id: "u_3", name: "Rahul Iyer", email: "rahul@siriusline.io", role: "analyst", color: "#34d399", mfa: true, title: "Security Analyst", phone: "+91 90040 77889", status: "active", joinedAt: daysAgo(140), onCall: true },
-  { id: "u_4", name: "Sneha Rao", email: "sneha@siriusline.io", role: "member", color: "#f472b6", mfa: false, title: "Senior Engineer, Payments", phone: "+91 99860 33221", status: "active", joinedAt: daysAgo(98), onCall: false },
+  { id: "u_1", name: "Aarav Mehta", email: "demo@sirius.dev", role: "owner", color: "#22d3ee", mfa: true, title: "Founder / CTO", phone: "+91 98200 11223", status: "active", joinedAt: daysAgo(320), onCall: false },
+  { id: "u_2", name: "Priya Sharma", email: "priya@sirius.dev", role: "admin", color: "#a78bfa", mfa: true, title: "Head of Security", phone: "+91 98200 44556", status: "active", joinedAt: daysAgo(210), onCall: true },
+  { id: "u_3", name: "Rahul Iyer", email: "rahul@sirius.dev", role: "analyst", color: "#34d399", mfa: true, title: "Security Analyst", phone: "+91 90040 77889", status: "active", joinedAt: daysAgo(140), onCall: true },
+  { id: "u_4", name: "Sneha Rao", email: "sneha@sirius.dev", role: "member", color: "#f472b6", mfa: false, title: "Senior Engineer, Payments", phone: "+91 99860 33221", status: "active", joinedAt: daysAgo(98), onCall: false },
   { id: "u_5", name: "Vikram Singh", email: "vikram@acmecapital.io", role: "viewer", color: "#fbbf24", mfa: false, title: "Compliance Consultant", status: "active", joinedAt: daysAgo(60), onCall: false },
 ];
 
 export const seedInvites: Invite[] = [
-  { id: "inv_1", email: "kavya@siriusline.io", role: "member", invitedBy: "Aarav Mehta", invitedAt: daysAgo(2), status: "pending" },
+  { id: "inv_1", email: "kavya@sirius.dev", role: "member", invitedBy: "Aarav Mehta", invitedAt: daysAgo(2), status: "pending" },
   { id: "inv_2", email: "devops@acmecapital.io", role: "viewer", invitedBy: "Priya Sharma", invitedAt: daysAgo(9), status: "pending" },
 ];
 
@@ -326,7 +326,7 @@ export const seedAlerts: CallAlert[] = [
     acknowledgedAt: ago(211),
     findingKey: "SIR-SAS-0001",
     transcript: [
-      "SIRIUS: This is a Sirius Line severity one alert.",
+      "SIRIUS: This is a Sirius severity one alert.",
       "SIRIUS: SQL injection detected in payments API, endpoint slash v2 slash refund.",
       "SIRIUS: Estimated money at risk, one point eight five million dollars.",
       "Priya: Acknowledged. Starting incident bridge now.",
@@ -362,7 +362,7 @@ export const seedAlerts: CallAlert[] = [
     acknowledgedAt: ago(88),
     findingKey: "SIR-SEC-0002",
     transcript: [
-      "SIRIUS: Sirius Line alert. AWS secret key committed to payments repository.",
+      "SIRIUS: Sirius alert. AWS secret key committed to payments repository.",
       "Sneha: Acknowledged — rotating the key.",
     ],
     durationSec: 31,
@@ -389,7 +389,7 @@ export const seedAudit: AuditEvent[] = [
   { id: "au_2", at: ago(47), actor: "Priya Sharma", action: "finding.status", target: "SIR-SAS-0003 → in_progress" },
   { id: "au_3", at: ago(96), actor: "Aarav Mehta", action: "scan.start", target: "Drift watch · prod-use1" },
   { id: "au_4", at: ago(150), actor: "Sneha Rao", action: "finding.acknowledge", target: "SIR-SEC-0002 via voice call" },
-  { id: "au_5", at: daysAgo(2), actor: "Aarav Mehta", action: "team.invite", target: "kavya@siriusline.io as member" },
+  { id: "au_5", at: daysAgo(2), actor: "Aarav Mehta", action: "team.invite", target: "kavya@sirius.dev as member" },
   { id: "au_6", at: daysAgo(2), actor: "Priya Sharma", action: "policy.update", target: "Secrets findings page owners immediately" },
   { id: "au_7", at: daysAgo(3), actor: "system", action: "report.generate", target: "Board pack · August" },
   { id: "au_8", at: daysAgo(4), actor: "Rahul Iyer", action: "suppression.add", target: "SIR-CON-0015 (45m session)" },
@@ -437,7 +437,7 @@ export const seedNotifications: Notification[] = [
   { id: "n_1", at: ago(26), title: "High finding on auth-service", body: "OTP brute-force window detected — owner called.", kind: "alert", read: false },
   { id: "n_2", at: ago(176), title: "Critical drift on ledger-db", body: "Security group opened to 0.0.0.0/0:5432. Escalation call placed.", kind: "alert", read: false },
   { id: "n_3", at: ago(712), title: "Nightly scan completed", body: "11 findings · 4 critical · money at risk $4.7M", kind: "scan", read: false },
-  { id: "n_4", at: daysAgo(2), title: "Invite sent", body: "kavya@siriusline.io invited as Developer.", kind: "team", read: true },
+  { id: "n_4", at: daysAgo(2), title: "Invite sent", body: "kavya@sirius.dev invited as Developer.", kind: "team", read: true },
   { id: "n_5", at: daysAgo(3), title: "Report ready", body: "Board pack · August generated.", kind: "system", read: true },
   { id: "n_6", at: daysAgo(5), title: "New API key", body: "ci-portal created with scans:write, findings:read.", kind: "system", read: true },
 ];

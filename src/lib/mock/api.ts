@@ -440,7 +440,7 @@ export const mockApi = {
         status: "ringing",
         triggeredAt: new Date().toISOString(),
         findingKey,
-        transcript: [`SIRIUS: Sirius Line alert. ${title}.`, "SIRIUS: Press one to acknowledge."],
+        transcript: [`SIRIUS: Sirius alert. ${title}.`, "SIRIUS: Press one to acknowledge."],
         durationSec: 0,
       };
       mutate((d) => d.alerts.unshift(al));
@@ -470,7 +470,7 @@ export const mockApi = {
         status: "ringing",
         triggeredAt: new Date().toISOString(),
         findingKey: input.findingKey,
-        transcript: [`SIRIUS: This is a Sirius Line ${input.severity} alert. ${input.title}.`, "SIRIUS: Press one to acknowledge."],
+        transcript: [`SIRIUS: This is a Sirius ${input.severity} alert. ${input.title}.`, "SIRIUS: Press one to acknowledge."],
         durationSec: 0,
       };
       mutate((d) => d.alerts.unshift(al));
@@ -602,6 +602,13 @@ export const mockApi = {
       await wait();
       resetDB();
       audit("workspace.reset", "demo data regenerated", by);
+    },
+  },
+
+  // ── LIVE EVENTS (mock: no-op — mock scans drive the stream directly) ──────
+  live: {
+    subscribe() {
+      return () => {};
     },
   },
 

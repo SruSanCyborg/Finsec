@@ -54,7 +54,7 @@ export default function ApiKeysPage() {
     <div>
       <PageHeader
         title="API keys"
-        subtitle="Programmatic access to the Sirius Line Core API — scoped, expiring, revocable"
+        subtitle="Programmatic access to the Sirius Core API — scoped, expiring, revocable"
         actions={
           manage && (
             <Button onClick={() => setModal(true)}>

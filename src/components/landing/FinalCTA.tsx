@@ -95,7 +95,7 @@ export default function FinalCTA() {
         </motion.div>
 
         <p className="mt-10 font-mono text-[10px] uppercase tracking-[0.18em] text-zinc-600">
-          Sirius Line / Security for autonomous financial agents / 2026
+          Sirius / Security for autonomous financial agents / 2026
         </p>
       </div>
     </section>

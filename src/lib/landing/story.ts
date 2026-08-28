@@ -52,7 +52,7 @@ export const CHAPTERS: Chapter[] = [
     marker: "01 / INTENT",
     eyebrow: "The agent acts",
     title: "A decision is generated.",
-    body: "TreasuryBot intends to transfer ₹18,50,000 to a new counterparty. The instruction is valid. The intent is clear. That is where Sirius Line begins.",
+    body: "TreasuryBot intends to transfer ₹18,50,000 to a new counterparty. The instruction is valid. The intent is clear. That is where Sirius begins.",
     risk: 0.25,
   },
   {
@@ -84,7 +84,7 @@ export const CHAPTERS: Chapter[] = [
     marker: "05 / DECISION",
     eyebrow: "Risk determines autonomy",
     title: "High risk is where autonomy stops.",
-    body: "The path breaks. The transaction is contained. Sirius Line blocks the action and preserves the evidence behind the decision.",
+    body: "The path breaks. The transaction is contained. Sirius blocks the action and preserves the evidence behind the decision.",
     risk: 1,
   },
   {
@@ -100,7 +100,7 @@ export const CHAPTERS: Chapter[] = [
     marker: "07 / RESOLUTION",
     eyebrow: "Selective intervention",
     title: "Safe actions keep moving.",
-    body: "The incident is acknowledged and resolved. Sirius Line does not block everything — it intervenes exactly where it should.",
+    body: "The incident is acknowledged and resolved. Sirius does not block everything — it intervenes exactly where it should.",
     risk: 0.3,
   },
   {

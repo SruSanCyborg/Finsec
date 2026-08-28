@@ -21,15 +21,18 @@ async def seed() -> None:
         TENANT_ID,
     )
     await db.execute(
-        """INSERT INTO projects (id, tenant_id, name) VALUES ($1,$2,'Sirius Line Demo')
+        """INSERT INTO projects (id, tenant_id, name) VALUES ($1,$2,'Sirius Demo')
            ON CONFLICT (id) DO NOTHING""",
         SIRIUS_PROJECT_ID,
         TENANT_ID,
     )
+    # Remove the legacy pre-rename demo account (old domain) if present.
+    await db.execute("DELETE FROM users WHERE email = 'demo@siriusline.io'")
     await db.execute(
         """INSERT INTO users (id, tenant_id, email, name, role, mfa)
-           VALUES ($1,$2,'demo@siriusline.io','Aarav Mehta','owner',FALSE)
-           ON CONFLICT (id) DO NOTHING""",
+           VALUES ($1,$2,'demo@sirius.dev','Aarav Mehta','owner',FALSE)
+           ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name, role = EXCLUDED.role
+           RETURNING id""",
         DEMO_USER_ID,
         TENANT_ID,
     )

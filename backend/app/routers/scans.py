@@ -87,8 +87,12 @@ async def create_scan(
     scan_id = str(uuid.uuid4())
     now = datetime.now(timezone.utc)
 
-    # Resolve target: explicit path, else a git clone (unsupported in demo), else CWD.
-    target = body.target or os.getcwd()
+    # Resolve target: explicit path, else the sample repo when present, else CWD.
+    target = body.target
+    if not target:
+        repo_root = Path(__file__).resolve().parents[3]  # backend/app/routers → repo root
+        sample = repo_root / "sample-repo"
+        target = str(sample) if sample.is_dir() else os.getcwd()
 
     await db.execute(
         """INSERT INTO scans (id, project_id, status, source, trigger, git_ref, commit_sha,
@@ -118,9 +122,110 @@ async def create_scan(
     return _row_to_scan(row)
 
 
+@router.post("/ingest", status_code=201)
+async def ingest_scan(
+    body: dict,
+    project_id: str = Depends(get_current_project_id),
+) -> Scan:
+    """Accept pre-computed scan results (from the CLI's local engine) and store
+    them in Neon. The CLI pushes its local report here; the web reads the same
+    rows. Body: { target?, rulesets?, findings: [...], compliance_score, money_at_risk_inr, counts, exit_code }
+    """
+    from ..core import events
+
+    findings_in = body.get("findings", [])
+    scan_id = str(uuid.uuid4())
+    now = datetime.now(timezone.utc)
+    counts = body.get("counts") or {}
+    score = body.get("compliance_score")
+    money = body.get("money_at_risk_inr", 0)
+    exit_code = body.get("exit_code", 0)
+    source = body.get("source", "inline")
+    rulesets = body.get("rulesets") or ["p/fintech-core"]
+    target = body.get("target", "cli local scan")
+
+    await db.execute(
+        """INSERT INTO scans (id, project_id, status, source, trigger, rulesets,
+                              compliance_score, money_at_risk_inr, exit_code,
+                              created_at, started_at, finished_at)
+           VALUES ($1,$2,'completed',$3,'ci',$4,$5,$6,$7,$8,$8,$8)""",
+        scan_id,
+        project_id,
+        source,
+        rulesets,
+        score,
+        money,
+        exit_code,
+        now,
+    )
+
+    await events.broadcast(scan_id, {
+        "type": "scan.started", "scan_id": scan_id, "total_files": len({f.get("file") for f in findings_in}),
+        "ts": now.isoformat(),
+    })
+
+    for f in findings_in:
+        finding_id = str(uuid.uuid4())
+        rule_id = f.get("rule_id", "SIR-SEC-000")
+        category = f.get("category", "logging")
+        if category not in ("secrets", "auth", "injection", "pii", "crypto", "logging", "ratelimit", "supplychain"):
+            category = "logging"
+        await db.execute(
+            """INSERT INTO findings (id, scan_id, file, line, end_line, col, severity, rule_id,
+                                     category, compliance_ref, message, snippet, fingerprint,
+                                     baseline_state, validity, money_at_risk_inr, suppressed,
+                                     triage_state, taint, fix_action)
+               VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
+            finding_id,
+            scan_id,
+            f.get("file", ""),
+            f.get("line", 0),
+            f.get("end_line"),
+            f.get("col"),
+            f.get("severity", "medium"),
+            rule_id,
+            category,
+            json.dumps(f.get("compliance_ref", [])),
+            f.get("message", rule_id),
+            f.get("snippet"),
+            f.get("fingerprint") or "",
+            f.get("baseline_state", "new"),
+            f.get("validity", "unknown"),
+            f.get("money_at_risk_inr", 0),
+            False,
+            "open",
+            f.get("taint"),
+            f.get("fix_action"),
+        )
+        row = await db.fetchrow("SELECT * FROM findings WHERE id = $1", finding_id)
+        await events.broadcast(scan_id, {
+            "type": "finding",
+            "finding": _finding_row_to_schema(row).model_dump(),
+        })
+
+    await events.broadcast(scan_id, {
+        "type": "scan.completed",
+        "scan_id": scan_id,
+        "compliance_score": score,
+        "money_at_risk_inr": money,
+        "counts": counts,
+        "exit_code": exit_code,
+        "ts": now.isoformat(),
+    })
+
+    row = await db.fetchrow("SELECT * FROM scans WHERE id = $1", scan_id)
+    return _row_to_scan(row)
+
+
 async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets: list[str]) -> None:
     """Run the local engine and persist findings. Errors are non-fatal per file."""
+    from ..core import events
+
     try:
+        await events.broadcast(scan_id, {
+            "type": "scan.started", "scan_id": scan_id, "total_files": 0,
+            "ts": datetime.now(timezone.utc).isoformat(),
+        })
         result = scanner.scan_directory(target, scan_id, rulesets)
         now = datetime.now(timezone.utc)
 
@@ -131,15 +236,16 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
                 "secrets", "auth", "injection", "pii", "crypto", "logging", "ratelimit", "supplychain"
             ):
                 category = "logging"
+            finding_id = str(uuid.uuid4())
             await db.execute(
                 """INSERT INTO findings (id, scan_id, file, line, end_line, col, severity, rule_id,
                                          category, compliance_ref, message, snippet, fingerprint,
                                          baseline_state, validity, money_at_risk_inr, suppressed,
                                          triage_state, taint, fix_action)
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
-                str(uuid.uuid4()),
+                finding_id,
                 scan_id,
-                f.file if getattr(f, "file", "") else "",
+                f.file or "unknown",
                 f.line,
                 f.end_line,
                 f.col,
@@ -158,6 +264,17 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
                 f.taint,
                 rule.get("fix_action") or f.fix_action,
             )
+            # live event → web console
+            row = await db.fetchrow("SELECT * FROM findings WHERE id = $1", finding_id)
+            await events.broadcast(scan_id, {
+                "type": "finding",
+                "finding": _finding_row_to_schema(row).model_dump(),
+            })
+            await events.broadcast(scan_id, {
+                "type": "progress",
+                "scanned": 1, "total": result.file_count,
+                "findings_so_far": result.findings.index(f) + 1,
+            })
 
         await db.execute(
             """UPDATE scans SET status='completed', compliance_score=$2, money_at_risk_inr=$3,
@@ -169,10 +286,20 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
             result.exit_code,
             now,
         )
+        await events.broadcast(scan_id, {
+            "type": "scan.completed",
+            "scan_id": scan_id,
+            "compliance_score": result.compliance_score,
+            "money_at_risk_inr": result.money_at_risk_inr,
+            "counts": result.counts,
+            "exit_code": result.exit_code,
+            "ts": now.isoformat(),
+        })
     except Exception as exc:  # worker failure → scan failed, not a 500
         await db.execute(
             "UPDATE scans SET status='failed', finished_at=now() WHERE id=$1", scan_id
         )
+        await events.broadcast(scan_id, {"type": "error", "code": "SIRIUS_ERR_SCAN", "detail": str(exc)})
         print(f"scan worker failed: {exc}")
 
 
@@ -242,7 +369,7 @@ async def get_scan_results(
         args.append(False)
 
     rows = await db.fetch(
-        f"SELECT * FROM findings WHERE {' AND '.join(where)} ORDER BY severity DESC, line ASC LIMIT {len(args) + 1}",
+        f"SELECT * FROM findings WHERE {' AND '.join(where)} ORDER BY severity DESC, line ASC LIMIT {limit}",
         *args,
     )
     total = await db.fetchval(
@@ -259,96 +386,79 @@ async def get_scan_results(
 
 @router.websocket("/{scan_id}/stream")
 async def scan_stream(websocket: WebSocket, scan_id: str):
-    """Live findings stream. Accepts ?token= fallback for browsers (D-004)."""
-    token = websocket.query_params.get("token")
-    from ..core.security import _constant_time_equal
-    from ..core.config import SIRIUS_DEMO_API_KEY
+    """Live findings stream via the event hub. Accepts Bearer header or ?token=."""
+    from ..core import events
+    from ..core.ws_auth import ws_authenticate
 
-    if token and not _constant_time_equal(token, SIRIUS_DEMO_API_KEY):
-        await websocket.close(code=4401)
-        return
-    if not token:
+    if not await ws_authenticate(websocket):
         await websocket.close(code=4401)
         return
 
     await websocket.accept()
+    await events.connect(scan_id, websocket)
 
     scan = await db.fetchrow("SELECT * FROM scans WHERE id = $1", scan_id)
     if not scan:
+        await events.disconnect(scan_id, websocket)
         await websocket.close(code=4404)
         return
 
-    # Replay: if already completed, stream the stored findings then complete.
-    if scan["status"] == "completed":
-        findings = await db.fetch(
-            "SELECT * FROM findings WHERE scan_id = $1 ORDER BY line ASC", scan_id
-        )
-        await websocket.send_json({
-            "type": "scan.started",
-            "scan_id": scan_id,
-            "total_files": await db.fetchval(
-                "SELECT count(DISTINCT file) FROM findings WHERE scan_id = $1", scan_id
-            ),
-            "ts": datetime.now(timezone.utc).isoformat(),
-        })
-        for i, f in enumerate(findings):
-            await websocket.send_json({
-                "type": "file.scanning",
-                "path": f["file"],
-                "index": i + 1,
-                "total": len(findings),
-            })
-            await websocket.send_json({
-                "type": "finding",
-                "finding": _finding_row_to_schema(f).model_dump(),
-            })
-            await asyncio.sleep(0.05)
-        await websocket.send_json({
-            "type": "scan.completed",
-            "compliance_score": float(scan["compliance_score"]) if scan["compliance_score"] is not None else None,
-            "money_at_risk_inr": scan["money_at_risk_inr"],
-            "counts": scan["counts"] or {},
-            "exit_code": scan["exit_code"],
-        })
-        await websocket.close()
-        return
-
-    if scan["status"] != "running":
-        await websocket.close(code=4404)
-        return
-
-    # Live: poll for new findings and emit as they land.
-    seen: set[str] = set()
+    # Replay stored findings first (so a late joiner sees history), then keep
+    # the socket open for live events pushed by the worker via the hub. Once a
+    # scan.completed frame is sent, close so clients (the CLI) can exit.
+    completed_sent = False
     try:
-        while True:
+        if scan["status"] == "completed":
             findings = await db.fetch(
-                "SELECT * FROM findings WHERE scan_id = $1 AND id != ALL($2::uuid[]) ORDER BY created_at",
-                scan_id,
-                list(seen),
+                "SELECT * FROM findings WHERE scan_id = $1 ORDER BY line ASC", scan_id
             )
-            for f in findings:
-                seen.add(str(f["id"]))
+            await websocket.send_json({
+                "type": "scan.started",
+                "scan_id": scan_id,
+                "total_files": len({f["file"] for f in findings}),
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+            for i, f in enumerate(findings):
+                await websocket.send_json({
+                    "type": "file.scanning",
+                    "path": f["file"],
+                    "index": i + 1,
+                    "total": len(findings),
+                })
                 await websocket.send_json({
                     "type": "finding",
                     "finding": _finding_row_to_schema(f).model_dump(),
                 })
+                await asyncio.sleep(0.02)
+            await websocket.send_json({
+                "type": "scan.completed",
+                "compliance_score": float(scan["compliance_score"]) if scan["compliance_score"] is not None else None,
+                "money_at_risk_inr": scan["money_at_risk_inr"],
+                "counts": scan["counts"] or {},
+                "exit_code": scan["exit_code"],
+            })
+            completed_sent = True
+
+        # Keep the connection open only while the scan is still running; the
+        # hub relays live worker events. Close once the scan completes.
+        while not completed_sent:
             cur = await db.fetchrow("SELECT * FROM scans WHERE id = $1", scan_id)
-            if cur and cur["status"] == "completed":
-                await websocket.send_json({
-                    "type": "scan.completed",
-                    "compliance_score": float(cur["compliance_score"]) if cur["compliance_score"] is not None else None,
-                    "money_at_risk_inr": cur["money_at_risk_inr"],
-                    "counts": cur["counts"] or {},
-                    "exit_code": cur["exit_code"],
-                })
+            if cur and cur["status"] in ("completed", "failed", "canceled"):
+                if cur["status"] == "completed":
+                    await websocket.send_json({
+                        "type": "scan.completed",
+                        "compliance_score": float(cur["compliance_score"]) if cur["compliance_score"] is not None else None,
+                        "money_at_risk_inr": cur["money_at_risk_inr"],
+                        "counts": cur["counts"] or {},
+                        "exit_code": cur["exit_code"],
+                    })
+                completed_sent = True
                 break
-            if cur and cur["status"] == "failed":
-                await websocket.send_json({"type": "error", "code": "SIRIUS_ERR_SCAN", "detail": "scan failed"})
-                break
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(1)
     except WebSocketDisconnect:
         pass
     finally:
+        await events.disconnect(scan_id, websocket)
         try:
             await websocket.close()
         except Exception:

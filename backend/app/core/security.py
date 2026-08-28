@@ -1,56 +1,29 @@
-"""Auth dependencies — Bearer API key (K) for CLI/CI, session/JWT (S) for Web.
+"""Auth dependencies — legacy bridge.
 
-The wire contract accepts `Authorization: Bearer <key>`. For the demo the key is
-seeded (`demo-key`); production hashes and stores real keys in api_keys.
+Routers previously used `require_api_key` / `get_current_project_id` (Bearer API
+key auth). That logic now lives in core/clerk.py as `get_current_user`, which
+verifies Clerk session tokens first and falls back to API keys. These aliases
+keep the existing routers working without per-route changes.
 """
 
 from __future__ import annotations
 
-import hashlib
 import hmac
-from typing import Optional
 
-from fastapi import Depends, HTTPException, Request, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import Depends
 
-from .config import SIRIUS_DEMO_API_KEY
-from . import db
-
-bearer = HTTPBearer(auto_error=False)
+from .clerk import get_current_user
 
 
 def _constant_time_equal(a: str, b: str) -> bool:
     return hmac.compare_digest(a.encode(), b.encode())
 
 
-async def require_api_key(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer),
-) -> str:
-    """K-auth: a valid Bearer API key. Returns the key's project_id (or None)."""
-    if credentials is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="missing bearer token")
-    key = credentials.credentials
-    if not key:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="empty bearer token")
+# Bearer API key / Clerk session auth → returns the authenticated user dict.
+require_api_key = get_current_user
 
-    # Demo key
-    if _constant_time_equal(key, SIRIUS_DEMO_API_KEY):
-        return "demo"
+# Returns the project id for the authenticated tenant (demo project for now).
+async def get_current_project_id(user: dict = Depends(get_current_user)) -> str:
+    from .config import SIRIUS_PROJECT_ID
 
-    # Seeded keys in api_keys
-    key_hash = hashlib.sha256(key.encode()).hexdigest()
-    row = await db.fetchrow(
-        "SELECT project_id FROM api_keys WHERE key_hash = $1 AND (expires_at IS NULL OR expires_at > now())",
-        key_hash,
-    )
-    if row:
-        return str(row["project_id"])
-    raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid api key")
-
-
-async def get_current_project_id(credentials: str = Depends(require_api_key)) -> str:
-    if credentials == "demo":
-        from .config import SIRIUS_PROJECT_ID
-
-        return SIRIUS_PROJECT_ID
-    return credentials
+    return SIRIUS_PROJECT_ID

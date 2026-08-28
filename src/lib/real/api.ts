@@ -3,12 +3,25 @@
 // The browser NEVER touches Neon directly — it talks to this API only.
 // Maps 1:1 to the mock facade in src/lib/mock/api.ts so pages are unchanged.
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_URL = (
+  process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? ""
+).replace(/\/$/, "");
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL?.replace(/\/$/, "") ??
   API_URL?.replace(/^http/, "ws");
 
 export const REAL = !!API_URL;
+
+/** Public health check — verifies frontend↔backend connectivity. */
+export async function checkHealth(): Promise<boolean> {
+  if (!API_URL) return false;
+  try {
+    const res = await fetch(`${API_URL}/health`, { cache: "no-store" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 const TOKEN_KEY = "sirius.api_token";
 
@@ -53,7 +66,12 @@ async function request<T>(
   path: string,
   init: RequestInit = {},
 ): Promise<T> {
-  const token = getApiToken();
+  // Prefer the Clerk session token (verified server-side); fall back to the
+  // stored API key for demo/CLI mode.
+  let token = getApiToken();
+  const clerkToken = await getClerkToken();
+  if (clerkToken) token = clerkToken;
+
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     ...(init.headers as Record<string, string> | undefined),
@@ -87,9 +105,14 @@ const del = <T>(path: string) => request<T>(path, { method: "DELETE" });
 // ── domain mapping: wire shapes → app shapes ────────────────────────────────
 
 import type {
+  ApiKey,
+  Asset,
+  CallAlert,
   Finding,
   FindingStatus,
+  Integration,
   LogLine,
+  Notification,
   Report,
   Scan,
   ScanType,
@@ -97,6 +120,7 @@ import type {
   TeamMember,
   User,
 } from "@/types";
+import { getClerkToken } from "@/lib/clerk-token";
 
 export interface WireScan {
   id: string;
@@ -209,6 +233,11 @@ export const realApi = {
       const res = await post<{ access_token?: string }>("/auth/token", { email, password });
       const token = res.access_token ?? "demo-jwt";
       setApiToken(token);
+      try {
+        localStorage.setItem("sirius.token", token);
+      } catch {
+        /* noop */
+      }
       return { token, user: { id: "demo", name: "Aarav Mehta", email, role: "owner", color: "#22d3ee", mfa: false } as User };
     },
     async signup(): Promise<{ ok: true }> {
@@ -225,23 +254,62 @@ export const realApi = {
       return { ok: true };
     },
     async me(): Promise<User> {
-      return { id: "demo", name: "Aarav Mehta", email: "demo@siriusline.io", role: "owner", color: "#22d3ee", mfa: false };
+      const r = await get<{ id: string; name?: string; email?: string; role?: string; avatarUrl?: string | null }>("/me");
+      return {
+        id: r.id,
+        name: r.name ?? "",
+        email: r.email ?? "",
+        role: (r.role as User["role"]) ?? "member",
+        color: "#22d3ee",
+        mfa: false,
+        avatarUrl: r.avatarUrl ?? undefined,
+      };
     },
     async logout() {
       clearApiToken();
+      try {
+        localStorage.removeItem("sirius.token");
+      } catch {
+        /* noop */
+      }
     },
   },
 
   team: {
     async members(): Promise<TeamMember[]> {
-      return [{ id: "demo", name: "Aarav Mehta", email: "demo@siriusline.io", role: "owner", color: "#22d3ee", mfa: false, title: "Founder", status: "active", joinedAt: new Date().toISOString(), onCall: false }];
+      const rows = await get<Array<Record<string, unknown>>>("/team");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ""),
+        email: String(r.email ?? ""),
+        role: (r.role as TeamMember["role"]) ?? "member",
+        color: "#22d3ee",
+        mfa: Boolean(r.mfa),
+        title: String(r.title ?? ""),
+        phone: r.phone ? String(r.phone) : undefined,
+        status: (r.status as TeamMember["status"]) ?? "active",
+        joinedAt: r.joinedAt ? String(r.joinedAt) : new Date().toISOString(),
+        onCall: Boolean(r.onCall),
+      }));
     },
     async invites() {
       return [];
     },
-    async invite(): Promise<void> {},
-    async updateMember(): Promise<void> {},
-    async removeMember(): Promise<void> {},
+    async invite(emails: string[], role: TeamMember["role"]): Promise<void> {
+      await post("/team/invite", { emails, role });
+    },
+    async updateMember(id: string, changes: Partial<TeamMember>): Promise<void> {
+      await patch(`/team/${id}`, {
+        role: changes.role,
+        onCall: changes.onCall,
+        status: changes.status,
+        title: changes.title,
+        phone: changes.phone,
+      });
+    },
+    async removeMember(id: string): Promise<void> {
+      await del(`/team/${id}`);
+    },
     async revokeInvite(): Promise<void> {},
   },
 
@@ -328,6 +396,68 @@ export const realApi = {
     },
   },
 
+  // ── LIVE EVENTS ──────────────────────────────────────────────────────────
+  live: {
+    /**
+     * Subscribe to the global live event stream (/api/v1/events). Fires for
+     * every scan: finding, progress, scan.completed. Returns unsubscribe.
+     */
+    subscribe(handlers: {
+      onFinding?: (f: Finding) => void;
+      onProgress?: (s: Scan) => void;
+      onDone?: (s: Scan) => void;
+      onLog?: (l: LogLine) => void;
+    }): () => void {
+      const token = getApiToken() ?? "demo-key";
+      const wsUrl = `${WS_URL}/api/v1/events?token=${encodeURIComponent(token)}`;
+      let ws: WebSocket | null = null;
+      let closed = false;
+
+      const open = () => {
+        if (closed || typeof window === "undefined") return;
+        ws = new WebSocket(wsUrl);
+        ws.onmessage = (ev) => {
+          try {
+            const frame = JSON.parse(ev.data as string);
+            if (frame.type === "finding") {
+              handlers.onFinding?.(findingToApp(frame.finding));
+            } else if (frame.type === "progress") {
+              handlers.onLog?.(toAppLog("info", `Progress ${frame.scanned}/${frame.total} · ${frame.findings_so_far} findings`));
+            } else if (frame.type === "scan.completed") {
+              handlers.onLog?.(toAppLog("success", `Scan completed · score ${frame.compliance_score ?? "—"} · ₹${(frame.money_at_risk_inr ?? 0).toLocaleString("en-IN")}`));
+              handlers.onDone?.(
+                scanToApp({
+                  id: frame.scan_id ?? "",
+                  project_id: "11111111-1111-4111-8111-111111111111",
+                  status: "completed",
+                  compliance_score: frame.compliance_score,
+                  money_at_risk_inr: frame.money_at_risk_inr,
+                  counts: frame.counts ?? {},
+                  exit_code: frame.exit_code,
+                }),
+              );
+            } else if (frame.type === "error") {
+              handlers.onLog?.(toAppLog("error", frame.detail ?? frame.code ?? "scan error"));
+            }
+          } catch {
+            /* ignore malformed frame */
+          }
+        };
+        ws.onclose = () => {
+          if (!closed) setTimeout(open, 3000);
+        };
+        ws.onerror = () => {
+          ws?.close();
+        };
+      };
+      open();
+      return () => {
+        closed = true;
+        ws?.close();
+      };
+    },
+  },
+
   findings: {
     async list(): Promise<Finding[]> {
       // newest scan's findings; falls back to all scans' results
@@ -392,30 +522,79 @@ export const realApi = {
 
   alerts: {
     async list() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/alerts");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        title: String(r.title ?? ""),
+        severity: (r.severity as CallAlert["severity"]) ?? "high",
+        recipient: String(r.recipient ?? ""),
+        phone: String(r.phone ?? ""),
+        policy: String(r.policy ?? ""),
+        status: (r.status as CallAlert["status"]) ?? "delivered",
+        triggeredAt: String(r.triggeredAt ?? new Date().toISOString()),
+        acknowledgedAt: r.acknowledgedAt ? String(r.acknowledgedAt) : undefined,
+        findingKey: r.findingKey ? String(r.findingKey) : undefined,
+        transcript: Array.isArray(r.transcript) ? (r.transcript as string[]) : [],
+        durationSec: Number(r.durationSec ?? 0),
+      }));
     },
     subscribe() {
       return () => {};
     },
     async triggerInternal() {},
     async trigger() {},
-    async update() {},
+    async update(id: string, status: string) {
+      await patch(`/alerts/${id}`, { status });
+    },
   },
 
   auditLog: {
     async list() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/audit-log");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        at: String(r.at ?? new Date().toISOString()),
+        actor: String(r.actor ?? "system"),
+        action: String(r.action ?? ""),
+        target: String(r.target ?? ""),
+        meta: r.meta ? String(r.meta) : undefined,
+      }));
     },
   },
 
   keys: {
-    async list() {
-      return [];
+    async list(): Promise<ApiKey[]> {
+      const rows = await get<Array<Record<string, unknown>>>("/auth/api-keys");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ""),
+        prefix: String(r.prefix ?? ""),
+        scopes: Array.isArray(r.scopes) ? (r.scopes as string[]) : [],
+        createdAt: String(r.created_at ?? new Date().toISOString()),
+        expiresAt: r.expires_at ? String(r.expires_at) : new Date(Date.now() + 365 * 864e5).toISOString(),
+        createdBy: String(r.created_by ?? ""),
+        status: "active" as const,
+      }));
     },
-    async create(): Promise<never> {
-      throw new Error("API key management is handled in the backend console");
+    async create(name: string, scopes: string[], expiryDays: number): Promise<ApiKey> {
+      const r = await post<{ id: string; secret?: string; prefix?: string; name: string; scopes: string[]; expires_at?: string; created_at?: string; created_by?: string }>("/auth/api-keys", {
+        name, scopes, expires_days: expiryDays,
+      });
+      return {
+        id: r.id,
+        name: r.name ?? name,
+        prefix: r.prefix ?? "",
+        scopes: r.scopes ?? scopes,
+        createdAt: r.created_at ?? new Date().toISOString(),
+        expiresAt: r.expires_at ?? new Date(Date.now() + expiryDays * 864e5).toISOString(),
+        createdBy: r.created_by ?? "",
+        status: "active",
+        secret: r.secret,
+      };
     },
-    async revoke() {},
+    async revoke(id: string) {
+      await del(`/auth/api-keys/${id}`);
+    },
   },
 
   reports: {
@@ -443,9 +622,19 @@ export const realApi = {
 
   integrations: {
     async list() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/integrations");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ""),
+        category: (r.category as Integration["category"]) ?? "messaging",
+        description: String(r.description ?? ""),
+        connected: Boolean(r.connected),
+        events: Number(r.events ?? 0),
+      }));
     },
-    async toggle() {},
+    async toggle(id: string) {
+      await patch(`/integrations/${id}`, {});
+    },
   },
 
   settings: {
@@ -454,36 +643,76 @@ export const realApi = {
     },
     async togglePolicy() {},
     async suppressions() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/suppressions");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        findingKey: String(r.rule_id ?? r.fingerprint ?? ""),
+        reason: String(r.reason ?? ""),
+        scope: "this_finding" as const,
+        createdBy: String(r.created_by ?? ""),
+        createdAt: String(r.created_at ?? new Date().toISOString()),
+        expiresAt: String(r.expires_at ?? new Date(Date.now() + 30 * 864e5).toISOString()),
+      }));
     },
-    async removeSuppression() {},
+    async removeSuppression(id: string) {
+      await del(`/suppressions/${id}`);
+    },
     async aiConfig() {
-      return { endpoint: "", token: "", model: "sirius-selflearning-v1", autoTriage: false };
+      return await get<{ endpoint: string; token: string; model: string; autoTriage: boolean }>("/ai-config");
     },
-    async saveAI() {},
+    async saveAI(cfg: { endpoint: string; token: string; model: string; autoTriage: boolean }) {
+      await post("/ai-config", cfg);
+    },
     async resetWorkspace() {},
   },
 
   notifications: {
     async list() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/notifications");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        at: String(r.at ?? new Date().toISOString()),
+        title: String(r.title ?? ""),
+        body: String(r.body ?? ""),
+        kind: (r.kind as Notification["kind"]) ?? "system",
+        read: Boolean(r.read),
+      }));
     },
     subscribe() {
       return () => {};
     },
     async markRead() {},
-    async markAllRead() {},
+    async markAllRead() {
+      await post("/notifications/read", {});
+    },
   },
 
   attackPaths: {
     async graph() {
-      return { nodes: [], links: [], paths: [] };
+      const res = await get<{ paths: Array<Record<string, unknown>> }>("/attack-paths");
+      const paths = (res.paths ?? []).map((p) => ({
+        id: String(p.id),
+        name: String(p.name ?? ""),
+        nodeIds: Array.isArray(p.nodeIds) ? (p.nodeIds as string[]) : [],
+        probability: Number(p.probability ?? 0),
+        impactUsd: Number(p.impactUsd ?? 0),
+        techniques: Array.isArray(p.techniques) ? (p.techniques as string[]) : [],
+        blocked: Boolean(p.blocked),
+      }));
+      return { nodes: [], links: [], paths };
     },
   },
 
   assets: {
     async list() {
-      return [];
+      const rows = await get<Array<Record<string, unknown>>>("/assets");
+      return (rows ?? []).map((r) => ({
+        id: String(r.id),
+        name: String(r.name ?? ""),
+        kind: (r.kind as Asset["kind"]) ?? "service",
+        criticality: Number(r.criticality ?? 1),
+        exposure: (r.exposure as Asset["exposure"]) ?? "internal",
+      }));
     },
   },
 

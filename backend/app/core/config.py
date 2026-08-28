@@ -28,7 +28,7 @@ API_V1_PREFIX: str = "/api/v1"
 # Seed values (dev convenience). Override in production.
 SIRIUS_PROJECT_ID: str = os.getenv("SIRIUS_PROJECT_ID", "11111111-1111-4111-8111-111111111111")
 SIRIUS_DEMO_API_KEY: str = os.getenv("SIRIUS_DEMO_API_KEY", "demo-key")
-SIRIUS_DEMO_EMAIL: str = os.getenv("SIRIUS_DEMO_EMAIL", "demo@siriusline.io")
+SIRIUS_DEMO_EMAIL: str = os.getenv("SIRIUS_DEMO_EMAIL", "demo@sirius.dev")
 
 # Hosted report/badge base — used when a project is configured.
 SIRIUS_BASE_URL: str = os.getenv("SIRIUS_BASE_URL", "http://localhost:8000")
@@ -36,3 +36,7 @@ SIRIUS_BASE_URL: str = os.getenv("SIRIUS_BASE_URL", "http://localhost:8000")
 # Simple bearer-token auth for the demo. In production this is a real key store
 # (hashed), but the wire contract (Authorization: Bearer <key>) is identical.
 AUTH_MODE: str = os.getenv("SIRIUS_AUTH_MODE", "api-key")
+
+# Clerk secret key — server-side only. When set, protected routes verify Clerk
+# session tokens (JWTs) and sync the Clerk user into the users table.
+CLERK_SECRET_KEY: str = os.getenv("CLERK_SECRET_KEY", "")

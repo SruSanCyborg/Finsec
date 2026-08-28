@@ -120,5 +120,5 @@ export const API_SCOPES = [
 
 export const SESSION_COOKIE = "sirius_session";
 export const DB_KEY = "sirius.db.v3";
-export const DEMO_CREDENTIALS = { email: "demo@siriusline.io", password: "Demo123!" };
+export const DEMO_CREDENTIALS = { email: "demo@sirius.dev", password: "Demo123!" };
 export const AVATAR_COLORS = ["#22d3ee", "#34d399", "#a78bfa", "#f472b6", "#fbbf24", "#38bdf8"];

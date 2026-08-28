@@ -1,13 +1,57 @@
 "use client";
 
 // Landing navbar — transparent over the hero, blurs on scroll, and swaps the
-// CTA for a Clerk user button when the visitor is signed in.
+// CTA for a user button when the visitor is signed in (Clerk when configured,
+// backend session otherwise).
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { SignedIn, SignedOut, UserButton } from "@clerk/nextjs";
 import { ArrowUpRight, ShieldCheck } from "lucide-react";
+import { USE_CLERK, useSession } from "@/lib/providers";
+
+function SessionAwareCta() {
+  const { isSignedIn } = useSession();
+  if (USE_CLERK) {
+    return (
+      <>
+        <SignedIn>
+          <UserButton
+            appearance={{
+              elements: {
+                avatarBox: "h-8 w-8 rounded-lg border border-line",
+              },
+            }}
+          />
+        </SignedIn>
+        <SignedOut>
+          <Link
+            href="/signup"
+            className="group flex items-center gap-2 border border-zinc-500/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-100 transition hover:border-accent hover:text-accent"
+          >
+            Enter the line <ArrowUpRight size={13} />
+          </Link>
+        </SignedOut>
+      </>
+    );
+  }
+  return isSignedIn ? (
+    <Link
+      href="/dashboard"
+      className="group flex items-center gap-2 border border-zinc-500/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-100 transition hover:border-accent hover:text-accent"
+    >
+      Console <ArrowUpRight size={13} />
+    </Link>
+  ) : (
+    <Link
+      href="/signup"
+      className="group flex items-center gap-2 border border-zinc-500/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-100 transition hover:border-accent hover:text-accent"
+    >
+      Enter the line <ArrowUpRight size={13} />
+    </Link>
+  );
+}
 
 export default function LandingNav() {
   const navRef = useRef<HTMLElement>(null);
@@ -46,23 +90,7 @@ export default function LandingNav() {
         </div>
 
         <div className="flex items-center gap-3">
-          <SignedIn>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: "h-8 w-8 rounded-lg border border-line",
-                },
-              }}
-            />
-          </SignedIn>
-          <SignedOut>
-            <Link
-              href="/signup"
-              className="group flex items-center gap-2 border border-zinc-500/60 px-4 py-2 font-mono text-[10px] uppercase tracking-[0.16em] text-zinc-100 transition hover:border-accent hover:text-accent"
-            >
-              Enter the line <ArrowUpRight size={13} />
-            </Link>
-          </SignedOut>
+          <SessionAwareCta />
         </div>
       </div>
     </motion.nav>

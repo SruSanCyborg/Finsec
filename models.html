@@ -1,0 +1,2476 @@
+<!doctype html>
+<html lang="en" data-theme="night">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sirius — Classy 3D Glass Experience</title>
+    <meta
+      name="description"
+      content="Sirius decides, per action, whether an autonomous agent's transaction should happen. 3D interactive preview with classy glassmorphic coding shapes."
+    />
+    <script>
+      (function () {
+        try {
+          var saved = localStorage.getItem("sirius-theme");
+          if (saved === "day" || saved === "night")
+            document.documentElement.setAttribute("data-theme", saved);
+        } catch (e) {}
+      })();
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-void: #14110d;
+        --bg-void-rgb: 20, 17, 13;
+        --bg-surface: #1c1811;
+        --bg-raised: #262019;
+        --border-hairline: rgba(255, 247, 235, 0.07);
+        --border-subtle: rgba(255, 247, 235, 0.15);
+        --accent: #e8a33d;
+        --accent-dim: #b9832e;
+        --accent-rgb: 232, 163, 61;
+        --ok: #8cae7d;
+        --bad: #c17a64;
+        --text-hi: #f5efe4;
+        --text-md: #c7beac;
+        --text-lo: #8c8371;
+        --glass-bg: rgba(28, 24, 17, 0.62);
+        --font-display: "Inter", -apple-system, sans-serif;
+        --font-body: "Inter", -apple-system, sans-serif;
+        --font-code: "JetBrains Mono", ui-monospace, monospace;
+      }
+      :root[data-theme="day"] {
+        --bg-void: #f3eee3;
+        --bg-void-rgb: 243, 238, 227;
+        --bg-surface: #eae2d1;
+        --bg-raised: #dfd4bc;
+        --border-hairline: rgba(20, 17, 13, 0.08);
+        --border-subtle: rgba(20, 17, 13, 0.16);
+        --accent: #b9772a;
+        --accent-dim: #8f5d20;
+        --accent-rgb: 185, 119, 42;
+        --ok: #4f7345;
+        --bad: #a2432f;
+        --text-hi: #1c1811;
+        --text-md: #4b4235;
+        --text-lo: #867b64;
+        --glass-bg: rgba(243, 238, 227, 0.65);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg-void);
+        color: var(--text-hi);
+        font-family: var(--font-body);
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+        transition:
+          background 0.4s ease,
+          color 0.4s ease;
+      }
+      ::selection {
+        background: var(--accent);
+        color: var(--bg-void);
+      }
+
+      #webgl-bg {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        display: block;
+        pointer-events: none;
+      }
+      #webgl-3d {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 1;
+        display: block;
+        cursor: grab;
+      }
+      #webgl-3d:active {
+        cursor: grabbing;
+      }
+      #grain {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        opacity: 0.04;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      }
+      #vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 2;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(var(--bg-void-rgb), 0) 40%,
+          rgba(var(--bg-void-rgb), 0.85) 100%
+        );
+      }
+
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 2.2rem;
+        pointer-events: none;
+      }
+      nav .word-group {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        pointer-events: auto;
+      }
+      nav .word {
+        font-family: var(--font-code);
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        font-size: 0.85rem;
+        color: var(--text-hi);
+        text-decoration: none;
+      }
+      nav .badge-3d {
+        font-family: var(--font-code);
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 0.2rem 0.55rem;
+        border-radius: 6px;
+        background: rgba(var(--accent-rgb), 0.12);
+        color: var(--accent);
+        border: 1px solid rgba(var(--accent-rgb), 0.25);
+        letter-spacing: 0.08em;
+      }
+      nav .right {
+        display: flex;
+        align-items: center;
+        gap: 1.6rem;
+        pointer-events: auto;
+      }
+      nav .links {
+        display: flex;
+        gap: 1.4rem;
+      }
+      nav .links a {
+        color: var(--text-md);
+        text-decoration: none;
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        font-family: var(--font-body);
+        transition: color 0.2s;
+      }
+      nav .links a:hover {
+        color: var(--accent);
+      }
+      @media (max-width: 768px) {
+        nav .links {
+          display: none;
+        }
+      }
+
+      .theme-toggle {
+        position: relative;
+        width: 42px;
+        height: 24px;
+        border-radius: 99px;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-raised);
+        cursor: pointer;
+        flex-shrink: 0;
+        padding: 0;
+        transition: border-color 0.2s;
+      }
+      .theme-toggle:hover {
+        border-color: var(--accent);
+      }
+      .theme-toggle .knob {
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--accent);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 11px;
+        line-height: 1;
+        transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      :root[data-theme="day"] .theme-toggle .knob {
+        transform: translateX(18px);
+      }
+
+      main {
+        position: relative;
+        z-index: 10;
+        pointer-events: none;
+      }
+      main * {
+        pointer-events: auto;
+      }
+
+      /* 2-COLUMN SPLIT PANEL LAYOUT */
+      section.panel {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        padding: 10vh 6vw;
+        position: relative;
+      }
+      .panel-grid {
+        display: grid;
+        grid-template-columns: minmax(320px, 640px) 1fr;
+        gap: 4rem;
+        width: 100%;
+        max-width: 1380px;
+        margin: 0 auto;
+        align-items: center;
+      }
+      @media (max-width: 1024px) {
+        .panel-grid {
+          grid-template-columns: 1fr;
+          gap: 2rem;
+        }
+      }
+
+      .content-col {
+        opacity: 0;
+        transform: translateY(28px);
+        transition:
+          opacity 0.9s cubic-bezier(0.16, 1, 0.3, 1),
+          transform 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+        width: 100%;
+      }
+      .content-col.wide {
+        max-width: 760px;
+      }
+      .panel.is-visible .content-col {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      /* RIGHT 3D HUD INDICATOR */
+      .stage-3d-hint {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        justify-content: center;
+        pointer-events: none;
+        user-select: none;
+      }
+      .hint-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.4rem 0.85rem;
+        border-radius: 99px;
+        background: var(--glass-bg);
+        border: 1px solid var(--border-hairline);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        font-family: var(--font-code);
+        font-size: 0.68rem;
+        color: var(--text-lo);
+        letter-spacing: 0.06em;
+        box-shadow: 0 4px 24px rgba(0, 0, 0, 0.12);
+        transform: translateY(12px);
+        opacity: 0;
+        transition:
+          opacity 0.7s ease 0.3s,
+          transform 0.7s ease 0.3s;
+      }
+      .hint-pill .pulse-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 8px var(--accent);
+        animation: pulse 2.2s infinite ease-in-out;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 0.35;
+          transform: scale(0.85);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.25);
+        }
+      }
+      .panel.is-visible .hint-pill {
+        opacity: 1;
+        transform: translateY(0);
+      }
+      @media (max-width: 1024px) {
+        .stage-3d-hint {
+          display: none;
+        }
+      }
+
+      .eyebrow {
+        font-family: var(--font-code);
+        font-size: 0.72rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--accent);
+        margin: 0 0 1.1rem;
+        font-weight: 600;
+      }
+      h1,
+      h2 {
+        font-family: var(--font-display);
+        font-weight: 800;
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+        color: var(--text-hi);
+        margin: 0 0 1.2rem;
+      }
+      h1 {
+        font-size: clamp(2.1rem, 5vw, 3.8rem);
+      }
+      h2 {
+        font-size: clamp(1.6rem, 3.2vw, 2.5rem);
+      }
+      p.lede {
+        font-size: clamp(0.98rem, 1.5vw, 1.15rem);
+        color: var(--text-md);
+        line-height: 1.65;
+        margin: 0 0 1.4rem;
+      }
+      p.body {
+        font-size: 0.96rem;
+        color: var(--text-md);
+        line-height: 1.7;
+        margin: 0 0 1rem;
+      }
+      strong {
+        color: var(--text-hi);
+        font-weight: 600;
+      }
+
+      .glass {
+        background: var(--glass-bg);
+        border: 1px solid var(--border-hairline);
+        border-radius: 18px;
+        backdrop-filter: blur(20px) saturate(1.3);
+        -webkit-backdrop-filter: blur(20px) saturate(1.3);
+        padding: 1.8rem 2rem;
+        box-shadow: 0 12px 48px rgba(0, 0, 0, 0.2);
+      }
+
+      .btn {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 0.92rem;
+        border-radius: 10px;
+        padding: 0.85rem 1.5rem;
+        cursor: pointer;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-raised);
+        color: var(--text-hi);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s,
+          transform 0.15s;
+      }
+      .btn:hover {
+        border-color: var(--accent);
+        box-shadow: 0 0 24px rgba(var(--accent-rgb), 0.25);
+        transform: translateY(-1px);
+      }
+      .btn.primary {
+        background: linear-gradient(
+          135deg,
+          rgba(var(--accent-rgb), 0.22),
+          rgba(var(--accent-rgb), 0.08)
+        );
+        border-color: rgba(var(--accent-rgb), 0.45);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--text-md);
+        border-color: transparent;
+      }
+      .btn.ghost:hover {
+        color: var(--accent);
+        box-shadow: none;
+        border-color: transparent;
+        transform: none;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn-row {
+        display: flex;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 0.4rem;
+      }
+
+      .micro {
+        font-size: 0.78rem;
+        color: var(--text-lo);
+        margin-top: 1rem;
+        line-height: 1.6;
+        max-width: 440px;
+      }
+
+      /* HERO */
+      #hero .content-col {
+        max-width: 680px;
+      }
+      .hero-mark {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 1.6rem;
+      }
+      .hero-mark .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--ok);
+        box-shadow: 0 0 10px var(--ok);
+      }
+      .hero-mark span {
+        font-family: var(--font-code);
+        font-size: 0.78rem;
+        letter-spacing: 0.2em;
+        color: var(--text-lo);
+      }
+      .scroll-cue {
+        position: absolute;
+        bottom: 2.4rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--text-lo);
+        font-size: 0.7rem;
+        letter-spacing: 0.15em;
+        font-family: var(--font-code);
+        animation: bob 2.2s ease-in-out infinite;
+        opacity: 0;
+      }
+      #hero.is-visible .scroll-cue {
+        opacity: 1;
+        transition: opacity 1s ease 1.2s;
+      }
+      @keyframes bob {
+        0%,
+        100% {
+          transform: translate(-50%, 0);
+        }
+        50% {
+          transform: translate(-50%, 8px);
+        }
+      }
+      .chev {
+        width: 14px;
+        height: 14px;
+        border-right: 1.5px solid var(--text-lo);
+        border-bottom: 1.5px solid var(--text-lo);
+        transform: rotate(45deg);
+      }
+
+      /* STAGE CARDS */
+      .stage-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.75rem;
+        margin-top: 1.4rem;
+        width: 100%;
+      }
+      @media (max-width: 760px) {
+        .stage-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 480px) {
+        .stage-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stage-card {
+        border-radius: 12px;
+        padding: 0.95rem 1rem;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border-hairline);
+        background: var(--glass-bg);
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        transition:
+          border-color 0.25s,
+          transform 0.2s,
+          box-shadow 0.25s;
+        min-height: 108px;
+      }
+      .stage-card:hover,
+      .stage-card.revealed,
+      .stage-card.highlighted {
+        transform: translateY(-3px);
+        border-color: var(--accent);
+        box-shadow: 0 0 20px rgba(var(--accent-rgb), 0.2);
+      }
+      .stage-card .num {
+        font-family: var(--font-code);
+        font-size: 0.68rem;
+        color: var(--accent);
+        letter-spacing: 0.1em;
+      }
+      .stage-card h3 {
+        margin: 0.3rem 0 0.35rem;
+        font-size: 0.95rem;
+        font-family: var(--font-display);
+        font-weight: 700;
+        color: var(--text-hi);
+        text-transform: capitalize;
+      }
+      .stage-card .q {
+        font-size: 0.8rem;
+        color: var(--text-md);
+        line-height: 1.4;
+        margin: 0;
+      }
+      .stage-card .ex {
+        font-family: var(--font-code);
+        font-size: 0.72rem;
+        color: var(--accent);
+        line-height: 1.45;
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border-hairline);
+        opacity: 0;
+        max-height: 0;
+        transition: opacity 0.25s ease;
+      }
+      .stage-card:hover .ex,
+      .stage-card.revealed .ex {
+        opacity: 1;
+        max-height: 200px;
+      }
+
+      /* CONSOLE / TERMINAL BLOCKS */
+      .term {
+        font-family: var(--font-code);
+        font-size: 0.8rem;
+        line-height: 1.75;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        width: 100%;
+        overflow-x: auto;
+        white-space: pre;
+        color: var(--text-md);
+      }
+      .term .l-block {
+        color: var(--bad);
+      }
+      .term .l-constrain {
+        color: var(--accent);
+      }
+      .term .l-verify {
+        color: var(--accent);
+      }
+      .term .l-allow {
+        color: var(--ok);
+      }
+      .term .l-fail {
+        color: var(--bad);
+      }
+      .term .l-ok {
+        color: var(--ok);
+      }
+      .feed-line {
+        opacity: 0;
+        transform: translateY(-6px);
+        animation: feedIn 0.5s ease forwards;
+      }
+      @keyframes feedIn {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      /* CAP BAR SECTION */
+      .caseline {
+        font-family: var(--font-code);
+        font-size: 0.82rem;
+        color: var(--text-md);
+        border-left: 2px solid var(--bad);
+        padding-left: 1rem;
+        margin-top: 1.2rem;
+        line-height: 1.7;
+      }
+
+      /* TRAIL SECTION */
+      .trail-actions {
+        display: flex;
+        gap: 0.8rem;
+        flex-wrap: wrap;
+        margin-top: 1.2rem;
+      }
+      #trailStatus {
+        margin-top: 1rem;
+        min-height: 2.4em;
+      }
+
+      /* SCAN SECTION */
+      .code-card {
+        font-family: var(--font-code);
+        font-size: 0.75rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        width: 100%;
+        line-height: 1.7;
+        color: var(--text-md);
+        overflow-x: auto;
+      }
+      .code-card .sev {
+        color: var(--bad);
+        font-weight: 700;
+      }
+      .code-card .loc {
+        color: var(--text-lo);
+      }
+      .code-card .flag {
+        color: var(--accent);
+      }
+      .scan-summary {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
+        gap: 1.4rem;
+        margin-top: 1.4rem;
+        font-family: var(--font-code);
+      }
+      .scan-summary div span {
+        display: block;
+      }
+      .scan-summary .v {
+        font-size: 1.2rem;
+        color: var(--bad);
+        font-weight: 600;
+      }
+      .scan-summary .k {
+        font-size: 0.68rem;
+        color: var(--text-lo);
+        letter-spacing: 0.08em;
+        margin-top: 0.2rem;
+      }
+
+      /* STATS */
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 1rem;
+        width: 100%;
+        margin-top: 1rem;
+      }
+      @media (max-width: 480px) {
+        .stat-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stat-tile {
+        padding: 1.3rem 1.1rem;
+        border-radius: 14px;
+      }
+      .stat-tile .v {
+        font-family: var(--font-code);
+        font-size: 1.9rem;
+        font-weight: 700;
+        color: var(--accent);
+        letter-spacing: -0.02em;
+      }
+      .stat-tile .l {
+        font-size: 0.78rem;
+        color: var(--text-md);
+        margin-top: 0.4rem;
+        line-height: 1.4;
+      }
+
+      /* CTA */
+      .cmd-row {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 10px;
+        padding: 0.7rem 0.9rem;
+        margin-bottom: 0.6rem;
+        width: 100%;
+      }
+      .cmd-row code {
+        font-family: var(--font-code);
+        font-size: 0.8rem;
+        color: var(--ok);
+        flex: 1;
+        overflow-x: auto;
+        white-space: pre;
+      }
+      .copy-btn {
+        font-family: var(--font-code);
+        font-size: 0.7rem;
+        color: var(--text-md);
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        padding: 0.35rem 0.6rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+          color 0.2s,
+          border-color 0.2s;
+      }
+      .copy-btn:hover {
+        color: var(--accent);
+        border-color: var(--accent);
+      }
+
+      footer {
+        position: relative;
+        z-index: 10;
+        text-align: center;
+        padding: 4rem 2rem 3rem;
+        color: var(--text-lo);
+        font-size: 0.82rem;
+      }
+      footer .word {
+        font-family: var(--font-code);
+        letter-spacing: 0.2em;
+        color: var(--text-md);
+        font-size: 0.75rem;
+        margin-bottom: 0.6rem;
+        display: block;
+      }
+
+      /* 3D FLOATING INTERACTIVE CONTROLLER OVERLAY */
+      #interactive-pill {
+        position: fixed;
+        bottom: 1.5rem;
+        right: 1.5rem;
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.5rem 1rem;
+        border-radius: 99px;
+        background: var(--glass-bg);
+        border: 1px solid var(--border-subtle);
+        backdrop-filter: blur(16px);
+        -webkit-backdrop-filter: blur(16px);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+        font-family: var(--font-code);
+        font-size: 0.72rem;
+        color: var(--text-md);
+      }
+      #interactive-pill .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--accent);
+        box-shadow: 0 0 10px var(--accent);
+      }
+    </style>
+  </head>
+  <body>
+    <!-- WebGL Background & 3D Stages -->
+    <canvas id="webgl-bg"></canvas>
+    <canvas id="webgl-3d"></canvas>
+    <div id="grain"></div>
+    <div id="vignette"></div>
+
+    <nav>
+      <div class="word-group">
+        <a class="word" href="#hero">SIRIUS</a>
+        <span class="badge-3d">3D GLASS SCULPTURES</span>
+      </div>
+      <div class="right">
+        <div class="links">
+          <a href="#problem">Problem</a>
+          <a href="#stages">Stages</a>
+          <a href="#feed">Feed</a>
+          <a href="#cap">Cap</a>
+          <a href="#trail">Trail</a>
+          <a href="#scan">Scan</a>
+          <a href="#stats">Stats</a>
+          <a href="#cta">Install</a>
+        </div>
+        <button
+          class="theme-toggle"
+          id="themeToggle"
+          aria-label="Toggle day and night mode"
+          aria-pressed="false"
+        >
+          <span class="knob"></span>
+        </button>
+      </div>
+    </nav>
+
+    <div id="interactive-pill">
+      <span class="dot"></span>
+      <span>Scroll to center · Drag 3D glass shape</span>
+    </div>
+
+    <main>
+      <!-- 0. HERO -->
+      <section class="panel" id="hero" data-idx="0">
+        <div class="panel-grid">
+          <div class="content-col">
+            <div class="hero-mark">
+              <span class="dot"></span
+              ><span>LOCAL-FIRST · NO BACKEND · NO NETWORK</span>
+            </div>
+            <h1>An agent with a wallet<br />is a new kind of actor.</h1>
+            <p class="lede">
+              It signs its own transactions. Every one can be perfectly valid —
+              and still be the wrong thing to do.
+            </p>
+            <p class="micro">
+              Sirius decides, per action, whether it happens — and signs a
+              record of every decision, including the ones it allowed.
+            </p>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Glass Prism · Floating &lt;/&gt; Core</span>
+            </div>
+          </div>
+        </div>
+        <div class="scroll-cue">
+          <span>SCROLL</span><span class="chev"></span>
+        </div>
+      </section>
+
+      <!-- 1. PROBLEM -->
+      <section class="panel" id="problem" data-idx="1">
+        <div class="panel-grid">
+          <div class="content-col glass">
+            <p class="eyebrow">The problem</p>
+            <h2>Valid isn't the same<br />as legitimate.</h2>
+            <p class="body">
+              A transaction can be correctly signed, inside the agent's own
+              credentials — and still be a transfer it's never made before,
+              because a web page told it to.
+            </p>
+            <p class="body">
+              <strong
+                >Full approval isn't autonomy. Full autonomy risks
+                everything.</strong
+              >
+              The answer has to be graduated.
+            </p>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Cryptographic Glass Vault & { } Key</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. STAGES -->
+      <section class="panel" id="stages" data-idx="2">
+        <div class="panel-grid">
+          <div class="content-col wide glass">
+            <p class="eyebrow">Six questions, asked of every action</p>
+            <h2>Nothing decides alone.</h2>
+            <p class="lede">
+              Each stage raises a signal. Hover over any stage card to
+              illuminate its 3D crystal node.
+            </p>
+            <div class="stage-grid" id="stageGrid"></div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>6-Facet Glass Decision Matrix</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. FEED -->
+      <section class="panel" id="feed" data-idx="3">
+        <div class="panel-grid">
+          <div class="content-col wide glass">
+            <p class="eyebrow">The decision trail</p>
+            <h2>264 allowed. 11 blocked.<br />All of them logged.</h2>
+            <p class="lede">
+              Watch a batch of 278 get judged. Click the button to launch
+              real-time 3D data block sorting.
+            </p>
+            <div class="btn-row">
+              <button class="btn primary" id="runFeed">Run 278 actions</button>
+            </div>
+            <div
+              class="term"
+              id="feedOutput"
+              style="margin-top: 1.2rem; min-height: 9.5em"
+            ></div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Volumetric Glass Ledger & Pipeline</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. CAP -->
+      <section class="panel" id="cap" data-idx="4">
+        <div class="panel-grid">
+          <div class="content-col glass">
+            <p class="eyebrow">The attacker who read the policy</p>
+            <h2>Right under the cap<br />is exactly where they aim.</h2>
+            <p class="body">
+              ₹49,500 against a ₹50,000 cap breaks no limit — but it's sized to
+              look like nothing. Two weak signals, stacked, are the tell.
+            </p>
+            <div class="caseline">
+              ! BLOCK wlt-9f2c41 ₹49,500 — an amount sized just under the cap,
+              to a counterparty never used before. The limit was not breached
+              because it was measured first.
+            </div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Precision Glass Caliper & Limit Radar</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. TRAIL -->
+      <section class="panel" id="trail" data-idx="5">
+        <div class="panel-grid">
+          <div class="content-col wide glass">
+            <p class="eyebrow">The decisions are the product</p>
+            <h2>Including the ones<br />it allowed.</h2>
+            <p class="lede">
+              A control layer's decisions are worth nothing if they can't be
+              proven. Every decision is hash-chained and ed25519-signed.
+            </p>
+            <div class="trail-actions">
+              <button class="btn" id="verifyBtn">
+                sirius guard trail --verify
+              </button>
+              <button class="btn ghost" id="tamperBtn">
+                tamper with entry 255
+              </button>
+              <button class="btn ghost" id="resetTrailBtn">reset</button>
+            </div>
+            <div class="term" id="trailStatus"></div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Interlocking Glass Blockchain Links</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. SCAN -->
+      <section class="panel" id="scan" data-idx="6">
+        <div class="panel-grid">
+          <div class="content-col wide glass">
+            <p class="eyebrow">The second surface</p>
+            <h2>It also secures the code<br />the agent runs on.</h2>
+            <p class="lede">
+              Same tool. Scans the code before deploy, maps findings to
+              compliance clauses, prices the exposure in rupees.
+            </p>
+            <div class="code-card">
+              <span class="sev">✗ CRITICAL</span> SIR-SEC-001 Hardcoded
+              payment-provider secret key
+              <span class="loc">src/config.py:14</span> PCI-DSS 8.6.2 · DPDP §8
+              14 │ STRIPE_KEY = "sk_live_51H8xR2eZv…" │
+              <span class="flag"
+                >╰── secret · ⚠ VERIFIED LIVE · ₹42,00,000 at risk</span
+              >
+              ↳ fix: env_lookup run sirius fix SIR-SEC-001
+            </div>
+            <div class="scan-summary" id="scanSummary">
+              <div>
+                <span class="v" id="moneyAtRisk">₹0</span
+                ><span class="k">MONEY @ RISK</span>
+              </div>
+              <div>
+                <span class="v">60/100</span
+                ><span class="k">COMPLIANCE SCORE</span>
+              </div>
+              <div>
+                <span class="v">2 crit · 2 high · 2 med</span
+                ><span class="k">FINDINGS · 3 FILES</span>
+              </div>
+            </div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Glass Code Hologram & Laser Scanner</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7. STATS -->
+      <section class="panel" id="stats" data-idx="7">
+        <div class="panel-grid">
+          <div class="content-col wide">
+            <p class="eyebrow">What the fixture shows</p>
+            <h2>
+              Every planted attack stopped.<br />Nothing ordinary touched.
+            </h2>
+            <div class="stat-grid" id="statGrid">
+              <div class="stat-tile glass">
+                <div class="v" data-target="95" data-suffix="%">0%</div>
+                <div class="l">of actions proceeded with nobody asked</div>
+              </div>
+              <div class="stat-tile glass">
+                <div class="v" data-target="0" data-suffix="%">0%</div>
+                <div class="l">of ordinary actions were intervened on</div>
+              </div>
+              <div class="stat-tile glass">
+                <div class="v" data-target="871" data-suffix="">0</div>
+                <div class="l">tests passing, checked by reverting the fix</div>
+              </div>
+              <div class="stat-tile glass">
+                <div class="v" data-static="0">0</div>
+                <div class="l">backend services — local-first, no network</div>
+              </div>
+            </div>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>3D Gyroscopic Fortress Core</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8. CTA -->
+      <section class="panel" id="cta" data-idx="8">
+        <div class="panel-grid">
+          <div class="content-col glass">
+            <p class="eyebrow">Try it</p>
+            <h2>Requires Node ≥ 22 and pnpm.</h2>
+            <div class="cmd-row">
+              <code>pnpm install &amp;&amp; pnpm --filter sirius build</code
+              ><button
+                class="copy-btn"
+                data-cmd="pnpm install && pnpm --filter sirius build"
+              >
+                copy
+              </button>
+            </div>
+            <div class="cmd-row">
+              <code>node packages/cli/dist/cli.js brief --plain</code
+              ><button
+                class="copy-btn"
+                data-cmd="node packages/cli/dist/cli.js brief --plain"
+              >
+                copy
+              </button>
+            </div>
+            <div class="cmd-row">
+              <code>node packages/cli/dist/cli.js guard gen feed</code
+              ><button
+                class="copy-btn"
+                data-cmd="node packages/cli/dist/cli.js guard gen feed"
+              >
+                copy
+              </button>
+            </div>
+            <div class="cmd-row">
+              <code
+                >node packages/cli/dist/cli.js guard eval feed --narrate</code
+              ><button
+                class="copy-btn"
+                data-cmd="node packages/cli/dist/cli.js guard eval feed --narrate"
+              >
+                copy
+              </button>
+            </div>
+            <p class="micro">
+              sirius brief writes this as a six-page PDF. Every figure comes
+              from that run — none of them are typed in.
+            </p>
+          </div>
+          <div class="stage-3d-hint">
+            <div class="hint-pill">
+              <span class="pulse-dot"></span
+              ><span>Architectural Glass CLI Monolith</span>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span class="word">SIRIUS</span>
+      Fintech compliance scanning and agent control, priced in rupees.<br />Runs
+      entirely on your machine.
+    </footer>
+
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        /* =========================================================================
+   1. COLOR THEME SYSTEM
+   ========================================================================= */
+        var NIGHT_BG = 0x14110d;
+        var DAY_BG = 0xf3eee3;
+        var ACCENT_NIGHT = 0xe8a33d;
+        var ACCENT_DAY = 0xb9772a;
+        var OK_COLOR = 0x8cae7d;
+        var BAD_COLOR = 0xc17a64;
+
+        var root = document.documentElement;
+        var themeToggle = document.getElementById("themeToggle");
+        var theme = root.getAttribute("data-theme") || "night";
+
+        function getAccentColor() {
+          return theme === "day" ? ACCENT_DAY : ACCENT_NIGHT;
+        }
+
+        /* =========================================================================
+   2. BACKGROUND AMBIENT PARTICLES
+   ========================================================================= */
+        var bgCanvas = document.getElementById("webgl-bg");
+        var bgRenderer, bgScene, bgCamera, bgPoints, bgGeom;
+        var N_BG = 100 * 60;
+        var bgPositions = new Float32Array(N_BG * 3);
+        var bgColors = new Float32Array(N_BG * 3);
+        var bgSeeds = new Float32Array(N_BG);
+
+        for (var s = 0; s < N_BG; s++) {
+          bgSeeds[s] = Math.random() * Math.PI * 2;
+        }
+
+        try {
+          bgRenderer = new THREE.WebGLRenderer({
+            canvas: bgCanvas,
+            antialias: true,
+            alpha: true,
+          });
+          bgRenderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          bgRenderer.setSize(window.innerWidth, window.innerHeight);
+
+          bgScene = new THREE.Scene();
+          bgCamera = new THREE.PerspectiveCamera(
+            56,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100,
+          );
+          bgCamera.position.set(0, 0, 11);
+
+          bgGeom = new THREE.BufferGeometry();
+          bgGeom.setAttribute(
+            "position",
+            new THREE.BufferAttribute(bgPositions, 3),
+          );
+          bgGeom.setAttribute("color", new THREE.BufferAttribute(bgColors, 3));
+
+          var bgMat = new THREE.PointsMaterial({
+            size: 0.04,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.6,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+          });
+          bgPoints = new THREE.Points(bgGeom, bgMat);
+          bgScene.add(bgPoints);
+        } catch (e) {
+          console.warn("BG Canvas init error:", e);
+        }
+
+        function updateBgParticles(time) {
+          if (!bgGeom) return;
+          var pos = bgGeom.attributes.position.array;
+          var col = bgGeom.attributes.color.array;
+          var isDay = theme === "day";
+          var baseR = isDay ? 0.72 : 0.91;
+          var baseG = isDay ? 0.46 : 0.64;
+          var baseB = isDay ? 0.16 : 0.24;
+
+          for (var i = 0; i < N_BG; i++) {
+            var sd = bgSeeds[i];
+            var phi = Math.acos(1 - 2 * ((i + 0.5) / N_BG));
+            var th = Math.PI * (1 + Math.sqrt(5)) * (i + 0.5);
+            var x = Math.sin(phi) * Math.cos(th);
+            var y = Math.sin(phi) * Math.sin(th);
+            var z = Math.cos(phi);
+            var n =
+              Math.sin(x * 2.2 + time * 0.2 + sd) *
+              Math.cos(y * 2.2 - time * 0.16) *
+              Math.sin(z * 2.2 + time * 0.18);
+            var r = 3.8 + n * 0.8;
+
+            pos[i * 3] = x * r * 2.8;
+            pos[i * 3 + 1] = y * r * 1.8;
+            pos[i * 3 + 2] = z * r * 1.5 - 2.0;
+
+            var bright = Math.max(0.08, Math.min(1, 0.25 + n * 0.45));
+            col[i * 3] = baseR * bright;
+            col[i * 3 + 1] = baseG * bright;
+            col[i * 3 + 2] = baseB * bright;
+          }
+          bgGeom.attributes.position.needsUpdate = true;
+          bgGeom.attributes.color.needsUpdate = true;
+          bgRenderer.render(bgScene, bgCamera);
+        }
+
+        /* =========================================================================
+   3. CLASSY FOREGROUND 3D STAGE & SHADERS
+   ========================================================================= */
+        var stageCanvas = document.getElementById("webgl-3d");
+        var renderer, scene, camera;
+        var sectionGroups = [];
+        var numSections = 9;
+
+        // Mouse Interaction & Classy Inertia
+        var isDragging = false;
+        var prevMouseX = 0,
+          prevMouseY = 0;
+        var rotVelX = 0,
+          rotVelY = 0;
+        var userRotX = 0,
+          userRotY = 0;
+        var mouseXNorm = 0,
+          mouseYNorm = 0;
+
+        try {
+          renderer = new THREE.WebGLRenderer({
+            canvas: stageCanvas,
+            antialias: true,
+            alpha: true,
+          });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(window.innerWidth, window.innerHeight);
+          renderer.shadowMap.enabled = true;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 1.15;
+
+          scene = new THREE.Scene();
+
+          camera = new THREE.PerspectiveCamera(
+            45,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100,
+          );
+          camera.position.set(0, 0, 9.5);
+
+          // Classy Studio Lighting
+          var ambientLight = new THREE.AmbientLight(0xffffff, 0.85);
+          scene.add(ambientLight);
+
+          var keyLight = new THREE.DirectionalLight(0xfff7ed, 1.9);
+          keyLight.position.set(6, 7, 8);
+          scene.add(keyLight);
+
+          var rimLight = new THREE.DirectionalLight(ACCENT_NIGHT, 1.4);
+          rimLight.position.set(-7, -4, -3);
+          scene.add(rimLight);
+
+          var softPoint = new THREE.PointLight(ACCENT_NIGHT, 2.0, 18);
+          softPoint.position.set(3.5, 0, 4);
+          scene.add(softPoint);
+        } catch (err) {
+          console.error("Stage WebGL init error:", err);
+        }
+
+        /* -------------------------------------------------------------------------
+   3.1 CLASSY MATERIAL FACTORIES
+   ------------------------------------------------------------------------- */
+        function createClassyGlassMaterial(tintColor, opacity, roughness) {
+          var mat = new THREE.MeshPhysicalMaterial({
+            color: tintColor || 0xffffff,
+            transparent: true,
+            opacity: opacity !== undefined ? opacity : 0.68,
+            roughness: roughness !== undefined ? roughness : 0.08,
+            metalness: 0.05,
+            transmission: 0.92,
+            ior: 1.52,
+            reflectivity: 0.95,
+            clearcoat: 1.0,
+            clearcoatRoughness: 0.08,
+            side: THREE.DoubleSide,
+          });
+          mat.userData = { baseOpacity: mat.opacity };
+          return mat;
+        }
+
+        function createClassyGlowMaterial(color, emissiveIntensity) {
+          var mat = new THREE.MeshStandardMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: emissiveIntensity || 0.6,
+            roughness: 0.15,
+            metalness: 0.4,
+            transparent: true,
+            opacity: 0.95,
+          });
+          mat.userData = {
+            baseOpacity: 0.95,
+            baseEmissive: emissiveIntensity || 0.6,
+          };
+          return mat;
+        }
+
+        function createClassyWireframeMaterial(color, opacity) {
+          var mat = new THREE.MeshBasicMaterial({
+            color: color,
+            wireframe: true,
+            transparent: true,
+            opacity: opacity || 0.35,
+          });
+          mat.userData = { baseOpacity: opacity || 0.35 };
+          return mat;
+        }
+
+        /* -------------------------------------------------------------------------
+   3.2 PROCEDURAL 3D SCULPTURES FOR EACH SLIDE
+   ------------------------------------------------------------------------- */
+
+        // Helper: 3D Tube Brackets for Coding Glyphs: "<", "/", ">", "{", "}"
+        function buildBracketGeometry(type) {
+          var curve = new THREE.CurvePath();
+          if (type === "<") {
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.45, 0.65, 0),
+                new THREE.Vector3(-0.45, 0, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.45, 0, 0),
+                new THREE.Vector3(0.45, -0.65, 0),
+              ),
+            );
+          } else if (type === ">") {
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.45, 0.65, 0),
+                new THREE.Vector3(0.45, 0, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.45, 0, 0),
+                new THREE.Vector3(-0.45, -0.65, 0),
+              ),
+            );
+          } else if (type === "/") {
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.3, 0.75, 0),
+                new THREE.Vector3(-0.3, -0.75, 0),
+              ),
+            );
+          } else if (type === "{") {
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.28, 0.75, 0),
+                new THREE.Vector3(-0.1, 0.38, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.1, 0.38, 0),
+                new THREE.Vector3(-0.28, 0, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.28, 0, 0),
+                new THREE.Vector3(-0.1, -0.38, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.1, -0.38, 0),
+                new THREE.Vector3(0.28, -0.75, 0),
+              ),
+            );
+          } else if (type === "}") {
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(-0.28, 0.75, 0),
+                new THREE.Vector3(0.1, 0.38, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.1, 0.38, 0),
+                new THREE.Vector3(0.28, 0, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.28, 0, 0),
+                new THREE.Vector3(0.1, -0.38, 0),
+              ),
+            );
+            curve.add(
+              new THREE.LineCurve3(
+                new THREE.Vector3(0.1, -0.38, 0),
+                new THREE.Vector3(-0.28, -0.75, 0),
+              ),
+            );
+          }
+          return new THREE.TubeGeometry(curve, 32, 0.055, 12, false);
+        }
+
+        // ----------------------------------------------------
+        // 0. HERO — Classy Glass Icosahedron & Glowing </>
+        // ----------------------------------------------------
+        function createHero3D() {
+          var group = new THREE.Group();
+
+          var outerGeo = new THREE.IcosahedronGeometry(2.0, 0);
+          var glassMat = createClassyGlassMaterial(0xfff2df, 0.65, 0.06);
+          var outerMesh = new THREE.Mesh(outerGeo, glassMat);
+          group.add(outerMesh);
+
+          var wireMat = createClassyWireframeMaterial(ACCENT_NIGHT, 0.35);
+          var wireMesh = new THREE.Mesh(outerGeo, wireMat);
+          wireMesh.scale.set(1.002, 1.002, 1.002);
+          group.add(wireMesh);
+
+          var glyphMat = createClassyGlowMaterial(ACCENT_NIGHT, 1.4);
+
+          var leftB = new THREE.Mesh(buildBracketGeometry("<"), glyphMat);
+          leftB.position.set(-0.8, 0, 0);
+          group.add(leftB);
+
+          var slash = new THREE.Mesh(buildBracketGeometry("/"), glyphMat);
+          slash.position.set(0, 0, 0);
+          group.add(slash);
+
+          var rightB = new THREE.Mesh(buildBracketGeometry(">"), glyphMat);
+          rightB.position.set(0.8, 0, 0);
+          group.add(rightB);
+
+          // Subtle Orbital Ring
+          var ringGeo = new THREE.TorusGeometry(2.6, 0.02, 16, 64);
+          var ringMat = createClassyGlowMaterial(0xf5efe4, 0.4);
+          var ring = new THREE.Mesh(ringGeo, ringMat);
+          ring.rotation.x = Math.PI * 0.35;
+          group.add(ring);
+
+          group.userData = {
+            animate: function (t) {
+              outerMesh.rotation.y += 0.0035;
+              outerMesh.rotation.x += 0.002;
+              wireMesh.rotation.y = outerMesh.rotation.y;
+              wireMesh.rotation.x = outerMesh.rotation.x;
+
+              leftB.position.y = Math.sin(t * 1.5) * 0.06;
+              slash.position.y = Math.sin(t * 1.5 + 0.4) * 0.06;
+              rightB.position.y = Math.sin(t * 1.5 + 0.8) * 0.06;
+
+              ring.rotation.z += 0.005;
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 1. PROBLEM — Classy Cryptographic Glass Vault & { }
+        // ----------------------------------------------------
+        function createProblem3D() {
+          var group = new THREE.Group();
+
+          var torusGeo = new THREE.TorusGeometry(1.8, 0.28, 24, 64);
+          var glassMat = createClassyGlassMaterial(0xffeedd, 0.68, 0.08);
+          var ringMesh = new THREE.Mesh(torusGeo, glassMat);
+          group.add(ringMesh);
+
+          var discGeo = new THREE.CylinderGeometry(1.25, 1.25, 0.12, 32);
+          var discMat = createClassyGlowMaterial(ACCENT_NIGHT, 0.45);
+          var disc = new THREE.Mesh(discGeo, discMat);
+          disc.rotation.x = Math.PI / 2;
+          group.add(disc);
+
+          // Keyhole Brackets: "{ }"
+          var keyLeft = new THREE.Mesh(
+            buildBracketGeometry("{"),
+            createClassyGlowMaterial(0xffffff, 1.2),
+          );
+          keyLeft.scale.set(0.6, 0.6, 0.6);
+          keyLeft.position.set(-0.22, 0, 0.15);
+          group.add(keyLeft);
+
+          var keyRight = new THREE.Mesh(
+            buildBracketGeometry("}"),
+            createClassyGlowMaterial(0xffffff, 1.2),
+          );
+          keyRight.scale.set(0.6, 0.6, 0.6);
+          keyRight.position.set(0.22, 0, 0.15);
+          group.add(keyRight);
+
+          group.userData = {
+            animate: function (t) {
+              ringMesh.rotation.z += 0.003;
+              disc.rotation.z -= 0.006;
+              group.rotation.y = Math.sin(t * 0.6) * 0.25;
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 2. STAGES — 6-Facet Glass Decision Matrix
+        // ----------------------------------------------------
+        var stageNodes = [];
+        function createStages3D() {
+          var group = new THREE.Group();
+          stageNodes = [];
+
+          var centerGeo = new THREE.CylinderGeometry(0.8, 0.8, 0.5, 6);
+          var centerMat = createClassyGlassMaterial(0xfff6eb, 0.72, 0.05);
+          var centerMesh = new THREE.Mesh(centerGeo, centerMat);
+          centerMesh.rotation.x = Math.PI / 4;
+          group.add(centerMesh);
+
+          var centerWire = new THREE.Mesh(
+            centerGeo,
+            createClassyWireframeMaterial(ACCENT_NIGHT, 0.4),
+          );
+          centerWire.rotation.x = Math.PI / 4;
+          centerWire.scale.set(1.02, 1.02, 1.02);
+          group.add(centerWire);
+
+          var radius = 2.0;
+          for (var i = 0; i < 6; i++) {
+            var angle = (i / 6) * Math.PI * 2;
+            var nodeGroup = new THREE.Group();
+            nodeGroup.position.set(
+              Math.cos(angle) * radius,
+              Math.sin(angle) * radius,
+              0,
+            );
+
+            var nodeGeo = new THREE.OctahedronGeometry(0.32, 0);
+            var nodeMat = createClassyGlassMaterial(ACCENT_NIGHT, 0.8, 0.08);
+            var nodeMesh = new THREE.Mesh(nodeGeo, nodeMat);
+            nodeGroup.add(nodeMesh);
+
+            var nodeWire = new THREE.Mesh(
+              nodeGeo,
+              createClassyWireframeMaterial(0xffffff, 0.5),
+            );
+            nodeWire.scale.set(1.04, 1.04, 1.04);
+            nodeGroup.add(nodeWire);
+
+            var beamGeo = new THREE.CylinderGeometry(0.015, 0.015, radius, 8);
+            var beamMat = createClassyGlowMaterial(ACCENT_NIGHT, 0.35);
+            var beam = new THREE.Mesh(beamGeo, beamMat);
+            beam.position.set(
+              -Math.cos(angle) * (radius / 2),
+              -Math.sin(angle) * (radius / 2),
+              0,
+            );
+            beam.rotation.z = angle + Math.PI / 2;
+            nodeGroup.add(beam);
+
+            group.add(nodeGroup);
+            stageNodes.push({
+              group: nodeGroup,
+              mesh: nodeMesh,
+              wire: nodeWire,
+              mat: nodeMat,
+              baseScale: 1.0,
+              targetScale: 1.0,
+            });
+          }
+
+          group.userData = {
+            animate: function (t) {
+              group.rotation.z = t * 0.08;
+              centerMesh.rotation.y += 0.005;
+
+              for (var j = 0; j < stageNodes.length; j++) {
+                var sn = stageNodes[j];
+                sn.mesh.rotation.x += 0.01;
+                sn.mesh.rotation.y += 0.012;
+                sn.baseScale += (sn.targetScale - sn.baseScale) * 0.15;
+                sn.group.scale.set(sn.baseScale, sn.baseScale, sn.baseScale);
+              }
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 3. FEED — Volumetric Glass Ledger & Pipeline
+        // ----------------------------------------------------
+        var feedCubes = [];
+        function createFeed3D() {
+          var group = new THREE.Group();
+          feedCubes = [];
+
+          var gateGeo = new THREE.TorusGeometry(1.7, 0.14, 16, 4);
+          gateGeo.rotateZ(Math.PI / 4);
+          var gateMat = createClassyGlassMaterial(ACCENT_NIGHT, 0.78, 0.08);
+          var gateMesh = new THREE.Mesh(gateGeo, gateMat);
+          group.add(gateMesh);
+
+          var cubeGeo = new THREE.BoxGeometry(0.38, 0.38, 0.38);
+          for (var i = 0; i < 8; i++) {
+            var isBlock = i % 4 === 0;
+            var color = isBlock
+              ? BAD_COLOR
+              : i % 2 === 0
+                ? OK_COLOR
+                : ACCENT_NIGHT;
+            var cubeMat = createClassyGlassMaterial(color, 0.82, 0.05);
+            var cube = new THREE.Mesh(cubeGeo, cubeMat);
+
+            var cWire = new THREE.Mesh(
+              cubeGeo,
+              createClassyWireframeMaterial(0xffffff, 0.35),
+            );
+            cube.add(cWire);
+
+            cube.position.set(
+              (Math.random() - 0.5) * 1.5,
+              (Math.random() - 0.5) * 1.5,
+              -3.5 + i * 0.9,
+            );
+
+            cube.userData = {
+              speed: 0.02 + Math.random() * 0.02,
+              rotSpeed: 0.01 + Math.random() * 0.015,
+              isBlock: isBlock,
+            };
+
+            group.add(cube);
+            feedCubes.push(cube);
+          }
+
+          group.userData = {
+            boost: 1.0,
+            animate: function (t) {
+              gateMesh.rotation.z += 0.004;
+
+              for (var i = 0; i < feedCubes.length; i++) {
+                var c = feedCubes[i];
+                c.rotation.x += c.userData.rotSpeed * group.userData.boost;
+                c.rotation.y += c.userData.rotSpeed * group.userData.boost;
+                c.position.z += c.userData.speed * group.userData.boost;
+
+                if (c.position.z > 2.6) {
+                  c.position.z = -3.8;
+                  c.position.x = (Math.random() - 0.5) * 1.6;
+                  c.position.y = (Math.random() - 0.5) * 1.6;
+                }
+              }
+
+              if (group.userData.boost > 1.0) {
+                group.userData.boost *= 0.985;
+              }
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 4. CAP — Precision Glass Caliper & Limit Radar
+        // ----------------------------------------------------
+        function createCap3D() {
+          var group = new THREE.Group();
+
+          var gaugeGeo = new THREE.RingGeometry(
+            1.5,
+            1.85,
+            48,
+            1,
+            0,
+            Math.PI * 1.5,
+          );
+          var gaugeMat = createClassyGlassMaterial(ACCENT_NIGHT, 0.72, 0.08);
+          var gauge = new THREE.Mesh(gaugeGeo, gaugeMat);
+          group.add(gauge);
+
+          var capLineGeo = new THREE.BoxGeometry(0.06, 0.5, 0.06);
+          var capLineMat = createClassyGlowMaterial(BAD_COLOR, 1.6);
+          var capLine = new THREE.Mesh(capLineGeo, capLineMat);
+          capLine.position.set(0, 1.68, 0);
+          group.add(capLine);
+
+          var needleGeo = new THREE.CylinderGeometry(0.025, 0.06, 1.6, 16);
+          needleGeo.translate(0, 0.8, 0);
+          var needleMat = createClassyGlowMaterial(ACCENT_NIGHT, 1.4);
+          var needle = new THREE.Mesh(needleGeo, needleMat);
+          needle.rotation.z = -Math.PI * 0.48;
+          group.add(needle);
+
+          var coreGeo = new THREE.SphereGeometry(0.35, 24, 24);
+          var coreMat = createClassyGlassMaterial(0xffffff, 0.85, 0.05);
+          var core = new THREE.Mesh(coreGeo, coreMat);
+          group.add(core);
+
+          group.userData = {
+            animate: function (t) {
+              var jitter = Math.sin(t * 6) * 0.02 + Math.sin(t * 14) * 0.01;
+              needle.rotation.z = -Math.PI * 0.48 + jitter;
+              gauge.rotation.z = Math.sin(t * 0.4) * 0.08;
+              core.scale.setScalar(1.0 + Math.sin(t * 3) * 0.05);
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 5. TRAIL — Interlocking Glass Blockchain Links
+        // ----------------------------------------------------
+        var trailLinks = [];
+        var trailFracture = 0;
+        function createTrail3D() {
+          var group = new THREE.Group();
+          trailLinks = [];
+
+          var linkGeo = new THREE.TorusGeometry(0.8, 0.2, 20, 48);
+
+          for (var i = -2; i <= 2; i++) {
+            var isMiddle = i === 0;
+            var linkMat = createClassyGlassMaterial(
+              isMiddle ? ACCENT_NIGHT : 0xffeedd,
+              0.76,
+              0.06,
+            );
+            var link = new THREE.Mesh(linkGeo, linkMat);
+
+            var wire = new THREE.Mesh(
+              linkGeo,
+              createClassyWireframeMaterial(0xffffff, 0.28),
+            );
+            link.add(wire);
+
+            link.position.set(0, i * 1.05, 0);
+            if (Math.abs(i) % 2 === 1) {
+              link.rotation.y = Math.PI / 2;
+            }
+
+            group.add(link);
+            trailLinks.push({
+              mesh: link,
+              mat: linkMat,
+              origX: 0,
+              origY: i * 1.05,
+              isMiddle: isMiddle,
+            });
+          }
+
+          group.userData = {
+            animate: function (t) {
+              group.rotation.y = t * 0.25;
+              group.rotation.x = Math.sin(t * 0.4) * 0.15;
+
+              for (var j = 0; j < trailLinks.length; j++) {
+                var tl = trailLinks[j];
+                if (tl.isMiddle && trailFracture > 0.01) {
+                  tl.mesh.position.x =
+                    tl.origX + Math.sin(t * 24) * 0.28 * trailFracture;
+                  tl.mesh.rotation.z = Math.sin(t * 20) * 0.6 * trailFracture;
+                  tl.mat.color.setHex(BAD_COLOR);
+                  tl.mat.emissive = new THREE.Color(BAD_COLOR);
+                  tl.mat.emissiveIntensity = 1.6 * trailFracture;
+                } else {
+                  tl.mesh.position.x = tl.origX;
+                  tl.mesh.rotation.z = 0;
+                  if (tl.isMiddle) {
+                    tl.mat.color.setHex(getAccentColor());
+                    tl.mat.emissive = new THREE.Color(getAccentColor());
+                    tl.mat.emissiveIntensity = 0.25;
+                  }
+                }
+              }
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 6. SCAN — Glass Code Hologram & Laser Scanner
+        // ----------------------------------------------------
+        function createScan3D() {
+          var group = new THREE.Group();
+
+          var boxGeo = new THREE.BoxGeometry(2.2, 3.0, 0.5);
+          var boxMat = createClassyGlassMaterial(0xffeedd, 0.55, 0.08);
+          var boxMesh = new THREE.Mesh(boxGeo, boxMat);
+          group.add(boxMesh);
+
+          var boxWire = new THREE.Mesh(
+            boxGeo,
+            createClassyWireframeMaterial(ACCENT_NIGHT, 0.35),
+          );
+          group.add(boxWire);
+
+          var codeGlyph = new THREE.Mesh(
+            buildBracketGeometry("{"),
+            createClassyGlowMaterial(ACCENT_NIGHT, 1.2),
+          );
+          codeGlyph.scale.set(0.55, 0.55, 0.55);
+          codeGlyph.position.set(-0.4, 0.65, 0);
+          group.add(codeGlyph);
+
+          var vulnGeo = new THREE.SphereGeometry(0.18, 16, 16);
+          var vulnMat = createClassyGlowMaterial(BAD_COLOR, 1.8);
+          var vulnMesh = new THREE.Mesh(vulnGeo, vulnMat);
+          vulnMesh.position.set(0, 0, 0);
+          group.add(vulnMesh);
+
+          var laserGeo = new THREE.PlaneGeometry(2.4, 0.06);
+          var laserMat = createClassyGlowMaterial(BAD_COLOR, 2.2);
+          laserMat.side = THREE.DoubleSide;
+          var laser = new THREE.Mesh(laserGeo, laserMat);
+          group.add(laser);
+
+          group.userData = {
+            animate: function (t) {
+              group.rotation.y = Math.sin(t * 0.5) * 0.3;
+              group.rotation.x = Math.cos(t * 0.4) * 0.12;
+
+              var scanY = Math.sin(t * 1.8) * 1.25;
+              laser.position.y = scanY;
+              vulnMesh.scale.setScalar(Math.abs(scanY) < 0.25 ? 1.35 : 1.0);
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 7. STATS — 3D Gyroscopic Fortress Core
+        // ----------------------------------------------------
+        function createStats3D() {
+          var group = new THREE.Group();
+
+          var ringGeo1 = new THREE.TorusGeometry(2.0, 0.09, 16, 64);
+          var ringGeo2 = new THREE.TorusGeometry(1.5, 0.08, 16, 64);
+          var ringGeo3 = new THREE.TorusGeometry(1.05, 0.06, 16, 64);
+
+          var mat1 = createClassyGlassMaterial(ACCENT_NIGHT, 0.75, 0.06);
+          var mat2 = createClassyGlassMaterial(0xffeedd, 0.7, 0.06);
+          var mat3 = createClassyGlassMaterial(OK_COLOR, 0.78, 0.06);
+
+          var r1 = new THREE.Mesh(ringGeo1, mat1);
+          var r2 = new THREE.Mesh(ringGeo2, mat2);
+          var r3 = new THREE.Mesh(ringGeo3, mat3);
+
+          group.add(r1);
+          group.add(r2);
+          group.add(r3);
+
+          var coreGeo = new THREE.DodecahedronGeometry(0.55, 0);
+          var coreMat = createClassyGlowMaterial(ACCENT_NIGHT, 1.4);
+          var coreMesh = new THREE.Mesh(coreGeo, coreMat);
+          group.add(coreMesh);
+
+          group.userData = {
+            animate: function (t) {
+              r1.rotation.x += 0.008;
+              r1.rotation.y += 0.005;
+
+              r2.rotation.y += 0.01;
+              r2.rotation.z += 0.006;
+
+              r3.rotation.x -= 0.012;
+              r3.rotation.z -= 0.008;
+
+              coreMesh.rotation.y += 0.015;
+            },
+          };
+
+          return group;
+        }
+
+        // ----------------------------------------------------
+        // 8. CTA / INSTALL — Architectural Glass CLI Monolith
+        // ----------------------------------------------------
+        function createCta3D() {
+          var group = new THREE.Group();
+
+          var monoGeo = new THREE.BoxGeometry(1.4, 2.5, 0.7);
+          var monoMat = createClassyGlassMaterial(ACCENT_NIGHT, 0.72, 0.05);
+          var monoMesh = new THREE.Mesh(monoGeo, monoMat);
+          group.add(monoMesh);
+
+          var monoWire = new THREE.Mesh(
+            monoGeo,
+            createClassyWireframeMaterial(0xffffff, 0.38),
+          );
+          monoWire.scale.set(1.01, 1.01, 1.01);
+          group.add(monoWire);
+
+          var promptMesh = new THREE.Mesh(
+            buildBracketGeometry(">"),
+            createClassyGlowMaterial(OK_COLOR, 1.6),
+          );
+          promptMesh.scale.set(0.7, 0.7, 0.7);
+          promptMesh.position.set(-0.18, 0.25, 0.4);
+          group.add(promptMesh);
+
+          group.userData = {
+            bounce: 0,
+            animate: function (t) {
+              monoMesh.rotation.y = t * 0.2 + group.userData.bounce;
+              monoWire.rotation.y = monoMesh.rotation.y;
+              promptMesh.position.y = 0.25 + Math.sin(t * 3.0) * 0.05;
+
+              if (group.userData.bounce > 0.001) {
+                group.userData.bounce *= 0.92;
+              }
+            },
+          };
+
+          return group;
+        }
+
+        /* -------------------------------------------------------------------------
+   3.3 INITIALIZE 3D GROUPS
+   ------------------------------------------------------------------------- */
+        function initSection3DGroups() {
+          var builders = [
+            createHero3D,
+            createProblem3D,
+            createStages3D,
+            createFeed3D,
+            createCap3D,
+            createTrail3D,
+            createScan3D,
+            createStats3D,
+            createCta3D,
+          ];
+
+          for (var i = 0; i < builders.length; i++) {
+            var grp = builders[i]();
+            grp.position.set(3.6, 0, 0); // Elegantly positioned in right empty space
+            grp.visible = false;
+            scene.add(grp);
+            sectionGroups.push(grp);
+          }
+        }
+        initSection3DGroups();
+
+        /* =========================================================================
+   4. MOUSE DRAG & INERTIA
+   ========================================================================= */
+        stageCanvas.addEventListener("mousedown", function (e) {
+          isDragging = true;
+          prevMouseX = e.clientX;
+          prevMouseY = e.clientY;
+        });
+
+        window.addEventListener("mouseup", function () {
+          isDragging = false;
+        });
+
+        window.addEventListener("mousemove", function (e) {
+          mouseXNorm = (e.clientX / window.innerWidth - 0.5) * 2;
+          mouseYNorm = (e.clientY / window.innerHeight - 0.5) * 2;
+
+          if (isDragging) {
+            var deltaX = e.clientX - prevMouseX;
+            var deltaY = e.clientY - prevMouseY;
+            rotVelY += deltaX * 0.004;
+            rotVelX += deltaY * 0.004;
+            prevMouseX = e.clientX;
+            prevMouseY = e.clientY;
+          }
+        });
+
+        stageCanvas.addEventListener(
+          "touchstart",
+          function (e) {
+            if (e.touches.length === 1) {
+              isDragging = true;
+              prevMouseX = e.touches[0].clientX;
+              prevMouseY = e.touches[0].clientY;
+            }
+          },
+          { passive: true },
+        );
+
+        window.addEventListener("touchend", function () {
+          isDragging = false;
+        });
+
+        window.addEventListener(
+          "touchmove",
+          function (e) {
+            if (isDragging && e.touches.length === 1) {
+              var deltaX = e.touches[0].clientX - prevMouseX;
+              var deltaY = e.touches[0].clientY - prevMouseY;
+              rotVelY += deltaX * 0.005;
+              rotVelX += deltaY * 0.005;
+              prevMouseX = e.touches[0].clientX;
+              prevMouseY = e.touches[0].clientY;
+            }
+          },
+          { passive: true },
+        );
+
+        /* =========================================================================
+   5. VIEWPORT-CENTERED FADE-IN / STABILITY / FADE-OUT SYSTEM
+   ========================================================================= */
+        var secElements = Array.prototype.slice.call(
+          document.querySelectorAll("section.panel"),
+        );
+
+        // Helper to recursively update material opacities inside a 3D group
+        function updateGroupOpacity(obj, visibility) {
+          if (obj.material) {
+            var baseOp =
+              obj.material.userData &&
+              obj.material.userData.baseOpacity !== undefined
+                ? obj.material.userData.baseOpacity
+                : 1.0;
+            obj.material.opacity = baseOp * visibility;
+
+            if (
+              obj.material.emissiveIntensity !== undefined &&
+              obj.material.userData &&
+              obj.material.userData.baseEmissive !== undefined
+            ) {
+              obj.material.emissiveIntensity =
+                obj.material.userData.baseEmissive * visibility;
+            }
+          }
+          if (obj.children && obj.children.length > 0) {
+            for (var c = 0; c < obj.children.length; c++) {
+              updateGroupOpacity(obj.children[c], visibility);
+            }
+          }
+        }
+
+        function update3DPerSlideTransitions(time) {
+          var viewportH = window.innerHeight;
+          var viewportCenter = viewportH * 0.5;
+          var targetX = window.innerWidth < 1024 ? 0 : 3.6;
+          var targetZ = window.innerWidth < 1024 ? -1.8 : 0;
+
+          for (var i = 0; i < secElements.length; i++) {
+            var secEl = secElements[i];
+            var grp = sectionGroups[i];
+            if (!grp) continue;
+
+            var rect = secEl.getBoundingClientRect();
+            var sectionCenter = rect.top + rect.height * 0.5;
+            var distFromCenter = Math.abs(sectionCenter - viewportCenter);
+
+            // Fade threshold: 0 at exact vertical center, 1 at 55% viewport distance
+            var normDist = distFromCenter / (viewportH * 0.55);
+            var rawVis = Math.max(0.0, Math.min(1.0, 1.0 - normDist));
+            var visibility = rawVis * rawVis * (3 - 2 * rawVis); // Smoothstep curve
+
+            if (visibility <= 0.002) {
+              grp.visible = false;
+            } else {
+              grp.visible = true;
+
+              // Classy stability & subtle organic hover at center
+              var driftY = (viewportCenter - sectionCenter) * 0.0025;
+              var hoverY = Math.sin(time * 1.2 + i) * 0.05;
+              grp.position.y = driftY + hoverY;
+              grp.position.x = targetX;
+              grp.position.z = targetZ;
+
+              // Scale gently into 100% focus at center
+              var scale = 0.88 + 0.12 * visibility;
+              grp.scale.set(scale, scale, scale);
+
+              // Fade materials in and out smoothly
+              updateGroupOpacity(grp, visibility);
+            }
+          }
+        }
+
+        /* =========================================================================
+   6. RENDER LOOP
+   ========================================================================= */
+        var clock = new THREE.Clock();
+
+        function animate() {
+          requestAnimationFrame(animate);
+
+          var time = clock.getElapsedTime();
+
+          // 1. Background particles
+          updateBgParticles(time);
+
+          // 2. Viewport-centered 3D fade-in / fade-out transitions
+          update3DPerSlideTransitions(time);
+
+          // 3. Inertia damping
+          userRotX += rotVelX;
+          userRotY += rotVelY;
+          rotVelX *= 0.92;
+          rotVelY *= 0.92;
+
+          // 4. Animate visible models
+          for (var i = 0; i < sectionGroups.length; i++) {
+            var grp = sectionGroups[i];
+            if (grp.visible && grp.userData && grp.userData.animate) {
+              grp.userData.animate(time);
+              grp.rotation.x = userRotX;
+              grp.rotation.y = userRotY;
+            }
+          }
+
+          // 5. Parallax camera drift
+          camera.position.x = mouseXNorm * 0.25;
+          camera.position.y = -mouseYNorm * 0.18;
+
+          renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener("resize", function () {
+          if (renderer) {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+          }
+          if (bgRenderer) {
+            bgRenderer.setSize(window.innerWidth, window.innerHeight);
+            bgCamera.aspect = window.innerWidth / window.innerHeight;
+            bgCamera.updateProjectionMatrix();
+          }
+        });
+
+        /* =========================================================================
+   7. DOM INTERACTIONS & REAL-TIME HOOKS
+   ========================================================================= */
+
+        // Theme Toggle
+        function applyTheme(t) {
+          theme = t;
+          root.setAttribute("data-theme", t);
+          themeToggle.setAttribute("aria-pressed", String(t === "day"));
+        }
+        themeToggle.addEventListener("click", function () {
+          var next = theme === "night" ? "day" : "night";
+          try {
+            localStorage.setItem("sirius-theme", next);
+          } catch (e) {}
+          applyTheme(next);
+        });
+
+        // Intersection Observer for Left Cards
+        if ("IntersectionObserver" in window) {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting) en.target.classList.add("is-visible");
+              });
+            },
+            { threshold: 0.25 },
+          );
+          secElements.forEach(function (el) {
+            io.observe(el);
+          });
+        } else {
+          secElements.forEach(function (el) {
+            el.classList.add("is-visible");
+          });
+        }
+
+        // Stage Cards & 3D Node Hover Lighting
+        var STAGES = [
+          {
+            n: "01",
+            name: "identity",
+            q: "Is this agent allowed to do this at all?",
+            ex: "withdraw is outside this agent’s grant",
+          },
+          {
+            n: "02",
+            name: "intent",
+            q: "Does its stated purpose match its objective?",
+            ex: "stated purpose does not match the agent’s objective",
+          },
+          {
+            n: "03",
+            name: "policy",
+            q: "Spending, exposure, frequency, counterparty.",
+            ex: "₹82,000 is over the per-action cap",
+          },
+          {
+            n: "04",
+            name: "context",
+            q: "Counterparty reputation, protocol risk, flags.",
+            ex: "yield-max is unaudited",
+          },
+          {
+            n: "05",
+            name: "behaviour",
+            q: "Is this how this agent actually behaves?",
+            ex: "₹49,500 is 2.1σ above this agent’s usual",
+          },
+          {
+            n: "06",
+            name: "manipulation",
+            q: "Can the instruction behind it be trusted?",
+            ex: "the instruction contains override of prior instructions",
+          },
+        ];
+        var grid = document.getElementById("stageGrid");
+        STAGES.forEach(function (s, idx) {
+          var el = document.createElement("div");
+          el.className = "stage-card";
+          el.innerHTML =
+            '<div class="num">' +
+            s.n +
+            "</div><h3>" +
+            s.name +
+            '</h3><p class="q">' +
+            s.q +
+            '</p><div class="ex">' +
+            s.ex +
+            "</div>";
+
+          el.addEventListener("mouseenter", function () {
+            if (stageNodes[idx]) {
+              stageNodes[idx].targetScale = 1.75;
+              stageNodes[idx].mat.color.setHex(0xffffff);
+              stageNodes[idx].mat.emissive = new THREE.Color(ACCENT_NIGHT);
+              stageNodes[idx].mat.emissiveIntensity = 1.8;
+            }
+          });
+          el.addEventListener("mouseleave", function () {
+            if (stageNodes[idx]) {
+              stageNodes[idx].targetScale = 1.0;
+              stageNodes[idx].mat.color.setHex(getAccentColor());
+              stageNodes[idx].mat.emissiveIntensity = 0.4;
+            }
+          });
+          el.addEventListener("click", function () {
+            el.classList.toggle("revealed");
+          });
+          grid.appendChild(el);
+        });
+
+        // Live Feed Run Button
+        var FEED = [
+          {
+            v: "BLOCK",
+            cls: "l-block",
+            text: "wlt-9f2c41    ₹48,000   the instruction contains override of prior instructions",
+          },
+          {
+            v: "CONSTRAIN",
+            cls: "l-constrain",
+            text: "delta-logi..  ₹82,000 -> ₹50,000   over the per-action cap",
+          },
+          {
+            v: "VERIFY",
+            cls: "l-verify",
+            text: "northwind..   ₹9,400    first time sending to northwind-print",
+          },
+          { v: "ALLOW", cls: "l-allow", text: "acme-cloud    ₹11,240" },
+        ];
+        var feedOut = document.getElementById("feedOutput");
+        var runFeedBtn = document.getElementById("runFeed");
+        runFeedBtn.addEventListener("click", function () {
+          runFeedBtn.disabled = true;
+          feedOut.innerHTML = "";
+
+          if (sectionGroups[3]) {
+            sectionGroups[3].userData.boost = 4.0;
+          }
+
+          var i = 0;
+          function next() {
+            if (i >= FEED.length) {
+              var summary = document.createElement("div");
+              summary.className = "feed-line";
+              summary.style.marginTop = "0.8em";
+              summary.style.color = "var(--text-lo)";
+              summary.textContent =
+                "Decisions   264 allowed (95%)   2 step-up   1 constrained   11 blocked\nAutonomy    95.0% of actions proceeded with nobody asked";
+              summary.style.whiteSpace = "pre";
+              feedOut.appendChild(summary);
+              runFeedBtn.disabled = false;
+              return;
+            }
+            var f = FEED[i];
+            var line = document.createElement("div");
+            line.className = "feed-line " + f.cls;
+            line.textContent = f.v.padEnd(10, " ") + f.text;
+            feedOut.appendChild(line);
+            i++;
+            setTimeout(next, 420);
+          }
+          next();
+        });
+
+        // Trail Verify / Tamper / Reset
+        var trailStatus = document.getElementById("trailStatus");
+        document
+          .getElementById("verifyBtn")
+          .addEventListener("click", function () {
+            trailFracture = 0;
+            trailStatus.innerHTML =
+              '<span class="l-ok">OK</span>      decisions-mtcnin36.json\n        278 decisions, chained and unbroken\n        signed 2026-08-28T07:49:52.870Z by key e960b577e03659b4';
+          });
+        document
+          .getElementById("tamperBtn")
+          .addEventListener("click", function () {
+            trailFracture = 1.0;
+            trailStatus.innerHTML =
+              '<span class="l-fail">FAILED</span>  tampered.json\n        entry 255 has been altered since it was written';
+          });
+        document
+          .getElementById("resetTrailBtn")
+          .addEventListener("click", function () {
+            trailFracture = 0;
+            trailStatus.innerHTML = "";
+          });
+
+        // Scan Money Counter
+        var moneyEl = document.getElementById("moneyAtRisk");
+        var scanSection = document.getElementById("scan");
+        var scanDone = false;
+        if ("IntersectionObserver" in window) {
+          var scanIO = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting && !scanDone) {
+                  scanDone = true;
+                  var start = null,
+                    target = 8930000,
+                    duration = 1600;
+                  function step(ts) {
+                    if (!start) start = ts;
+                    var p = Math.max(0, Math.min(1, (ts - start) / duration));
+                    var val = Math.floor(target * (1 - Math.pow(1 - p, 3)));
+                    moneyEl.textContent = "₹" + val.toLocaleString("en-IN");
+                    if (p < 1) requestAnimationFrame(step);
+                  }
+                  requestAnimationFrame(step);
+                }
+              });
+            },
+            { threshold: 0.35 },
+          );
+          scanIO.observe(scanSection);
+        }
+
+        // Stats Counter
+        var statDone = false;
+        var statsSection = document.getElementById("stats");
+        if ("IntersectionObserver" in window) {
+          var statIO = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting && !statDone) {
+                  statDone = true;
+                  document
+                    .querySelectorAll("#statGrid .v[data-target]")
+                    .forEach(function (el) {
+                      var target = parseInt(el.getAttribute("data-target"), 10);
+                      var suffix = el.getAttribute("data-suffix") || "";
+                      var start = null,
+                        duration = 1200;
+                      function step(ts) {
+                        if (!start) start = ts;
+                        var p = Math.max(
+                          0,
+                          Math.min(1, (ts - start) / duration),
+                        );
+                        el.textContent =
+                          Math.floor(target * (1 - Math.pow(1 - p, 3))) +
+                          suffix;
+                        if (p < 1) requestAnimationFrame(step);
+                      }
+                      requestAnimationFrame(step);
+                    });
+                }
+              });
+            },
+            { threshold: 0.35 },
+          );
+          statIO.observe(statsSection);
+        }
+
+        // Copy Buttons + Monolith Bounce
+        document.querySelectorAll(".copy-btn").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var cmd = btn.getAttribute("data-cmd");
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(cmd).then(function () {
+                var orig = btn.textContent;
+                btn.textContent = "copied";
+                setTimeout(function () {
+                  btn.textContent = orig;
+                }, 1400);
+              });
+            }
+            if (sectionGroups[8]) {
+              sectionGroups[8].userData.bounce = 0.8;
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

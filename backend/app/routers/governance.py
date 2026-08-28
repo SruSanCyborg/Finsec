@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import uuid
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, WebSocket, Response
 
 from ..core import db
 from ..core.config import SIRIUS_PROJECT_ID
@@ -54,6 +55,12 @@ async def create_suppression(body: SuppressionCreate) -> Suppression:
     )
     row = await db.fetchrow("SELECT * FROM suppressions WHERE id = $1", row_id)
     return Suppression(**{k: v for k, v in _suppression_from_row(row).items() if v is not None})
+
+
+@router.delete("/suppressions/{suppression_id}", status_code=204, response_class=Response)
+async def delete_suppression(suppression_id: str) -> Response:
+    await db.execute("DELETE FROM suppressions WHERE id = $1", suppression_id)
+    return Response(status_code=204)
 
 
 # ---- baselines -------------------------------------------------------------
@@ -189,3 +196,28 @@ async def healthz() -> dict:
 @router.get("/readyz")
 async def readyz() -> dict:
     return await healthz()
+
+
+@router.websocket("/events")
+async def global_events(websocket: WebSocket):
+    """Global live event stream — every scan's findings/completion in real time.
+    Accepts Bearer header or ?token= fallback for browsers."""
+    from ..core import events
+    from ..core.ws_auth import ws_authenticate
+
+    if not await ws_authenticate(websocket):
+        await websocket.close(code=4401)
+        return
+    await websocket.accept()
+    await events.connect_global(websocket)
+    try:
+        while True:
+            await asyncio.sleep(30)
+    except Exception:
+        pass
+    finally:
+        await events.disconnect_global(websocket)
+        try:
+            await websocket.close()
+        except Exception:
+            pass

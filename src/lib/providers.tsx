@@ -1,13 +1,20 @@
 "use client";
 
-// Unified auth provider for the whole app. Wraps ClerkProvider so every layout
-// and page gets Clerk context, and exposes a small Sirius-shaped session hook
-// (user + org role) so the existing app code keeps working with minimal churn.
+// Unified auth provider for the whole app.
+//
+// When a valid Clerk publishable key is configured, wraps ClerkProvider and
+// exposes the Clerk session. When Clerk is NOT configured (missing or dead
+// key — which makes Clerk's own SignIn/SignUp 404), falls back to the Sirius
+// backend session: the mock store in mock mode, or the Core API token in real
+// mode. Both expose the same { user, role, isSignedIn, isLoaded } shape so the
+// rest of the app is unchanged.
 
 import { ClerkProvider, useUser, useOrganization } from "@clerk/nextjs";
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { clerkAppearance } from "@/lib/clerk-appearance";
-import type { Role } from "@/types";
+import { clerkConfigured } from "@/lib/clerk-available";
+import { api } from "@/lib/mock/api";
+import type { Role, User } from "@/types";
 
 /** Clerk org roles map 1:1 to the Sirius RBAC roles. */
 const ROLE_MAP: Record<string, Role> = {
@@ -23,8 +30,10 @@ export function clerkRoleToSirius(role: string | null | undefined): Role | undef
   return ROLE_MAP[role] ?? undefined;
 }
 
+export const USE_CLERK = clerkConfigured();
+
 interface SiriusSession {
-  user: ReturnType<typeof useUser>["user"];
+  user: User | null;
   role: Role | undefined;
   isSignedIn: boolean;
   isLoaded: boolean;
@@ -37,12 +46,25 @@ const Ctx = createContext<SiriusSession>({
   isLoaded: false,
 });
 
-function SessionBridge({ children }: { children: ReactNode }) {
-  const { user, isLoaded: userLoaded, isSignedIn } = useUser();
+// ── Clerk-backed session ─────────────────────────────────────────────────────
+
+function ClerkSessionBridge({ children }: { children: ReactNode }) {
+  const { user: clerkUser, isLoaded: userLoaded, isSignedIn } = useUser();
   const { membership, isLoaded: orgLoaded } = useOrganization();
 
   const role = clerkRoleToSirius(membership?.role);
   const isLoaded = userLoaded && orgLoaded;
+
+  const user: User | null = clerkUser
+    ? {
+        id: clerkUser.id,
+        name: clerkUser.fullName ?? clerkUser.firstName ?? clerkUser.username ?? clerkUser.primaryEmailAddress?.emailAddress ?? "You",
+        email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
+        role: role ?? "member",
+        color: "#22d3ee",
+        mfa: false,
+      }
+    : null;
 
   return (
     <Ctx.Provider value={{ user, role, isSignedIn: !!isSignedIn, isLoaded }}>
@@ -51,13 +73,58 @@ function SessionBridge({ children }: { children: ReactNode }) {
   );
 }
 
+// ── Backend session (no Clerk) ───────────────────────────────────────────────
+
+function BackendSessionBridge({ children }: { children: ReactNode }) {
+  const [session, setSession] = useState<{ user: User | null; loaded: boolean }>({
+    user: null,
+    loaded: false,
+  });
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const token =
+          localStorage.getItem("sirius.token") ??
+          (await import("@/lib/real/api")).getApiToken();
+        if (!token) {
+          if (active) setSession({ user: null, loaded: true });
+          return;
+        }
+        const user = await api.auth.me(token);
+        if (active) setSession({ user, loaded: true });
+      } catch {
+        if (active) setSession({ user: null, loaded: true });
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const user = session.user;
+  const role = user?.role;
+
+  return (
+    <Ctx.Provider value={{ user, role, isSignedIn: !!user, isLoaded: session.loaded }}>
+      {children}
+    </Ctx.Provider>
+  );
+}
+
+// ── Top-level provider ───────────────────────────────────────────────────────
+
 export function Providers({ children }: { children: ReactNode }) {
+  if (!USE_CLERK) {
+    return <BackendSessionBridge>{children}</BackendSessionBridge>;
+  }
   return (
     <ClerkProvider
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       appearance={clerkAppearance}
     >
-      <SessionBridge>{children}</SessionBridge>
+      <ClerkSessionBridge>{children}</ClerkSessionBridge>
     </ClerkProvider>
   );
 }
@@ -71,8 +138,8 @@ export function useSession() {
 export function useSiriusUser() {
   const { user, role } = useSession();
   return {
-    name: user?.fullName ?? user?.firstName ?? user?.username ?? user?.primaryEmailAddress?.emailAddress ?? "You",
-    email: user?.primaryEmailAddress?.emailAddress ?? "",
+    name: user?.name ?? "You",
+    email: user?.email ?? "",
     role,
     id: user?.id,
   };

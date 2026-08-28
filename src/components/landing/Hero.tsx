@@ -18,7 +18,7 @@ export default function Hero() {
         className="max-w-2xl"
       >
         <p className="mb-7 font-mono text-[10px] uppercase tracking-[0.3em] text-accent">
-          SIRIUS LINE / LIVE SECURITY SYSTEM
+          SIRIUS / LIVE SECURITY SYSTEM
         </p>
         <h1 className="max-w-xl text-5xl font-medium leading-[0.96] tracking-[-0.04em] text-zinc-100 sm:text-7xl lg:text-[7.5rem]">
           Let agents move money.

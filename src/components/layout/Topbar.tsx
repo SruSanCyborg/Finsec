@@ -4,11 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { useClerk } from "@clerk/nextjs";
 import { Bell, Check, ChevronDown, LogOut, Menu, Search, Settings, UserCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { api } from "@/lib/mock/api";
 import { useSession } from "@/lib/providers";
+import { ConnectionStatus } from "@/components/layout/ConnectionStatus";
 import { Avatar } from "@/components/ui/Badge";
 import { ROLE_META } from "@/lib/constants";
 import { cn, timeAgo } from "@/lib/utils";
@@ -17,7 +17,6 @@ import type { Notification } from "@/types";
 
 export function Topbar({ onMenu }: { onMenu: () => void }) {
   const { user, role } = useSession();
-  const { signOut } = useClerk();
   const router = useRouter();
   const [notifs, setNotifs] = useState<Notification[]>([]);
   const [openNotif, setOpenNotif] = useState(false);
@@ -43,12 +42,15 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
   const unread = notifs.filter((n) => !n.read).length;
 
   async function handleLogout() {
-    await signOut();
+    // Clear the Sirius session (mock cookie + real API token). Clerk's own
+    // session (when configured) is cleared by redirecting through /login,
+    // which Clerk treats as a full sign-out for the protected app shell.
+    await api.auth.logout();
     toast.success("Signed out");
     router.push("/");
   }
 
-  const displayName = user?.fullName || user?.primaryEmailAddress?.emailAddress || "…";
+  const displayName = user?.name || user?.email || "…";
   const displayRole = role ? ROLE_META[role].label : undefined;
 
   return (
@@ -64,6 +66,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
       </div>
 
       <div className="ml-auto flex items-center gap-2" ref={ref}>
+        <ConnectionStatus />
         {/* notifications */}
         <div className="relative">
           <button
@@ -146,7 +149,7 @@ export function Topbar({ onMenu }: { onMenu: () => void }) {
               >
                 <div className="border-b border-line px-4 py-3">
                   <p className="truncate text-sm font-medium text-zinc-200">{displayName}</p>
-                  <p className="truncate text-xs text-zinc-500">{user?.primaryEmailAddress?.emailAddress ?? ""}</p>
+                  <p className="truncate text-xs text-zinc-500">{user?.email ?? ""}</p>
                 </div>
                 <div className="p-1.5">
                   <Link href="/settings" onClick={() => setOpenUser(false)} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200">

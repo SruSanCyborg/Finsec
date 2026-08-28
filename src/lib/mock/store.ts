@@ -51,7 +51,7 @@ export function freshDB(): DB {
   return {
     v: 3,
     credentials: [
-      { email: "demo@siriusline.io", password: "Demo123!", name: "Aarav Mehta", verified: true },
+      { email: "demo@sirius.dev", password: "Demo123!", name: "Aarav Mehta", verified: true },
     ],
     members: seed.seedMembers,
     invites: seed.seedInvites,

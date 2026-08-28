@@ -22,6 +22,7 @@ export interface User {
   role: Role;
   color: string;
   mfa: boolean;
+  avatarUrl?: string;
 }
 
 export interface TeamMember extends User {

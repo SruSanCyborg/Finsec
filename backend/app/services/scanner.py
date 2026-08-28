@@ -57,6 +57,7 @@ class RawFinding:
     taint: str | None = None
     fingerprint: str = ""
     tags: list[str] = field(default_factory=list)
+    file: str = ""
 
 
 @dataclass
@@ -540,13 +541,16 @@ def scan_directory(root: str | Path, scan_id: str, rulesets: list[str] | None = 
     for path, lines in files:
         rel = path.relative_to(root_path).as_posix()
         try:
-            raw.extend(_run_all(path, lines, rel))
+            found = _run_all(path, lines, rel)
+            for f in found:
+                f.file = rel  # stamp the source path onto each finding
+            raw.extend(found)
         except Exception as exc:  # one bad file must not abandon the scan
             errors.append({"path": rel, "detail": str(exc)})
 
     # assign fingerprints + money (post-dedup)
     for f in raw:
-        f.fingerprint = fingerprint(f.rule_id, f.file if hasattr(f, "file") else "", f.snippet)
+        f.fingerprint = fingerprint(f.rule_id, f.file, f.snippet)
 
     unique = dedupe(raw)
     counts = {sev: 0 for sev in SEVERITY_ORDER}

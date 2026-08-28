@@ -1,0 +1,1745 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sirius — a control layer for AI agents that can move money</title>
+    <meta
+      name="description"
+      content="Sirius decides, per action, whether an autonomous agent's transaction should happen — and keeps a signed record of every decision, including the ones it allowed. Runs entirely on your machine."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg-void: #0a0b10;
+        --bg-surface: #12141c;
+        --bg-raised: #1a1d28;
+        --bg-grid: #14161f;
+        --border-hairline: rgba(255, 255, 255, 0.06);
+        --border-subtle: rgba(255, 255, 255, 0.12);
+        --emerald: #4ade80;
+        --teal: #2dd4bf;
+        --cyan: #38bdf8;
+        --indigo: #818cf8;
+        --violet: #a78bfa;
+        --text-hi: #f3f4f8;
+        --text-md: #b7bbc9;
+        --text-lo: #767b8c;
+        --font-display: "Inter", -apple-system, sans-serif;
+        --font-body: "Inter", -apple-system, sans-serif;
+        --font-code: "JetBrains Mono", ui-monospace, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg-void);
+        color: var(--text-hi);
+        font-family: var(--font-body);
+        -webkit-font-smoothing: antialiased;
+        overflow-x: hidden;
+      }
+      ::selection {
+        background: var(--cyan);
+        color: var(--bg-void);
+      }
+
+      #webgl {
+        position: fixed;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        z-index: 0;
+        display: block;
+      }
+      #grain {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        opacity: 0.05;
+        mix-blend-mode: overlay;
+        background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+      }
+      #vignette {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        pointer-events: none;
+        background: radial-gradient(
+          ellipse at center,
+          rgba(10, 11, 16, 0) 40%,
+          rgba(10, 11, 16, 0.75) 100%
+        );
+      }
+      .no-webgl #webgl,
+      .no-webgl #grain {
+        display: none;
+      }
+      .no-webgl body {
+        background: radial-gradient(ellipse at 50% 0%, #161a26 0%, #0a0b10 65%);
+      }
+
+      nav {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 10;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 1.25rem 2rem;
+        pointer-events: none;
+      }
+      nav .word {
+        font-family: var(--font-code);
+        font-weight: 700;
+        letter-spacing: 0.14em;
+        font-size: 0.8rem;
+        color: var(--text-hi);
+        pointer-events: auto;
+        text-decoration: none;
+      }
+      nav .links {
+        display: flex;
+        gap: 1.6rem;
+        pointer-events: auto;
+      }
+      nav .links a {
+        color: var(--text-md);
+        text-decoration: none;
+        font-size: 0.78rem;
+        letter-spacing: 0.03em;
+        font-family: var(--font-body);
+        transition: color 0.2s;
+      }
+      nav .links a:hover {
+        color: var(--cyan);
+      }
+      @media (max-width: 640px) {
+        nav .links {
+          display: none;
+        }
+      }
+
+      main {
+        position: relative;
+        z-index: 2;
+      }
+      section.panel {
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        justify-content: center;
+        padding: 8vh 6vw;
+        position: relative;
+      }
+      section.panel.center {
+        align-items: center;
+        text-align: center;
+      }
+      .content {
+        max-width: 640px;
+        opacity: 0;
+        transform: translateY(28px);
+        transition:
+          opacity 0.9s ease,
+          transform 0.9s ease;
+      }
+      .content.wide {
+        max-width: 820px;
+      }
+      .panel.is-visible .content {
+        opacity: 1;
+        transform: translateY(0);
+      }
+
+      .eyebrow {
+        font-family: var(--font-code);
+        font-size: 0.72rem;
+        letter-spacing: 0.22em;
+        text-transform: uppercase;
+        color: var(--cyan);
+        margin: 0 0 1.1rem;
+        font-weight: 600;
+      }
+      h1,
+      h2 {
+        font-family: var(--font-display);
+        font-weight: 800;
+        line-height: 1.08;
+        letter-spacing: -0.02em;
+        color: var(--text-hi);
+        margin: 0 0 1.2rem;
+      }
+      h1 {
+        font-size: clamp(2.2rem, 5.6vw, 4.2rem);
+      }
+      h2 {
+        font-size: clamp(1.7rem, 3.6vw, 2.7rem);
+      }
+      p.lede {
+        font-size: clamp(1rem, 1.6vw, 1.2rem);
+        color: var(--text-md);
+        line-height: 1.65;
+        margin: 0 0 1.4rem;
+      }
+      p.body {
+        font-size: 0.98rem;
+        color: var(--text-md);
+        line-height: 1.7;
+        margin: 0 0 1rem;
+      }
+      strong {
+        color: var(--text-hi);
+        font-weight: 600;
+      }
+
+      .glass {
+        background: rgba(18, 20, 28, 0.62);
+        border: 1px solid var(--border-hairline);
+        border-radius: 16px;
+        backdrop-filter: blur(14px);
+        -webkit-backdrop-filter: blur(14px);
+        padding: 1.6rem 1.8rem;
+      }
+
+      .btn {
+        font-family: var(--font-body);
+        font-weight: 600;
+        font-size: 0.92rem;
+        border-radius: 10px;
+        padding: 0.85rem 1.5rem;
+        cursor: pointer;
+        border: 1px solid var(--border-subtle);
+        background: var(--bg-raised);
+        color: var(--text-hi);
+        transition:
+          border-color 0.2s,
+          box-shadow 0.2s,
+          transform 0.15s;
+      }
+      .btn:hover {
+        border-color: var(--cyan);
+        box-shadow: 0 0 24px rgba(56, 189, 248, 0.25);
+        transform: translateY(-1px);
+      }
+      .btn.primary {
+        background: linear-gradient(
+          135deg,
+          rgba(56, 189, 248, 0.18),
+          rgba(167, 139, 250, 0.18)
+        );
+        border-color: rgba(56, 189, 248, 0.4);
+      }
+      .btn.ghost {
+        background: transparent;
+        color: var(--text-md);
+        border-color: transparent;
+      }
+      .btn.ghost:hover {
+        color: var(--cyan);
+        box-shadow: none;
+        border-color: transparent;
+        transform: none;
+      }
+      .btn:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
+      .btn-row {
+        display: flex;
+        gap: 0.9rem;
+        flex-wrap: wrap;
+        align-items: center;
+        margin-top: 0.4rem;
+      }
+
+      .micro {
+        font-size: 0.78rem;
+        color: var(--text-lo);
+        margin-top: 1rem;
+        line-height: 1.6;
+        max-width: 420px;
+      }
+
+      /* HERO */
+      #hero {
+        padding-top: 0;
+      }
+      #hero .content {
+        max-width: 720px;
+      }
+      .hero-mark {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        margin-bottom: 1.6rem;
+      }
+      .hero-mark .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: var(--emerald);
+        box-shadow: 0 0 10px var(--emerald);
+      }
+      .hero-mark span {
+        font-family: var(--font-code);
+        font-size: 0.78rem;
+        letter-spacing: 0.2em;
+        color: var(--text-lo);
+      }
+      .scroll-cue {
+        position: absolute;
+        bottom: 2.4rem;
+        left: 50%;
+        transform: translateX(-50%);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 0.4rem;
+        color: var(--text-lo);
+        font-size: 0.7rem;
+        letter-spacing: 0.15em;
+        font-family: var(--font-code);
+        animation: bob 2.2s ease-in-out infinite;
+        opacity: 0;
+      }
+      #hero.is-visible .scroll-cue {
+        opacity: 1;
+        transition: opacity 1s ease 1.2s;
+      }
+      @keyframes bob {
+        0%,
+        100% {
+          transform: translate(-50%, 0);
+        }
+        50% {
+          transform: translate(-50%, 8px);
+        }
+      }
+      .chev {
+        width: 14px;
+        height: 14px;
+        border-right: 1.5px solid var(--text-lo);
+        border-bottom: 1.5px solid var(--text-lo);
+        transform: rotate(45deg);
+      }
+
+      /* STAGE CARDS */
+      .stage-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 0.9rem;
+        margin-top: 1.6rem;
+        width: 100%;
+        max-width: 820px;
+      }
+      @media (max-width: 760px) {
+        .stage-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      @media (max-width: 480px) {
+        .stage-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+      .stage-card {
+        border-radius: 14px;
+        padding: 1.1rem 1.15rem;
+        cursor: pointer;
+        position: relative;
+        overflow: hidden;
+        border: 1px solid var(--border-hairline);
+        background: rgba(18, 20, 28, 0.55);
+        transition:
+          border-color 0.25s,
+          transform 0.2s;
+        min-height: 118px;
+      }
+      .stage-card:hover,
+      .stage-card.revealed {
+        transform: translateY(-3px);
+        border-color: var(--stage-c, var(--cyan));
+      }
+      .stage-card .num {
+        font-family: var(--font-code);
+        font-size: 0.68rem;
+        color: var(--stage-c, var(--cyan));
+        letter-spacing: 0.1em;
+      }
+      .stage-card h3 {
+        margin: 0.35rem 0 0.4rem;
+        font-size: 1rem;
+        font-family: var(--font-display);
+        font-weight: 700;
+        color: var(--text-hi);
+        text-transform: capitalize;
+      }
+      .stage-card .q {
+        font-size: 0.82rem;
+        color: var(--text-md);
+        line-height: 1.45;
+        margin: 0;
+      }
+      .stage-card .ex {
+        font-family: var(--font-code);
+        font-size: 0.74rem;
+        color: var(--stage-c, var(--cyan));
+        line-height: 1.5;
+        margin-top: 0.6rem;
+        padding-top: 0.6rem;
+        border-top: 1px solid var(--border-hairline);
+        opacity: 0;
+        max-height: 0;
+        transition: opacity 0.25s ease;
+      }
+      .stage-card:hover .ex,
+      .stage-card.revealed .ex {
+        opacity: 1;
+        max-height: 200px;
+      }
+
+      /* CONSOLE / TERMINAL BLOCKS */
+      .term {
+        font-family: var(--font-code);
+        font-size: 0.82rem;
+        line-height: 1.75;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 1.2rem 1.3rem;
+        width: 100%;
+        max-width: 780px;
+        overflow-x: auto;
+        white-space: pre;
+        color: var(--text-md);
+      }
+      .term .l-block {
+        color: var(--violet);
+      }
+      .term .l-constrain {
+        color: var(--indigo);
+      }
+      .term .l-verify {
+        color: var(--cyan);
+      }
+      .term .l-allow {
+        color: var(--emerald);
+      }
+      .term .l-fail {
+        color: var(--violet);
+      }
+      .term .l-ok {
+        color: var(--emerald);
+      }
+      .feed-line {
+        opacity: 0;
+        transform: translateY(-6px);
+        animation: feedIn 0.5s ease forwards;
+      }
+      @keyframes feedIn {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      .num-tabular {
+        font-family: var(--font-code);
+        font-variant-numeric: tabular-nums;
+        letter-spacing: -0.02em;
+      }
+
+      /* CAP BAR SECTION */
+      .caseline {
+        font-family: var(--font-code);
+        font-size: 0.85rem;
+        color: var(--text-md);
+        border-left: 2px solid var(--violet);
+        padding-left: 1rem;
+        margin-top: 1.2rem;
+        line-height: 1.7;
+      }
+
+      /* TRAIL SECTION */
+      .trail-actions {
+        display: flex;
+        gap: 0.8rem;
+        flex-wrap: wrap;
+        margin-top: 1.2rem;
+      }
+      #trailStatus {
+        margin-top: 1rem;
+        min-height: 2.4em;
+      }
+
+      /* SCAN SECTION */
+      .code-card {
+        font-family: var(--font-code);
+        font-size: 0.78rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 12px;
+        padding: 1.1rem 1.2rem;
+        width: 100%;
+        max-width: 780px;
+        line-height: 1.7;
+        color: var(--text-md);
+        overflow-x: auto;
+      }
+      .code-card .sev {
+        color: var(--violet);
+        font-weight: 700;
+      }
+      .code-card .loc {
+        color: var(--text-lo);
+      }
+      .code-card .flag {
+        color: var(--indigo);
+      }
+      .scan-summary {
+        display: grid;
+        grid-template-columns: repeat(3, auto);
+        gap: 1.6rem;
+        margin-top: 1.4rem;
+        font-family: var(--font-code);
+      }
+      .scan-summary div span {
+        display: block;
+      }
+      .scan-summary .v {
+        font-size: 1.3rem;
+        color: var(--violet);
+        font-weight: 600;
+      }
+      .scan-summary .k {
+        font-size: 0.7rem;
+        color: var(--text-lo);
+        letter-spacing: 0.08em;
+        margin-top: 0.2rem;
+      }
+
+      /* STATS */
+      .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1.2rem;
+        width: 100%;
+        max-width: 900px;
+        margin-top: 1rem;
+      }
+      @media (max-width: 760px) {
+        .stat-grid {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+      .stat-tile {
+        padding: 1.4rem 1.2rem;
+        border-radius: 14px;
+      }
+      .stat-tile .v {
+        font-family: var(--font-code);
+        font-size: 2.1rem;
+        font-weight: 700;
+        color: var(--cyan);
+        letter-spacing: -0.02em;
+      }
+      .stat-tile .l {
+        font-size: 0.8rem;
+        color: var(--text-md);
+        margin-top: 0.4rem;
+        line-height: 1.4;
+      }
+
+      /* CTA */
+      .cmd-row {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        background: var(--bg-surface);
+        border: 1px solid var(--border-hairline);
+        border-radius: 10px;
+        padding: 0.7rem 0.9rem;
+        margin-bottom: 0.6rem;
+        width: 100%;
+        max-width: 620px;
+      }
+      .cmd-row code {
+        font-family: var(--font-code);
+        font-size: 0.82rem;
+        color: var(--emerald);
+        flex: 1;
+        overflow-x: auto;
+        white-space: pre;
+      }
+      .copy-btn {
+        font-family: var(--font-code);
+        font-size: 0.7rem;
+        color: var(--text-md);
+        background: transparent;
+        border: 1px solid var(--border-subtle);
+        border-radius: 6px;
+        padding: 0.35rem 0.6rem;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition:
+          color 0.2s,
+          border-color 0.2s;
+      }
+      .copy-btn:hover {
+        color: var(--cyan);
+        border-color: var(--cyan);
+      }
+
+      footer {
+        position: relative;
+        z-index: 2;
+        text-align: center;
+        padding: 4rem 2rem 3rem;
+        color: var(--text-lo);
+        font-size: 0.82rem;
+      }
+      footer .word {
+        font-family: var(--font-code);
+        letter-spacing: 0.2em;
+        color: var(--text-md);
+        font-size: 0.75rem;
+        margin-bottom: 0.6rem;
+        display: block;
+      }
+
+      /* WEBCAM CONSENT OVERLAY */
+      #consent {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(10, 11, 16, 0.72);
+        backdrop-filter: blur(6px);
+        transition: opacity 0.6s ease;
+      }
+      #consent.hidden {
+        opacity: 0;
+        pointer-events: none;
+      }
+      #consent .box {
+        max-width: 460px;
+        text-align: center;
+        padding: 2.2rem 2rem;
+      }
+      #consent h2 {
+        font-size: 1.5rem;
+        margin-bottom: 0.9rem;
+      }
+      #consent p {
+        color: var(--text-md);
+        font-size: 0.92rem;
+        line-height: 1.6;
+        margin-bottom: 1.6rem;
+      }
+      #calibrating {
+        margin-top: 1rem;
+        font-family: var(--font-code);
+        font-size: 0.78rem;
+        color: var(--teal);
+        display: none;
+      }
+      canvas#sampleCanvas {
+        display: none;
+      }
+      video#srcVideo {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 1px;
+        height: 1px;
+        opacity: 0.01;
+        pointer-events: none;
+        z-index: -1;
+      }
+    </style>
+  </head>
+  <body>
+    <video id="srcVideo" autoplay muted playsinline></video>
+    <canvas id="sampleCanvas" width="100" height="50"></canvas>
+    <canvas id="webgl"></canvas>
+    <div id="grain"></div>
+    <div id="vignette"></div>
+
+    <div id="consent">
+      <div class="box glass">
+        <h2>Before we begin</h2>
+        <p>
+          Sirius watches every action an agent takes and decides whether it
+          should happen. This page can watch <em>you</em>, the same way —
+          turning your camera into the particle field below. Nothing is
+          uploaded; it never leaves this tab.
+        </p>
+        <div class="btn-row" style="justify-content: center">
+          <button class="btn primary" id="grantBtn">
+            Begin — grant camera access
+          </button>
+          <button class="btn ghost" id="skipBtn">
+            Skip, use a generated visualization
+          </button>
+        </div>
+        <div id="calibrating">calibrating background… hold still</div>
+      </div>
+    </div>
+
+    <nav>
+      <a class="word" href="#hero">SIRIUS</a>
+      <div class="links">
+        <a href="#problem">Problem</a>
+        <a href="#stages">Stages</a>
+        <a href="#trail">Trail</a>
+        <a href="#scan">Scan</a>
+        <a href="#cta">Install</a>
+      </div>
+    </nav>
+
+    <main>
+      <section class="panel center" id="hero" data-idx="0">
+        <div class="content">
+          <div class="hero-mark">
+            <span class="dot"></span
+            ><span>LOCAL-FIRST · NO BACKEND · NO NETWORK</span>
+          </div>
+          <h1>An agent with a wallet<br />is a new kind of actor.</h1>
+          <p class="lede">
+            It holds credentials, decides for itself, and signs its own
+            transactions. Every one of those transactions can be perfectly valid
+            — and still be the wrong thing to do.
+          </p>
+          <p class="micro">
+            Sirius decides, per action, whether it should happen — and keeps a
+            signed record of every decision, including the ones it allowed.
+          </p>
+        </div>
+        <div class="scroll-cue">
+          <span>SCROLL</span><span class="chev"></span>
+        </div>
+      </section>
+
+      <section class="panel" id="problem" data-idx="1">
+        <div class="content glass">
+          <p class="eyebrow">The problem</p>
+          <h2>Technical validity is not<br />behavioural legitimacy.</h2>
+          <p class="body">
+            A transaction can be correctly signed, properly authenticated,
+            inside the agent's own credentials — and still be a transfer it has
+            never made before, to a counterparty it has never used, because a
+            web page it was reading told it to.
+          </p>
+          <p class="body">
+            Require human approval for every action and the agent isn't
+            autonomous — the operator has become the agent. Grant it
+            unrestricted authority and a single compromised instruction drains
+            the account.
+          </p>
+          <p class="body">
+            <strong>So the answer has to be graduated.</strong>
+          </p>
+        </div>
+      </section>
+
+      <section class="panel" id="stages" data-idx="2">
+        <div class="content wide">
+          <p class="eyebrow">Six questions, asked of every action</p>
+          <h2>Nothing decides alone.</h2>
+          <p class="lede">
+            Each stage raises signals, and the verdict is the strongest one —
+            because the same fact means different things in combination. A
+            first-time counterparty is routine. A large amount is routine. A
+            large amount to a first-time counterparty, on an instruction fetched
+            from a web page, is not.
+          </p>
+          <div class="stage-grid" id="stageGrid"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="feed" data-idx="3">
+        <div class="content wide">
+          <p class="eyebrow">The decision trail</p>
+          <h2>264 allowed. 11 blocked.<br />All of them logged.</h2>
+          <p class="lede">
+            Every action an agent proposes runs the same six checks. Watch a
+            batch of 278 get judged.
+          </p>
+          <div class="btn-row">
+            <button class="btn primary" id="runFeed">Run 278 actions</button>
+          </div>
+          <div
+            class="term"
+            id="feedOutput"
+            style="margin-top: 1.2rem; min-height: 9.5em"
+          ></div>
+        </div>
+      </section>
+
+      <section class="panel" id="cap" data-idx="4">
+        <div class="content">
+          <p class="eyebrow">The attacker who read the policy</p>
+          <h2>Right under the cap<br />is exactly where they aim.</h2>
+          <p class="body">
+            A cap stops an action that exceeds it — and says nothing about one
+            that lands at 99% of it. At ₹49,500 against a ₹50,000 cap, there is
+            no limit breach and only 2σ on amount. Neither signal blocks alone.
+          </p>
+          <div class="caseline">
+            ! BLOCK wlt-9f2c41 ₹49,500 — an amount sized just under the cap, to
+            a counterparty never used before. The limit was not breached because
+            it was measured first.
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" id="trail" data-idx="5">
+        <div class="content wide">
+          <p class="eyebrow">The decisions are the product</p>
+          <h2>Including the ones<br />it allowed.</h2>
+          <p class="lede">
+            A control layer's decisions are worth nothing if they can't be shown
+            to be the decisions it actually made. Every decision — allowed or
+            not — is hash-chained, and the sealed trail is ed25519-signed.
+          </p>
+          <div class="trail-actions">
+            <button class="btn" id="verifyBtn">
+              sirius guard trail --verify
+            </button>
+            <button class="btn ghost" id="tamperBtn">
+              tamper with entry 255
+            </button>
+            <button class="btn ghost" id="resetTrailBtn">reset</button>
+          </div>
+          <div class="term" id="trailStatus"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="scan" data-idx="6">
+        <div class="content wide">
+          <p class="eyebrow">The second surface</p>
+          <h2>It also secures the code<br />the agent runs on.</h2>
+          <p class="lede">
+            An agent is only as safe as the system it operates. The same tool
+            scans that code before deployment, maps each finding to a compliance
+            clause, and prices the exposure in rupees.
+          </p>
+          <div class="code-card">
+            <span class="sev">✗ CRITICAL</span> SIR-SEC-001 Hardcoded
+            payment-provider secret key
+            <span class="loc">src/config.py:14</span> PCI-DSS 8.6.2 · DPDP §8 14
+            │ STRIPE_KEY = "sk_live_51H8xR2eZv…" │
+            <span class="flag"
+              >╰── secret · ⚠ VERIFIED LIVE · ₹42,00,000 at risk</span
+            >
+            ↳ fix: env_lookup run sirius fix SIR-SEC-001
+          </div>
+          <div class="scan-summary" id="scanSummary">
+            <div>
+              <span class="v" id="moneyAtRisk">₹0</span
+              ><span class="k">MONEY @ RISK</span>
+            </div>
+            <div>
+              <span class="v">60/100</span
+              ><span class="k">COMPLIANCE SCORE</span>
+            </div>
+            <div>
+              <span class="v">2 crit · 2 high · 2 med</span
+              ><span class="k">FINDINGS · 3 FILES</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel center" id="stats" data-idx="7">
+        <div class="content wide" style="max-width: 900px">
+          <p class="eyebrow">What the fixture shows</p>
+          <h2>Every planted attack stopped.<br />Nothing ordinary touched.</h2>
+          <div class="stat-grid" id="statGrid">
+            <div class="stat-tile glass">
+              <div class="v" data-target="95" data-suffix="%">0%</div>
+              <div class="l">of actions proceeded with nobody asked</div>
+            </div>
+            <div class="stat-tile glass">
+              <div class="v" data-target="0" data-suffix="%">0%</div>
+              <div class="l">of ordinary actions were intervened on</div>
+            </div>
+            <div class="stat-tile glass">
+              <div class="v" data-target="871" data-suffix="">0</div>
+              <div class="l">tests passing, checked by reverting the fix</div>
+            </div>
+            <div class="stat-tile glass">
+              <div class="v" data-static="0">0</div>
+              <div class="l">
+                backend services — local-first, no network, no account
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel center" id="cta" data-idx="8">
+        <div class="content">
+          <p class="eyebrow">Try it</p>
+          <h2>Requires Node ≥ 22 and pnpm.</h2>
+          <div class="cmd-row">
+            <code>pnpm install &amp;&amp; pnpm --filter sirius build</code
+            ><button
+              class="copy-btn"
+              data-cmd="pnpm install && pnpm --filter sirius build"
+            >
+              copy
+            </button>
+          </div>
+          <div class="cmd-row">
+            <code>node packages/cli/dist/cli.js brief --plain</code
+            ><button
+              class="copy-btn"
+              data-cmd="node packages/cli/dist/cli.js brief --plain"
+            >
+              copy
+            </button>
+          </div>
+          <div class="cmd-row">
+            <code>node packages/cli/dist/cli.js guard gen feed</code
+            ><button
+              class="copy-btn"
+              data-cmd="node packages/cli/dist/cli.js guard gen feed"
+            >
+              copy
+            </button>
+          </div>
+          <div class="cmd-row">
+            <code>node packages/cli/dist/cli.js guard eval feed --narrate</code
+            ><button
+              class="copy-btn"
+              data-cmd="node packages/cli/dist/cli.js guard eval feed --narrate"
+            >
+              copy
+            </button>
+          </div>
+          <p class="micro">
+            sirius brief writes the same thing as a six-page PDF. Every figure
+            in it comes from that run — none of them are typed in.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span class="word">SIRIUS</span>
+      Fintech compliance scanning and agent control, priced in rupees.<br />Runs
+      entirely on your machine.
+    </footer>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+      (function () {
+        "use strict";
+
+        /* ---------- constants & palette ---------- */
+        var N = 5000,
+          GRID_W = 100,
+          GRID_H = 50;
+        var PALETTE = [
+          [0.29, 0.871, 0.502], // emerald
+          [0.176, 0.831, 0.749], // teal
+          [0.22, 0.741, 0.973], // cyan
+          [0.506, 0.549, 0.973], // indigo
+          [0.655, 0.545, 0.98], // violet
+        ];
+        var REDUCED =
+          window.matchMedia &&
+          matchMedia("(prefers-reduced-motion: reduce)").matches;
+        var jitterAmp = REDUCED ? 0.02 : 0.06;
+
+        function lerp(a, b, t) {
+          return a + (b - a) * t;
+        }
+        function clamp(v, a, b) {
+          return Math.max(a, Math.min(b, v));
+        }
+        function smoothstep(t) {
+          t = clamp(t, 0, 1);
+          return t * t * (3 - 2 * t);
+        }
+
+        /* ---------- three.js scaffold ---------- */
+        var canvas = document.getElementById("webgl");
+        var renderer, scene, camera, points, geometry;
+        var lineMesh, lineGeom;
+        var webglOK = true;
+
+        try {
+          renderer = new THREE.WebGLRenderer({
+            canvas: canvas,
+            antialias: true,
+            alpha: true,
+          });
+          renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+          renderer.setSize(window.innerWidth, window.innerHeight);
+
+          scene = new THREE.Scene();
+          scene.fog = new THREE.FogExp2(0x0a0b10, 0.045);
+
+          camera = new THREE.PerspectiveCamera(
+            58,
+            window.innerWidth / window.innerHeight,
+            0.1,
+            100,
+          );
+          camera.position.set(0, 0, 10.5);
+
+          var positions = new Float32Array(N * 3);
+          var colors = new Float32Array(N * 3);
+          geometry = new THREE.BufferGeometry();
+          geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(positions, 3),
+          );
+          geometry.setAttribute("color", new THREE.BufferAttribute(colors, 3));
+          var material = new THREE.PointsMaterial({
+            size: 0.065,
+            vertexColors: true,
+            transparent: true,
+            opacity: 0.92,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            fog: true,
+          });
+          points = new THREE.Points(geometry, material);
+          scene.add(points);
+
+          lineGeom = new THREE.BufferGeometry();
+          var lineMat = new THREE.LineBasicMaterial({
+            color: 0x38bdf8,
+            transparent: true,
+            opacity: 0,
+          });
+          lineMesh = new THREE.LineSegments(lineGeom, lineMat);
+          scene.add(lineMesh);
+        } catch (e) {
+          webglOK = false;
+          document.body.classList.add("no-webgl");
+        }
+
+        /* ---------- seeds for idle jitter ---------- */
+        var seeds = new Float32Array(N);
+        for (var s = 0; s < N; s++) seeds[s] = Math.random() * Math.PI * 2;
+
+        /* ---------- helpers to build base formations ---------- */
+        function fillSphere(pos, col, start, end, cx, cy, cz, radius, color) {
+          for (var i = start; i < end; i++) {
+            var u = Math.random(),
+              v = Math.random(),
+              w = Math.random();
+            var theta = u * Math.PI * 2,
+              phi = Math.acos(2 * v - 1),
+              r = radius * Math.cbrt(w);
+            var x = cx + r * Math.sin(phi) * Math.cos(theta);
+            var y = cy + r * Math.sin(phi) * Math.sin(theta);
+            var z = cz + r * Math.cos(phi);
+            pos[i * 3] = x;
+            pos[i * 3 + 1] = y;
+            pos[i * 3 + 2] = z;
+            col[i * 3] = color[0];
+            col[i * 3 + 1] = color[1];
+            col[i * 3 + 2] = color[2];
+          }
+        }
+
+        var basePos = [null],
+          baseCol = [null]; // index 0 (hero) unused — computed live
+        var chainCenters = [],
+          scanCenters = [],
+          stageCenters = [];
+
+        (function buildFormations() {
+          // k=1 gap — two clusters
+          var p1 = new Float32Array(N * 3),
+            c1 = new Float32Array(N * 3);
+          fillSphere(p1, c1, 0, 2500, -3.1, 0, 0, 1.55, PALETTE[2]);
+          fillSphere(p1, c1, 2500, 5000, 3.1, 0, 0, 1.55, PALETTE[4]);
+          basePos[1] = p1;
+          baseCol[1] = c1;
+
+          // k=2 stages — 6 clusters in a ring
+          var p2 = new Float32Array(N * 3),
+            c2 = new Float32Array(N * 3);
+          var per = Math.floor(N / 6),
+            stageColors = [
+              PALETTE[0],
+              PALETTE[1],
+              PALETTE[2],
+              PALETTE[3],
+              PALETTE[3],
+              PALETTE[4],
+            ];
+          for (var si = 0; si < 6; si++) {
+            var ang = si * ((Math.PI * 2) / 6) - Math.PI / 2;
+            var cx = Math.cos(ang) * 4.2,
+              cy = Math.sin(ang) * 4.2;
+            stageCenters.push([cx, cy, 0]);
+            var st = si * per,
+              en = si === 5 ? N : (si + 1) * per;
+            fillSphere(p2, c2, st, en, cx, cy, 0, 0.62, stageColors[si]);
+          }
+          basePos[2] = p2;
+          baseCol[2] = c2;
+
+          // k=3 feed — layered sine bands
+          var p3 = new Float32Array(N * 3),
+            c3 = new Float32Array(N * 3);
+          for (var i3 = 0; i3 < N; i3++) {
+            var layer = i3 % 5;
+            var x3 = (i3 / N) * 13 - 6.5;
+            var y3 =
+              Math.sin(x3 * 1.15 + layer * 1.3) * 1.15 + (layer - 2) * 0.85;
+            var z3 = (Math.random() - 0.5) * 1.1;
+            p3[i3 * 3] = x3;
+            p3[i3 * 3 + 1] = y3;
+            p3[i3 * 3 + 2] = z3;
+            var col = PALETTE[layer];
+            c3[i3 * 3] = col[0];
+            c3[i3 * 3 + 1] = col[1];
+            c3[i3 * 3 + 2] = col[2];
+          }
+          basePos[3] = p3;
+          baseCol[3] = c3;
+
+          // k=4 cap bar — fill to 99% + cap line marker
+          var p4 = new Float32Array(N * 3),
+            c4 = new Float32Array(N * 3);
+          var fillCount = Math.floor(N * 0.9);
+          for (var i4 = 0; i4 < fillCount; i4++) {
+            var t4 = Math.random();
+            var x4 = (Math.random() - 0.5) * 1.4,
+              z4 = (Math.random() - 0.5) * 1.4;
+            var y4 = -3.1 + t4 * 5.9;
+            p4[i4 * 3] = x4;
+            p4[i4 * 3 + 1] = y4;
+            p4[i4 * 3 + 2] = z4;
+            var mix4 = lerp(0, 1, t4);
+            var cA = PALETTE[2],
+              cB = PALETTE[0];
+            c4[i4 * 3] = lerp(cA[0], cB[0], mix4);
+            c4[i4 * 3 + 1] = lerp(cA[1], cB[1], mix4);
+            c4[i4 * 3 + 2] = lerp(cA[2], cB[2], mix4);
+          }
+          for (var i4b = fillCount; i4b < N; i4b++) {
+            var x4b = (Math.random() - 0.5) * 2.8,
+              z4b = (Math.random() - 0.5) * 0.6;
+            p4[i4b * 3] = x4b;
+            p4[i4b * 3 + 1] = 3.05;
+            p4[i4b * 3 + 2] = z4b;
+            c4[i4b * 3] = PALETTE[4][0];
+            c4[i4b * 3 + 1] = PALETTE[4][1];
+            c4[i4b * 3 + 2] = PALETTE[4][2];
+          }
+          basePos[4] = p4;
+          baseCol[4] = c4;
+
+          // k=5 chain — 8 linked blocks
+          var p5 = new Float32Array(N * 3),
+            c5 = new Float32Array(N * 3);
+          var blocks = 8,
+            per5 = Math.floor(N / blocks);
+          for (var b = 0; b < blocks; b++) {
+            var bx = -6.3 + b * (12.6 / (blocks - 1));
+            chainCenters.push([bx, 0, 0]);
+            var st5 = b * per5,
+              en5 = b === blocks - 1 ? N : (b + 1) * per5;
+            fillSphere(p5, c5, st5, en5, bx, 0, 0, 0.46, PALETTE[0]);
+          }
+          basePos[5] = p5;
+          baseCol[5] = c5;
+
+          // k=6 scan flow — 4 stage clusters
+          var p6 = new Float32Array(N * 3),
+            c6 = new Float32Array(N * 3);
+          var flow = 4,
+            per6 = Math.floor(N / flow),
+            flowColors = [PALETTE[1], PALETTE[2], PALETTE[3], PALETTE[4]];
+          for (var f = 0; f < flow; f++) {
+            var fx = -5 + f * (10 / (flow - 1));
+            scanCenters.push([fx, 0, 0]);
+            var st6 = f * per6,
+              en6 = f === flow - 1 ? N : (f + 1) * per6;
+            fillSphere(p6, c6, st6, en6, fx, 0, 0, 0.72, flowColors[f]);
+          }
+          basePos[6] = p6;
+          baseCol[6] = c6;
+
+          // k=7 stats — broad ambient dispersed field
+          var p7 = new Float32Array(N * 3),
+            c7 = new Float32Array(N * 3);
+          for (var i7 = 0; i7 < N; i7++) {
+            var phi7 = Math.acos(1 - 2 * ((i7 + 0.5) / N));
+            var th7 = Math.PI * (1 + Math.sqrt(5)) * (i7 + 0.5);
+            var rr = 3 + Math.random() * 2.2;
+            p7[i7 * 3] = Math.sin(phi7) * Math.cos(th7) * rr;
+            p7[i7 * 3 + 1] = Math.sin(phi7) * Math.sin(th7) * rr * 0.55;
+            p7[i7 * 3 + 2] = Math.cos(phi7) * rr * 0.7;
+            var pc = PALETTE[i7 % 5];
+            c7[i7 * 3] = pc[0] * 0.45;
+            c7[i7 * 3 + 1] = pc[1] * 0.45;
+            c7[i7 * 3 + 2] = pc[2] * 0.45;
+          }
+          basePos[7] = p7;
+          baseCol[7] = c7;
+
+          // k=8 cta — dense converging core
+          var p8 = new Float32Array(N * 3),
+            c8 = new Float32Array(N * 3);
+          for (var i8 = 0; i8 < N; i8++) {
+            var u8 = Math.random(),
+              v8 = Math.random(),
+              w8 = Math.random();
+            var theta8 = u8 * Math.PI * 2,
+              phi8 = Math.acos(2 * v8 - 1);
+            var r8 = Math.pow(w8, 2.1) * 3.4;
+            p8[i8 * 3] = r8 * Math.sin(phi8) * Math.cos(theta8);
+            p8[i8 * 3 + 1] = r8 * Math.sin(phi8) * Math.sin(theta8);
+            p8[i8 * 3 + 2] = r8 * Math.cos(phi8);
+            var m8 = clamp(r8 / 3.4, 0, 1);
+            c8[i8 * 3] = lerp(PALETTE[2][0], PALETTE[0][0], 1 - m8);
+            c8[i8 * 3 + 1] = lerp(PALETTE[2][1], PALETTE[0][1], 1 - m8);
+            c8[i8 * 3 + 2] = lerp(PALETTE[2][2], PALETTE[0][2], 1 - m8);
+          }
+          basePos[8] = p8;
+          baseCol[8] = c8;
+        })();
+
+        /* ---------- hero (live webcam / procedural) ---------- */
+        var video = document.getElementById("srcVideo");
+        var sampleCanvas = document.getElementById("sampleCanvas");
+        var sctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        var bgData = null;
+        var useLiveVideo = false;
+
+        function computeHeroLive(outPos, outCol) {
+          sctx.drawImage(video, 0, 0, GRID_W, GRID_H);
+          var data = sctx.getImageData(0, 0, GRID_W, GRID_H).data;
+          for (var gy = 0; gy < GRID_H; gy++) {
+            for (var gx = 0; gx < GRID_W; gx++) {
+              var idx = gy * GRID_W + gx;
+              var r = data[idx * 4],
+                g = data[idx * 4 + 1],
+                b = data[idx * 4 + 2];
+              var diff = 0,
+                lum = (r + g + b) / 765;
+              if (bgData) {
+                diff =
+                  Math.abs(r - bgData[idx * 4]) +
+                  Math.abs(g - bgData[idx * 4 + 1]) +
+                  Math.abs(b - bgData[idx * 4 + 2]);
+              }
+              var depthFactor = clamp((diff - 40) / 200, 0, 1);
+              var x = (0.5 - gx / GRID_W) * 9.2;
+              var y = (0.5 - gy / GRID_H) * 6.2;
+              var z = bgData ? -2.2 + depthFactor * 4.8 : (lum - 0.5) * 3.2;
+              outPos[idx * 3] = x;
+              outPos[idx * 3 + 1] = y;
+              outPos[idx * 3 + 2] = z;
+              var bright = bgData
+                ? 0.12 + depthFactor * 0.88
+                : 0.25 + lum * 0.6;
+              var cy = PALETTE[2],
+                wh = [0.9, 0.97, 1.0];
+              var edgeMix = bgData ? depthFactor * 0.55 : lum * 0.3;
+              outCol[idx * 3] = lerp(cy[0], wh[0], edgeMix) * bright;
+              outCol[idx * 3 + 1] = lerp(cy[1], wh[1], edgeMix) * bright;
+              outCol[idx * 3 + 2] = lerp(cy[2], wh[2], edgeMix) * bright;
+            }
+          }
+        }
+
+        function computeHeroProcedural(outPos, outCol, time) {
+          for (var i = 0; i < N; i++) {
+            var seed = seeds[i];
+            var phi = Math.acos(1 - 2 * ((i + 0.5) / N));
+            var th = Math.PI * (1 + Math.sqrt(5)) * (i + 0.5);
+            var x = Math.sin(phi) * Math.cos(th),
+              y = Math.sin(phi) * Math.sin(th),
+              z = Math.cos(phi);
+            var n =
+              Math.sin(x * 3 + time * 0.3 + seed) *
+              Math.cos(y * 3 - time * 0.22) *
+              Math.sin(z * 3 + time * 0.26);
+            var r = 2.5 + n * 0.55;
+            outPos[i * 3] = x * r;
+            outPos[i * 3 + 1] = y * r * 1.55;
+            outPos[i * 3 + 2] = z * r;
+            var m = clamp((y * 1.55 + 2.4) / 4.8, 0, 1);
+            outCol[i * 3] = lerp(PALETTE[2][0], PALETTE[4][0], m);
+            outCol[i * 3 + 1] = lerp(PALETTE[2][1], PALETTE[4][1], m);
+            outCol[i * 3 + 2] = lerp(PALETTE[2][2], PALETTE[4][2], m);
+          }
+        }
+
+        var heroPos = new Float32Array(N * 3),
+          heroCol = new Float32Array(N * 3);
+        computeHeroProcedural(heroPos, heroCol, 0);
+
+        /* ---------- consent flow ---------- */
+        var consent = document.getElementById("consent");
+        var grantBtn = document.getElementById("grantBtn");
+        var skipBtn = document.getElementById("skipBtn");
+        var calibrating = document.getElementById("calibrating");
+
+        function dismissConsent() {
+          consent.classList.add("hidden");
+        }
+
+        skipBtn.addEventListener("click", dismissConsent);
+
+        grantBtn.addEventListener("click", function () {
+          if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+            dismissConsent();
+            return;
+          }
+          grantBtn.disabled = true;
+          skipBtn.disabled = true;
+          navigator.mediaDevices
+            .getUserMedia({ video: { width: 320, height: 240 }, audio: false })
+            .then(function (stream) {
+              video.srcObject = stream;
+              video.addEventListener(
+                "loadedmetadata",
+                function () {
+                  calibrating.style.display = "block";
+                  setTimeout(function () {
+                    sctx.drawImage(video, 0, 0, GRID_W, GRID_H);
+                    bgData = sctx
+                      .getImageData(0, 0, GRID_W, GRID_H)
+                      .data.slice();
+                    useLiveVideo = true;
+                    dismissConsent();
+                  }, 1100);
+                },
+                { once: true },
+              );
+            })
+            .catch(function () {
+              dismissConsent();
+            });
+        });
+
+        /* ---------- section-driven scroll mapping ---------- */
+        var secEls = Array.prototype.slice.call(
+          document.querySelectorAll(".panel"),
+        );
+        var centers = [];
+        function computeCenters() {
+          centers = secEls.map(function (el) {
+            return el.offsetTop + el.offsetHeight / 2;
+          });
+        }
+        computeCenters();
+        window.addEventListener("resize", function () {
+          computeCenters();
+          if (renderer) {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+          }
+        });
+
+        /* ---------- reveal-on-scroll for content ---------- */
+        if ("IntersectionObserver" in window) {
+          var io = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting) en.target.classList.add("is-visible");
+              });
+            },
+            { threshold: 0.32 },
+          );
+          secEls.forEach(function (el) {
+            io.observe(el);
+          });
+        } else {
+          secEls.forEach(function (el) {
+            el.classList.add("is-visible");
+          });
+        }
+
+        /* ---------- mouse parallax ---------- */
+        var mouseX = 0,
+          mouseY = 0,
+          camX = 0,
+          camY = 0;
+        window.addEventListener("mousemove", function (e) {
+          mouseX = (e.clientX / window.innerWidth - 0.5) * 2;
+          mouseY = (e.clientY / window.innerHeight - 0.5) * 2;
+        });
+
+        /* ---------- render loop ---------- */
+        var scratchAPos = new Float32Array(N * 3),
+          scratchACol = new Float32Array(N * 3);
+        var scratchBPos = new Float32Array(N * 3),
+          scratchBCol = new Float32Array(N * 3);
+        var lastLineIdx = -1;
+
+        function computeFormation(k, time, outPos, outCol) {
+          if (k === 0) {
+            if (useLiveVideo) computeHeroLive(outPos, outCol);
+            else computeHeroProcedural(outPos, outCol, time);
+            return;
+          }
+          var bp = basePos[k],
+            bc = baseCol[k];
+          for (var i = 0; i < N; i++) {
+            var sd = seeds[i];
+            var jx = Math.sin(time * 0.42 + sd) * jitterAmp;
+            var jy = Math.cos(time * 0.31 + sd * 1.7) * jitterAmp * 0.8;
+            var jz = Math.sin(time * 0.23 + sd * 1.3) * jitterAmp * 0.8;
+            outPos[i * 3] = bp[i * 3] + jx;
+            outPos[i * 3 + 1] = bp[i * 3 + 1] + jy;
+            outPos[i * 3 + 2] = bp[i * 3 + 2] + jz;
+            outCol[i * 3] = bc[i * 3];
+            outCol[i * 3 + 1] = bc[i * 3 + 1];
+            outCol[i * 3 + 2] = bc[i * 3 + 2];
+          }
+        }
+
+        function buildLinePairs(centersArr, close) {
+          var arr = [];
+          for (var i = 0; i < centersArr.length - 1; i++) {
+            arr.push(centersArr[i][0], centersArr[i][1], centersArr[i][2]);
+            arr.push(
+              centersArr[i + 1][0],
+              centersArr[i + 1][1],
+              centersArr[i + 1][2],
+            );
+          }
+          if (close && centersArr.length > 2) {
+            arr.push(
+              centersArr[centersArr.length - 1][0],
+              centersArr[centersArr.length - 1][1],
+              centersArr[centersArr.length - 1][2],
+            );
+            arr.push(centersArr[0][0], centersArr[0][1], centersArr[0][2]);
+          }
+          return new Float32Array(arr);
+        }
+        var lineSets = {
+          2: buildLinePairs(stageCenters, true),
+          5: buildLinePairs(chainCenters, false),
+          6: buildLinePairs(scanCenters, false),
+        };
+
+        var tamperActive = false;
+
+        var clock = webglOK ? new THREE.Clock() : null;
+
+        function animate() {
+          requestAnimationFrame(animate);
+          if (!webglOK) return;
+          var time = clock.getElapsedTime();
+
+          var marker = window.scrollY + window.innerHeight * 0.5;
+          var idx = 0;
+          for (var k = 0; k < centers.length - 1; k++) {
+            if (marker >= centers[k]) idx = k;
+          }
+          idx = Math.min(idx, centers.length - 2);
+          var span = centers[idx + 1] - centers[idx];
+          var local =
+            span > 0 ? clamp((marker - centers[idx]) / span, 0, 1) : 0;
+          var smooth = smoothstep(local);
+
+          computeFormation(idx, time, scratchAPos, scratchACol);
+          computeFormation(idx + 1, time, scratchBPos, scratchBCol);
+
+          var posAttr = geometry.attributes.position.array;
+          var colAttr = geometry.attributes.color.array;
+          for (var i = 0; i < N * 3; i++) {
+            posAttr[i] = lerp(scratchAPos[i], scratchBPos[i], smooth);
+            colAttr[i] = lerp(scratchACol[i], scratchBCol[i], smooth);
+          }
+
+          // tamper effect on chain formation (idx window 5)
+          if (tamperActive && (idx === 5 || idx + 1 === 5)) {
+            for (var bIdx = 6 * Math.floor(N / 8); bIdx < N; bIdx++) {
+              posAttr[bIdx * 3] += Math.sin(time * 9 + bIdx) * 0.12;
+              posAttr[bIdx * 3 + 1] += Math.cos(time * 11 + bIdx) * 0.12;
+              colAttr[bIdx * 3] = PALETTE[4][0];
+              colAttr[bIdx * 3 + 1] = PALETTE[4][1] * 0.3;
+              colAttr[bIdx * 3 + 2] = PALETTE[4][2] * 0.3;
+            }
+          }
+
+          geometry.attributes.position.needsUpdate = true;
+          geometry.attributes.color.needsUpdate = true;
+
+          // structure lines (stage ring / chain / scan flow)
+          var nearestIdx = Math.round(idx + smooth);
+          var settle =
+            1 - Math.min(1, Math.abs(idx + smooth - nearestIdx) * 3.2);
+          if (lineSets[nearestIdx]) {
+            if (nearestIdx !== lastLineIdx) {
+              lineGeom.setAttribute(
+                "position",
+                new THREE.BufferAttribute(lineSets[nearestIdx], 3),
+              );
+              lastLineIdx = nearestIdx;
+            }
+            lineMesh.material.opacity = settle * 0.35;
+          } else {
+            lineMesh.material.opacity = 0;
+            lastLineIdx = -1;
+          }
+
+          // camera motion: gentle autodrift + scroll dolly + mouse parallax
+          camX = lerp(camX, mouseX * 0.7, 0.04);
+          camY = lerp(camY, -mouseY * 0.5, 0.04);
+          var drift = REDUCED ? 0 : Math.sin(time * 0.05) * 0.6;
+          camera.position.x = camX + drift;
+          camera.position.y =
+            camY + (REDUCED ? 0 : Math.cos(time * 0.04) * 0.4);
+          camera.position.z = 10.5 - idx * 0.15;
+          camera.lookAt(0, 0, 0);
+
+          renderer.render(scene, camera);
+        }
+        if (webglOK) animate();
+
+        /* ================= DOM content & interactions ================= */
+
+        /* stage cards */
+        var STAGES = [
+          {
+            n: "01",
+            name: "identity",
+            c: "--emerald",
+            q: "Is this agent allowed to do this at all?",
+            ex: "withdraw is outside this agent’s grant",
+          },
+          {
+            n: "02",
+            name: "intent",
+            c: "--teal",
+            q: "Does its stated purpose match its objective?",
+            ex: "stated purpose does not match the agent’s objective",
+          },
+          {
+            n: "03",
+            name: "policy",
+            c: "--cyan",
+            q: "Spending, exposure, frequency, counterparty.",
+            ex: "₹82,000 is over the per-action cap",
+          },
+          {
+            n: "04",
+            name: "context",
+            c: "--indigo",
+            q: "Counterparty reputation, protocol risk, flags.",
+            ex: "yield-max is unaudited",
+          },
+          {
+            n: "05",
+            name: "behaviour",
+            c: "--indigo",
+            q: "Is this how this agent actually behaves?",
+            ex: "₹49,500 is 2.1σ above this agent’s usual",
+          },
+          {
+            n: "06",
+            name: "manipulation",
+            c: "--violet",
+            q: "Can the instruction behind it be trusted?",
+            ex: "the instruction contains override of prior instructions",
+          },
+        ];
+        var grid = document.getElementById("stageGrid");
+        STAGES.forEach(function (s) {
+          var el = document.createElement("div");
+          el.className = "stage-card";
+          el.style.setProperty("--stage-c", "var(" + s.c + ")");
+          el.innerHTML =
+            '<div class="num">' +
+            s.n +
+            "</div><h3>" +
+            s.name +
+            '</h3><p class="q">' +
+            s.q +
+            '</p><div class="ex">' +
+            s.ex +
+            "</div>";
+          el.addEventListener("click", function () {
+            el.classList.toggle("revealed");
+          });
+          grid.appendChild(el);
+        });
+
+        /* live feed */
+        var FEED = [
+          {
+            v: "BLOCK",
+            cls: "l-block",
+            text: "wlt-9f2c41    ₹48,000   the instruction contains override of prior instructions",
+          },
+          {
+            v: "CONSTRAIN",
+            cls: "l-constrain",
+            text: "delta-logi..  ₹82,000 -> ₹50,000   over the per-action cap",
+          },
+          {
+            v: "VERIFY",
+            cls: "l-verify",
+            text: "northwind..   ₹9,400    first time sending to northwind-print",
+          },
+          { v: "ALLOW", cls: "l-allow", text: "acme-cloud    ₹11,240" },
+        ];
+        var feedOut = document.getElementById("feedOutput");
+        var runFeedBtn = document.getElementById("runFeed");
+        runFeedBtn.addEventListener("click", function () {
+          runFeedBtn.disabled = true;
+          feedOut.innerHTML = "";
+          var i = 0;
+          function next() {
+            if (i >= FEED.length) {
+              var summary = document.createElement("div");
+              summary.className = "feed-line";
+              summary.style.marginTop = "0.8em";
+              summary.style.color = "var(--text-lo)";
+              summary.textContent =
+                "Decisions   264 allowed (95%)   2 step-up   1 constrained   11 blocked\nAutonomy    95.0% of actions proceeded with nobody asked";
+              summary.style.whiteSpace = "pre";
+              feedOut.appendChild(summary);
+              runFeedBtn.disabled = false;
+              return;
+            }
+            var f = FEED[i];
+            var line = document.createElement("div");
+            line.className = "feed-line " + f.cls;
+            line.textContent = f.v.padEnd(10, " ") + f.text;
+            feedOut.appendChild(line);
+            i++;
+            setTimeout(next, 420);
+          }
+          next();
+        });
+
+        /* trail verify / tamper */
+        var trailStatus = document.getElementById("trailStatus");
+        document
+          .getElementById("verifyBtn")
+          .addEventListener("click", function () {
+            tamperActive = false;
+            trailStatus.innerHTML =
+              '<span class="l-ok">OK</span>      decisions-mtcnin36.json\n        278 decisions, chained and unbroken\n        signed 2026-08-28T07:49:52.870Z by key e960b577e03659b4';
+          });
+        document
+          .getElementById("tamperBtn")
+          .addEventListener("click", function () {
+            tamperActive = true;
+            trailStatus.innerHTML =
+              '<span class="l-fail">FAILED</span>  tampered.json\n        entry 255 has been altered since it was written';
+          });
+        document
+          .getElementById("resetTrailBtn")
+          .addEventListener("click", function () {
+            tamperActive = false;
+            trailStatus.innerHTML = "";
+          });
+
+        /* scan money counter */
+        var moneyEl = document.getElementById("moneyAtRisk");
+        var scanSection = document.getElementById("scan");
+        var scanDone = false;
+        if ("IntersectionObserver" in window) {
+          var scanIO = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting && !scanDone) {
+                  scanDone = true;
+                  var start = null,
+                    target = 8930000,
+                    duration = 1600;
+                  function step(ts) {
+                    if (!start) start = ts;
+                    var p = clamp((ts - start) / duration, 0, 1);
+                    var val = Math.floor(target * (1 - Math.pow(1 - p, 3)));
+                    moneyEl.textContent = "₹" + val.toLocaleString("en-IN");
+                    if (p < 1) requestAnimationFrame(step);
+                  }
+                  requestAnimationFrame(step);
+                }
+              });
+            },
+            { threshold: 0.4 },
+          );
+          scanIO.observe(scanSection);
+        }
+
+        /* stat counters */
+        var statDone = false;
+        var statsSection = document.getElementById("stats");
+        if ("IntersectionObserver" in window) {
+          var statIO = new IntersectionObserver(
+            function (entries) {
+              entries.forEach(function (en) {
+                if (en.isIntersecting && !statDone) {
+                  statDone = true;
+                  document
+                    .querySelectorAll("#statGrid .v[data-target]")
+                    .forEach(function (el) {
+                      var target = parseInt(el.getAttribute("data-target"), 10);
+                      var suffix = el.getAttribute("data-suffix") || "";
+                      var start = null,
+                        duration = 1200;
+                      function step(ts) {
+                        if (!start) start = ts;
+                        var p = clamp((ts - start) / duration, 0, 1);
+                        el.textContent =
+                          Math.floor(target * (1 - Math.pow(1 - p, 3))) +
+                          suffix;
+                        if (p < 1) requestAnimationFrame(step);
+                      }
+                      requestAnimationFrame(step);
+                    });
+                }
+              });
+            },
+            { threshold: 0.35 },
+          );
+          statIO.observe(statsSection);
+        }
+
+        /* copy buttons */
+        document.querySelectorAll(".copy-btn").forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            var cmd = btn.getAttribute("data-cmd");
+            if (navigator.clipboard && navigator.clipboard.writeText) {
+              navigator.clipboard.writeText(cmd).then(function () {
+                var orig = btn.textContent;
+                btn.textContent = "copied";
+                setTimeout(function () {
+                  btn.textContent = orig;
+                }, 1400);
+              });
+            }
+          });
+        });
+      })();
+    </script>
+  </body>
+</html>

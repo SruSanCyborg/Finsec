@@ -12,6 +12,15 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 DROP TABLE IF EXISTS api_keys;
 DROP TABLE IF EXISTS policies;
 
+-- Add Clerk identity column to existing users table (idempotent)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS clerk_user_id TEXT UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now();
+ALTER TABLE users ADD COLUMN IF NOT EXISTS on_call BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+
 CREATE TABLE IF NOT EXISTS tenants (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name          TEXT NOT NULL,
@@ -21,12 +30,15 @@ CREATE TABLE IF NOT EXISTS tenants (
 CREATE TABLE IF NOT EXISTS users (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id     UUID NOT NULL REFERENCES tenants(id) ON DELETE CASCADE,
+  clerk_user_id TEXT UNIQUE,          -- primary external identity (Clerk)
   email         TEXT NOT NULL UNIQUE,
   name          TEXT NOT NULL DEFAULT '',
+  avatar_url    TEXT,
   role          TEXT NOT NULL DEFAULT 'member'
                 CHECK (role IN ('owner','admin','analyst','member','viewer')),
   mfa           BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS projects (
@@ -206,6 +218,60 @@ CREATE TABLE IF NOT EXISTS notifications (
   kind          TEXT NOT NULL DEFAULT 'system'
                 CHECK (kind IN ('alert','scan','team','system','ai')),
   read          BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS integrations (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  category      TEXT NOT NULL DEFAULT 'messaging',
+  description   TEXT,
+  connected     BOOLEAN NOT NULL DEFAULT FALSE,
+  events        INTEGER NOT NULL DEFAULT 0,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS alerts (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title           TEXT NOT NULL,
+  severity        TEXT NOT NULL DEFAULT 'high',
+  recipient       TEXT,
+  phone           TEXT,
+  policy          TEXT,
+  status          TEXT NOT NULL DEFAULT 'ringing'
+                  CHECK (status IN ('ringing','delivered','acknowledged','escalated','resolved')),
+  finding_key     TEXT,
+  transcript      JSONB NOT NULL DEFAULT '[]',
+  duration_sec    INTEGER NOT NULL DEFAULT 0,
+  acknowledged_at TIMESTAMPTZ,
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS assets (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  kind          TEXT NOT NULL DEFAULT 'service',
+  criticality   INTEGER NOT NULL DEFAULT 1,
+  exposure      TEXT NOT NULL DEFAULT 'internal'
+);
+
+CREATE TABLE IF NOT EXISTS attack_paths (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name          TEXT NOT NULL,
+  node_ids      JSONB NOT NULL DEFAULT '[]',
+  probability   NUMERIC(5,4) NOT NULL DEFAULT 0,
+  impact_usd    BIGINT NOT NULL DEFAULT 0,
+  techniques    JSONB NOT NULL DEFAULT '[]',
+  blocked       BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS ai_config (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  endpoint      TEXT,
+  token         TEXT,
+  model         TEXT NOT NULL DEFAULT 'sirius-selflearning-v1',
+  auto_triage   BOOLEAN NOT NULL DEFAULT FALSE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 """

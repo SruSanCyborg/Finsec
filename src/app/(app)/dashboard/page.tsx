@@ -43,11 +43,24 @@ export default function DashboardPage() {
   const [alerts, setAlerts] = useState<CallAlert[]>([]);
 
   useEffect(() => {
-    api.risk.summary().then(setSummary);
-    api.findings.list().then((f) => setRecent(f.slice(0, 6)));
+    let active = true;
+    const refresh = () => {
+      api.risk.summary().then((s) => active && setSummary(s));
+      api.findings.list().then((f) => active && setRecent(f.slice(0, 6)));
+    };
+    refresh();
     const unsub = api.alerts.subscribe(setAlerts);
     api.alerts.list().then(setAlerts);
-    return unsub;
+    // Real mode: live events refresh the KPIs when a scan completes (incl. CLI).
+    const live = api.live?.subscribe?.({
+      onDone: refresh,
+      onFinding: () => refresh(),
+    });
+    return () => {
+      active = false;
+      unsub();
+      live?.();
+    };
   }, []);
 
   if (!summary) return <Spinner className="min-h-[60vh]" />;

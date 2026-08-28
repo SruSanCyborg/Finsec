@@ -84,7 +84,7 @@ function NavItems({ onNavigate }: { onNavigate?: () => void }) {
 
 export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useSession();
-  const email = user?.primaryEmailAddress?.emailAddress ?? "";
+  const email = user?.email ?? "";
 
   const content = (
     <div className="flex h-full flex-col">

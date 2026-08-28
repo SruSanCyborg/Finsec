@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .core import db
 from .core.config import API_V1_PREFIX, ALLOWED_ORIGINS
 from .core.schema import SCHEMA_SQL
-from .routers import findings, governance, projects, reports, scans
+from .routers import findings, governance, meta, projects, reports, scans, workspace
 from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
@@ -57,6 +57,20 @@ app.include_router(findings.router, prefix=API_V1_PREFIX)
 app.include_router(governance.router, prefix=API_V1_PREFIX)
 app.include_router(reports.router, prefix=API_V1_PREFIX)
 app.include_router(projects.router, prefix=API_V1_PREFIX)
+app.include_router(meta.router, prefix=API_V1_PREFIX)
+app.include_router(meta.router, prefix="")  # /health + /healthz at root (CLI probes /healthz)
+app.include_router(workspace.router, prefix=API_V1_PREFIX)
+
+
+# CLI (packages/cli) probes GET /healthz at the origin root — alias it.
+@app.get("/healthz")
+async def healthz_root() -> dict:
+    return await meta.health()
+
+
+@app.get("/readyz")
+async def readyz_root() -> dict:
+    return await meta.health()
 
 
 @app.get("/")

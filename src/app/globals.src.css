@@ -1,0 +1,114 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --font-inter: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-display: "Instrument Serif", Georgia, "Times New Roman", serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
+}
+
+body {
+  @apply bg-base text-zinc-300 antialiased;
+  min-height: 100vh;
+  font-family: var(--font-inter);
+}
+
+::selection {
+  @apply bg-accent/25 text-zinc-50;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  @apply rounded-full bg-line-strong;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .card {
+    @apply rounded-xl border border-line bg-panel;
+  }
+  .input {
+    @apply w-full rounded-lg border border-line bg-[#101013] px-3.5 py-2.5 text-sm text-zinc-100 outline-none transition placeholder:text-zinc-600 focus:border-accent/60 focus:ring-2 focus:ring-accent/10;
+  }
+  .label {
+    @apply mb-1.5 block text-[11px] font-medium uppercase tracking-[0.08em] text-zinc-500;
+  }
+  .kbd {
+    @apply rounded border border-line bg-raise px-1.5 py-0.5 font-mono text-[10px] text-zinc-500;
+  }
+}
+
+.grid-bg {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+.scanline-overlay {
+  position: relative;
+  overflow: hidden;
+}
+.scanline-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(transparent 50%, rgba(124, 58, 237, 0.03) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+}
+
+.nav-scrolled {
+  background: rgba(5, 5, 5, 0.85);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-bottom: 1px solid rgba(30, 30, 34, 0.6);
+}
+
+/* Landing: display serif for cinematic headlines */
+.font-display {
+  font-family: var(--font-display), Georgia, serif;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+@keyframes dot-flow {
+  0% { left: -6%; }
+  100% { left: 106%; }
+}
+
+@keyframes dot-stop {
+  0% { left: -6%; }
+  55% { left: 56%; }
+  100% { left: 56%; }
+}
+
+@keyframes call-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+.call-pulse {
+  animation: call-pulse 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

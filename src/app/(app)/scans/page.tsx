@@ -33,7 +33,18 @@ export default function ScansPage() {
   const [starting, setStarting] = useState(false);
 
   useEffect(() => {
-    api.scans.list().then(setScans);
+    let active = true;
+    api.scans.list().then((s) => active && setScans(s));
+    // Real mode: live events keep the list fresh when the CLI pushes scans.
+    const unsub = api.live?.subscribe?.({
+      onDone: (s) => {
+        api.scans.list().then((all) => active && setScans(all));
+      },
+    });
+    return () => {
+      active = false;
+      unsub?.();
+    };
   }, []);
 
   async function startScan() {

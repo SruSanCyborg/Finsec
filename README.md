@@ -1,90 +1,210 @@
-# Sirius Line (Finsec — Web branch)
+# Sirius
 
 Continuous security & compliance for fintech: **continuous security for money that moves.**
 
-Next.js web console for the Sirius Line platform — fix-the-leak scanning, money-at-risk
-quantification, 3D attack paths, voice call alerts, audit-ready compliance, team RBAC,
-and a self-learning AI console (model connects later).
+Next.js web console + FastAPI Core API (Neon PostgreSQL). CLI, Web, and Automation
+are all clients of one Core API — the backend is the source of truth for data
+and permissions.
 
-## Quick start
+## Architecture
 
-```bash
-pnpm install
-cp .env.example .env.local   # add your Clerk keys
-pnpm dev          # http://localhost:3000
+```
+                    Clerk
+                     │
+                     ▼
+              User Authentication
+                     │
+          ┌──────────┴──────────┐
+          │                     │
+          ▼                     ▼
+    Sirius Web              Sirius CLI (future)
+          │                     │
+          │ HTTPS               │ HTTPS
+          ▼                     ▼
+              Sirius Backend (FastAPI)
+                     │
+                     ▼
+           Neon PostgreSQL
 ```
 
-**Auth:** Clerk-powered sign-in/sign-up (`/login`, `/signup`). The browser only ever
-sees the publishable key; `CLERK_SECRET_KEY` stays server-side for route protection.
-The five Sirius roles (Owner, Admin, Security Analyst, Developer/Member, Viewer) map
-to Clerk organization roles of the same name — assign them from the Clerk dashboard
-or via invitations.
+- The browser **never** talks to Neon — only to the Core API.
+- The backend verifies the authenticated Clerk session/token on every protected
+  request. Browser-sent `userId`/`email`/`role` claims are never trusted.
+- Users are keyed by `clerk_user_id` (unique); email is not the primary identity.
 
-**Demo preview:** the landing page's "View live demo" button seeds the local mock
-workspace and opens the dashboard without a Clerk account.
+## Repository layout
 
-## Modes
+```
+src/              Next.js web console (App Router, Tailwind, Clerk)
+backend/          FastAPI Core API (asyncpg → Neon)
+scripts/          cli_push.py (local scan → API), test_auth.py, e2e_pipeline.py
+sample-repo/      deliberately-vulnerable fixture the scanner can chew on
+```
 
-| Mode | How | Notes |
-|---|---|---|
-| Mock (default) | leave `NEXT_PUBLIC_API_URL` empty | Full app runs locally; data persists in `localStorage`; scans/alerts simulate live |
-| Real | set `NEXT_PUBLIC_API_URL` to the FastAPI Core API | Same UI; streams become WebSockets; the backend verifies Clerk session tokens |
+## 1. Installing dependencies
 
-> Neon PostgreSQL is only ever accessed by the backend — never from this client.
+```bash
+# Frontend (Node ≥ 22, pnpm)
+pnpm install
 
-## Real backend (FastAPI + Neon PostgreSQL)
+# Backend (Python 3.12/3.13 — 3.14 has no prebuilt wheels for asyncpg/pydantic)
+cd backend
+py -3.13 -m pip install -r requirements.txt
+cd ..
+```
 
-The Core API lives in [`backend/`](backend/README.md). It owns the schema (15
-tables), the scan engine, the money-at-risk model, and the hand-written PDF
-report generator — all ports of the CLI engine so every surface agrees.
+## 2. Creating a Clerk application
+
+1. Go to https://dashboard.clerk.com → **Add application**.
+2. Name it "sirius", enable **Email + password** (or Google/GitHub as needed).
+3. Copy the **Publishable key** (`pk_test_...`) and **Secret key** (`sk_test_...`).
+
+## 3. Configuring Clerk environment variables
+
+Frontend (`.env.local`, copy from `.env.example`):
+
+```env
+NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_...
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/signup
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/dashboard
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/dashboard
+```
+
+The publishable key is safe for the browser. **Never** put the secret key in the
+frontend.
+
+## 4. Configuring backend environment variables
+
+Backend (`backend/.env`, copy from `backend/.env.example`):
+
+```env
+DATABASE_URL=postgresql://...neon.tech/neondb?sslmode=require
+CLERK_SECRET_KEY=sk_test_...          # server-side only
+SIRIUS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+SIRIUS_PROJECT_ID=11111111-1111-4111-8111-111111111111
+SIRIUS_DEMO_API_KEY=demo-key
+```
+
+`CLERK_SECRET_KEY` enables Clerk session-token verification on protected routes.
+Without it, the backend falls back to `demo-key` API-key auth (mock mode).
+
+## 5. Configuring the database
+
+The backend creates all tables automatically on boot (15+ tables, idempotent
+`CREATE TABLE IF NOT EXISTS` + `ALTER TABLE` migrations). Just point
+`DATABASE_URL` at your Neon instance. The demo workspace (tenant, project,
+`demo@sirius.dev` user, `demo-key` API key) is seeded on every start.
+
+## 6. Starting the backend
 
 ```bash
 cd backend
-py -3.13 -m pip install -r requirements.txt
-cp .env.example .env        # Neon connection string already filled for the demo
 py -3.13 -m uvicorn app.main:app --reload   # http://localhost:8000
 ```
 
-Then in `.env.local`:
+Interactive docs: http://localhost:8000/docs
 
+## 7. Starting the frontend
+
+```bash
+pnpm build        # production build (compiles Tailwind first)
+pnpm start        # http://localhost:3000
 ```
+
+To connect the frontend to the backend, add to `.env.local`:
+
+```env
 NEXT_PUBLIC_API_URL=http://localhost:8000/api/v1
 NEXT_PUBLIC_WS_URL=ws://localhost:8000/api/v1
 ```
 
-The API is seeded with a demo project (`demo-key`) and accepts
-`demo@siriusline.io / Demo123!` at `/api/v1/auth/token`. Interactive docs at
-`http://localhost:8000/docs`.
+## 8. Testing /health
 
-## Landing experience
-
-The landing page is a cinematic, scroll-driven demonstration of the security loop:
-a persistent full-viewport 3D system (React Three Fiber) shows an autonomous agent
-generating a ₹18.5L transfer, then walks through context → behaviour (94% deviation) →
-policy (₹5L cap) → decision (BLOCKED) → escalation (call alert) → resolution →
-autonomy, synced by GSAP ScrollTrigger and ending in a dashboard reveal.
-
-## Scripts
-
-- `pnpm dev` / `pnpm build` / `pnpm start`
-- `pnpm typecheck` — strict TS, zero errors
-- `pnpm lint`
-
-## Docs
-
-- [`docs/SIRIUS_FEATURES.md`](docs/SIRIUS_FEATURES.md) — full feature spec
-- [`docs/SIRIUS_OPENCODE_PROMPT.md`](docs/SIRIUS_OPENCODE_PROMPT.md) — build prompt / architecture brief
-
-## Structure
-
-```
-src/
-  app/            # route groups: (auth) Clerk shell · (app) sidebar shell · landing
-  components/     # ui primitives · layout (sidebar/topbar) · three (R3F scenes + landing) · landing
-  lib/            # api facade → mock store · clerk providers · landing story/quality
-  types/          # domain model
-  middleware.ts   # Clerk route protection
+```bash
+curl http://localhost:8000/health
+# {"status":"ok"}
 ```
 
-Stack: Next.js 14 · TypeScript · Tailwind · Clerk · Framer Motion (UI) · GSAP (cinematic) ·
-Three.js/R3F (3D) · Recharts (analytics) · Sonner.
+The web console shows a small **API** status pill in the top bar (green =
+connected, red = offline).
+
+## 9. Testing authentication
+
+```bash
+# Unauthenticated → 401
+curl -i http://localhost:8000/api/v1/me | head -1
+# HTTP/1.1 401 Unauthorized
+
+# With the demo key → the Sirius user
+curl -H "Authorization: Bearer demo-key" http://localhost:8000/api/v1/me
+```
+
+With Clerk configured, sign in at `/login`; the frontend attaches the Clerk
+session token to every API request (`Authorization: Bearer <clerk-session-jwt>`),
+and the backend verifies it against Clerk's JWKS before mapping to the Sirius
+user.
+
+## 10. Testing /api/me
+
+```bash
+curl -H "Authorization: Bearer demo-key" http://localhost:8000/api/v1/me
+```
+
+```json
+{
+  "id": "…",
+  "clerkUserId": null,
+  "name": "Aarav Mehta",
+  "email": "demo@sirius.dev",
+  "avatarUrl": null,
+  "role": "owner"
+}
+```
+
+With a Clerk session: `clerkUserId` is populated and the user is created on
+first access (idempotent — never duplicated).
+
+## 11. Full acceptance run
+
+```bash
+py -3.13 scripts/test_auth.py        # 16 checks: health, 401s, me, team, CORS, sync
+py -3.13 scripts/e2e_pipeline.py     # local scan → Neon → reports → live WS events
+py -3.13 scripts/cli_push.py         # scan sample-repo/ and push to Neon
+```
+
+## CLI authentication architecture (foundation)
+
+The future `sirius login` flow — **the CLI never holds the Clerk secret**:
+
+```text
+CLI                 Backend               Browser/Web
+ │ request login ──▶  │                      │
+ │ ◀── session/device id │                    │
+ │ opens browser ────────────────────────────▶│
+ │                    │  Clerk auth          │
+ │                    │ ◀── session token ───│
+ │                    │  verify + sync user  │
+ │ ◀── CLI credential │                      │
+ │ store securely     │                      │
+```
+
+- **Clerk** handles the user's identity (browser session).
+- **The Sirius backend** issues a Sirius-specific credential to the CLI after
+  the user authorizes in the browser (device-flow), which the CLI stores in OS
+  secure storage (Windows Credential Manager / macOS Keychain / Linux Secret
+  Service).
+- The backend's `/auth/api-keys` endpoint already mints scoped, expiring,
+  revocable keys — the CLI credential will be an extension of that.
+
+## Demo credentials
+
+`demo@sirius.dev` / `Demo123!` (owner). The demo key is `demo-key`.
+
+## Notes
+
+- Dev mode (`pnpm dev`) has a known Next 14.2.35 + pnpm issue with the dev CSS
+  loader; Tailwind is pre-compiled (`pnpm build:css`) and the app runs in
+  production mode (`pnpm start`).
+- Server secrets (CLERK_SECRET_KEY, DATABASE_URL) are never exposed to the
+  browser and never logged.

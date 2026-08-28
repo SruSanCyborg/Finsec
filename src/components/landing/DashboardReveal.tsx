@@ -43,7 +43,7 @@ export default function DashboardReveal() {
             <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
             <span className="h-2.5 w-2.5 rounded-full bg-zinc-700" />
             <span className="ml-3 font-mono text-[10px] uppercase tracking-[0.2em] text-zinc-500">
-              command.siriusline.io
+              command.sirius.dev
             </span>
           </div>
           <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-wider text-zinc-600">

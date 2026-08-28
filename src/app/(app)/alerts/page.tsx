@@ -34,7 +34,7 @@ export default function AlertsPage() {
   async function play(id: string) {
     setPlaying(id);
     await new Promise((r) => setTimeout(r, 1200));
-    await api.alerts.update(id, "acknowledged", "demo@siriusline.io");
+    await api.alerts.update(id, "acknowledged", "demo@sirius.dev");
     setAlerts((prev) => prev.map((a) => (a.id === id ? { ...a, status: "acknowledged" } : a)));
     setPlaying(null);
   }
@@ -53,7 +53,7 @@ export default function AlertsPage() {
           </button>
         )}
         {a.status === "acknowledged" && (
-          <button onClick={(e) => { e.stopPropagation(); api.alerts.update(a.id, "resolved", "demo@siriusline.io"); setAlerts((p) => p.map((x) => (x.id === a.id ? { ...x, status: "resolved" } : x))); }} className="rounded-lg border border-line bg-raise px-2.5 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:bg-white/[0.04]">
+          <button onClick={(e) => { e.stopPropagation(); api.alerts.update(a.id, "resolved", "demo@sirius.dev"); setAlerts((p) => p.map((x) => (x.id === a.id ? { ...x, status: "resolved" } : x))); }} className="rounded-lg border border-line bg-raise px-2.5 py-1.5 text-[11px] font-medium text-zinc-400 transition hover:bg-white/[0.04]">
             Resolve
           </button>
         )}
