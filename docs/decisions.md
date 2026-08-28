@@ -1340,3 +1340,35 @@ listing none — and that every entry has a real sentence, since a name with no
 explanation leaves you exactly where you were.
 
 ---
+## D-041 — Clickable locations, and the reason they are opt-in
+
+From the zero-AI design report's Part D, which calls OSC 8 "the single most
+impressive small touch". A finding prints `src/config.py:14`; on a terminal that
+implements the sequence, that string becomes a link the terminal will open.
+
+**It is detected, never assumed.** A terminal that does not understand OSC 8 may
+print the payload as literal text, which would turn every location in the output
+into a line of escape gibberish — far worse than a location that is merely not
+clickable. So the check is a list of terminals known to implement it (iTerm2,
+WezTerm, kitty, Ghostty, Windows Terminal, VS Code, VTE), plus `SIRIUS_LINKS=1`
+to force it on and `=0` to force it off for a terminal that lies. Off in a pipe,
+which is what every test and every CI log sees.
+
+**The scheme is configurable because there is no standard for "open this file at
+this line".** `file://` opens the file and usually forgets the line;
+`SIRIUS_LINK_SCHEME=vscode` gives `vscode://file/<abs>:<line>`, which does jump.
+
+**Writing the test found a real bug in the layout kit.** `stripAnsi` knew about
+colour and nothing else, so `visibleWidth` measured a linked cell as the length
+of its URL — seventy columns for a six-character filename. Every `table` and
+`padVisible` would have been laid out against a number wrong by the length of a
+path. The finding card happened to be safe because it pads the plain string and
+wraps the link around it afterwards, but the primitive was wrong and any future
+linked cell would have exposed it. `stripAnsi` strips OSC 8 now.
+
+Two other items from the report were already in place and are not re-done:
+synchronized output (DEC 2026) arrives through Ink, and reports are signed over
+a canonicalised payload with sorted keys — close to RFC 8785 and documented as
+such rather than claimed to be it.
+
+---

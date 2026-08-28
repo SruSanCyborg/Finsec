@@ -15,6 +15,9 @@
 
 import { Box, Text } from 'ink';
 import React from 'react';
+import { resolve } from 'node:path';
+
+import { hyperlink } from './kit.js';
 
 import { formatInr } from '../money.js';
 import { COLOR, SEVERITY_COLOR, severityLabel, validityLabel } from './theme.js';
@@ -62,6 +65,14 @@ export function FindingCard({ finding, glyphs, capabilities, showRunHint = false
   const muted = capabilities.color ? COLOR.muted : undefined;
 
   const location = `${finding.file}:${finding.line}`;
+
+  // Clickable where the terminal supports it. The padding is computed from the
+  // plain text and the link wrapped around it afterwards, because an OSC 8
+  // payload is bytes the terminal never draws — padding the wrapped string
+  // would pad the escape and pull the column left by however long the path is.
+  const shown = capabilities.hyperlinks
+    ? (text: string) => hyperlink(text, resolve(process.cwd(), finding.file), finding.line)
+    : (text: string) => text;
   const refs = formatComplianceRefs(finding.compliance_ref, glyphs.separator);
 
   // Right-align the compliance refs when there is room; stack them when there is not.
@@ -95,7 +106,11 @@ export function FindingCard({ finding, glyphs, capabilities, showRunHint = false
       </Box>
 
       <Box>
-        <Text color={muted}>{canAlign ? `     ${location}`.padEnd(locationWidth) : `     ${location}`}</Text>
+        <Text color={muted}>
+          {canAlign
+            ? `     ${shown(location)}${' '.repeat(Math.max(0, locationWidth - location.length - 5))}`
+            : `     ${shown(location)}`}
+        </Text>
         {refs ? <Text color={muted}>{canAlign ? refs : ''}</Text> : null}
       </Box>
       {refs && !canAlign ? <Text color={muted}>{`     ${refs}`}</Text> : null}

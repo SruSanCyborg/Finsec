@@ -17,6 +17,16 @@ export interface Capabilities {
   tty: boolean;
   unicode: boolean;
   width: number;
+  /**
+   * OSC 8 hyperlinks: a `file:line` the terminal can open.
+   *
+   * Detected from the terminal rather than assumed, because a terminal that
+   * does not understand the sequence may print its payload as literal text —
+   * turning every location in the output into a line of escape gibberish. When
+   * in doubt this is off, and the plain `file:line` it falls back to is what
+   * was always there.
+   */
+  hyperlinks: boolean;
 }
 
 export interface CapabilityOptions {
@@ -45,6 +55,21 @@ export function detectCapabilities(options: CapabilityOptions = {}): Capabilitie
   const unicodeForced = env.SIRIUS_UNICODE === '1';
   // Windows Terminal and modern macOS/Linux terminals are fine; a bare TERM=dumb
   // or a non-UTF-8 locale is not.
+  // Terminals that implement OSC 8. Deliberately a list of known-good rather
+  // than a guess: the failure mode of guessing wrong is the escape payload
+  // printed as text on every finding, which is far worse than a location that
+  // is merely not clickable.
+  const program = env.TERM_PROGRAM ?? '';
+  const knownGood =
+    /iTerm|WezTerm|ghostty|vscode|Hyper|rio/i.test(program) ||
+    env.KITTY_WINDOW_ID !== undefined ||
+    env.WT_SESSION !== undefined ||
+    env.VTE_VERSION !== undefined;
+  const hyperlinks =
+    env.SIRIUS_LINKS === '0'
+      ? false
+      : env.SIRIUS_LINKS === '1' || (tty && !options.machineMode && knownGood);
+
   const unicode =
     !asciiForced && (unicodeForced || (tty && env.TERM !== 'dumb' && (utf8 || process.platform === 'darwin')));
 
@@ -56,6 +81,7 @@ export function detectCapabilities(options: CapabilityOptions = {}): Capabilitie
     // is not nullish and would otherwise collapse every layout to its narrowest
     // form. This showed up under `script`, and would show up in CI too.
     width: process.stdout.columns || 80,
+    hyperlinks,
   };
 }
 

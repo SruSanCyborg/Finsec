@@ -27,11 +27,22 @@
 
 /** The escape sequences a palette introduces. Written as an escape, not a byte. */
 const ANSI = /\u001B\[[0-9;]*m/g;
+
+/**
+ * OSC 8 hyperlinks, which occupy no columns either.
+ *
+ * `stripAnsi` knew about colour and nothing else, so a cell carrying a link
+ * measured the length of its URL — seventy columns for a six-column filename —
+ * and every table containing one would have been laid out against a number
+ * that was wrong by the length of a path. Caught by a test asserting the one
+ * property the whole layout rests on: what a string costs is what you can see.
+ */
+const OSC8 = /\u001B\]8;;.*?\u001B\\/g;
 const ANSI_AT_START = /^\u001B\[[0-9;]*m/;
 const RESET = '\u001B[0m';
 
 export function stripAnsi(text: string): string {
-  return text.replace(ANSI, '');
+  return text.replace(OSC8, '').replace(ANSI, '');
 }
 
 /** Columns a string actually occupies, ignoring colour. */
@@ -204,4 +215,31 @@ export function rule(width: number, label?: string, glyph = '─'): string {
   const text = ` ${label} `;
   const fill = Math.max(0, width - text.length - 2);
   return `${glyph.repeat(2)}${text}${glyph.repeat(fill)}`;
+}
+
+/**
+ * A location the terminal can open, via OSC 8.
+ *
+ * The sequence is ESC ]8;; <url> ST <text> ESC ]8;; ST — the terminal renders
+ * `text` and treats it as a link. Supported by iTerm2, WezTerm, kitty, Ghostty,
+ * Windows Terminal and VS Code's terminal. A terminal that does not understand
+ * it may print the payload as literal text, so the caller decides from
+ * `capabilities.hyperlinks` rather than this function guessing — a location
+ * that is merely not clickable beats a line of escape gibberish.
+ *
+ * The scheme is configurable because "open this file at this line" has no
+ * standard. `file://` opens the file and usually forgets the line; editors each
+ * have their own, and `SIRIUS_LINK_SCHEME=vscode` gives
+ * `vscode://file/<abs>:<line>`, which does jump to it.
+ */
+export function hyperlink(text: string, path: string, line?: number): string {
+  const scheme = process.env.SIRIUS_LINK_SCHEME ?? 'file';
+  const target =
+    scheme === 'file'
+      ? `file://${path}${line ? `#L${line}` : ''}`
+      : `${scheme}://file/${path}${line ? `:${line}` : ''}`;
+
+  const open = `\u001B]8;;${target}\u001B\\`;
+  const close = '\u001B]8;;\u001B\\';
+  return `${open}${text}${close}`;
 }
