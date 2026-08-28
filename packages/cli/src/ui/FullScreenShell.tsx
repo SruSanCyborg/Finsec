@@ -105,10 +105,25 @@ export function FullScreenShell({
   useInput((input, key) => {
     // Scrolling stays live while a command runs — watching output go by is
     // exactly when you want to look back at something.
-    if (key.pageUp) return scrollBy(-Math.floor(viewportHeight / 2));
-    if (key.pageDown) return scrollBy(Math.floor(viewportHeight / 2));
+    //
+    // The bindings matter more than they look. A MacBook has no PgUp key (it is
+    // Fn+↑) and macOS takes Ctrl+↑ for Mission Control, so a Mac user with only
+    // those two bindings has no working way to scroll at all. Shift+arrows and
+    // Ctrl+U/D always reach us.
+    const halfPage = Math.max(1, Math.floor(viewportHeight / 2));
+
+    if (key.pageUp) return scrollBy(-halfPage);
+    if (key.pageDown) return scrollBy(halfPage);
+    if (key.ctrl && input === 'u') return scrollBy(-halfPage);
+    if (key.ctrl && input === 'd' && value !== '') return scrollBy(halfPage);
+    if (key.shift && key.upArrow) return scrollBy(-1);
+    if (key.shift && key.downArrow) return scrollBy(1);
     if (key.ctrl && key.upArrow) return setScrollOffset(0);
     if (key.ctrl && key.downArrow) return setScrollOffset(null);
+
+    // Scrolled up with nothing typed, Escape means "put me back at the bottom"
+    // — the thing you actually want after reading history.
+    if (key.escape && !following && value === '') return setScrollOffset(null);
 
     if (key.ctrl && input === 'c') {
       if (busy) {
@@ -265,9 +280,9 @@ export function FullScreenShell({
         <Text color={muted}>
           {following
             ? busy
-              ? ' ctrl-c cancel · pgup scroll'
-              : ' / commands · ↑ history · pgup scroll · ctrl-c ctrl-c exit'
-            : ` ${hiddenBelow} line${hiddenBelow === 1 ? '' : 's'} below · ctrl-↓ jump to bottom`}
+              ? ' ctrl-c cancel · shift-↑↓ scroll'
+              : ' / commands · ↑ history · shift-↑↓ scroll · ctrl-c ctrl-c exit'
+            : ` ${hiddenBelow} line${hiddenBelow === 1 ? '' : 's'} below · shift-↑↓ scroll · esc back to bottom`}
         </Text>
       </Box>
     </Box>

@@ -26,6 +26,25 @@ const RESET = '\u001b[0m';
 
 const paint = (text: string, color: string, on: boolean) => (on ? `${color}${text}${RESET}` : text);
 
+/** Greedy word wrap. */
+export function wrap(text: string, width: number): string[] {
+  if (width < 12) return [text];
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let current = '';
+
+  for (const word of words) {
+    if (current === '') current = word;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length > 0 ? lines : [text];
+}
+
 export interface ThreatReport {
   paths: AttackPath[];
   /** Provenance for leaked credentials, keyed by finding id. */
@@ -116,7 +135,12 @@ export function renderThreatReport(
       );
     }
 
-    lines.push(`   ${paint(bullet + ' ' + path.narrative, DIM, color)}`);
+    // Wrapped, not truncated. The narrative is the reason the path matters, and
+    // an explanation cut off mid-sentence explains nothing.
+    const indent = '     ';
+    for (const [index, chunk] of wrap(path.narrative, (options.width ?? 80) - indent.length - 2).entries()) {
+      lines.push(`   ${paint(index === 0 ? `${bullet} ${chunk}` : `  ${chunk}`, DIM, color)}`);
+    }
   }
 
   if (!report.validated && secrets.length > 0 && report.exposure.size === 0) {

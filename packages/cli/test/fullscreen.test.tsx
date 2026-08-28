@@ -148,7 +148,7 @@ describe('FullScreenShell input', () => {
     const { stdin, lastFrame } = setup({ lines: lines(500) });
     stdin.write('\u001b[5~'); // PgUp
     await settle();
-    expect(lastFrame()).toContain('jump to bottom');
+    expect(lastFrame()).toContain('back to bottom');
   });
 });
 
