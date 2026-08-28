@@ -23,7 +23,7 @@ import { dirname, join, resolve } from 'node:path';
 import { CliError } from '../api/errors.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import { detectCapabilities } from '../ui/theme.js';
-import { truncate } from '../ui/kit.js';
+import { note, truncate } from '../ui/kit.js';
 import { paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
 import { evaluate } from '../revenue/evaluate.js';
 import { analyzeBatch } from '../revenue/features.js';
@@ -255,7 +255,7 @@ async function detect(
   process.stdout.write('\n');
   process.stdout.write(
     ` ${palette.bold('sirius revenue')}  ${palette.dim(
-      `${inSplit.length} records · split=${split}${kind ? ` · ${kind}s` : ''}` +
+      `${inSplit.length} records · split=${split}${kind ? ` · showing ${kind}s` : ''}` +
         ` · floor ${model.threshold} · room for ${capacity.max_actions}`,
     )}\n\n`,
   );
@@ -311,12 +311,17 @@ async function detect(
     )}\n`,
   );
   process.stdout.write(palette.hr + '\n');
-  process.stdout.write(
-    palette.dim(
-      ` A forecast, not a result. ` +
-        `Measure it:  sirius revenue eval ${target ?? DEFAULT_BATCH}\n`,
-    ),
-  );
+  // Wrapped, not shortened. Trimming this to fit cost it its subject — "a
+  // forecast, not a result" does not say *what* is a forecast, and the whole
+  // point of the line is that the expected-recovery figure above it has not
+  // happened yet.
+  for (const line of note(
+    `Expected recovery is a forecast, not a result. ` +
+      `Measure it:  sirius revenue eval ${target ?? DEFAULT_BATCH}`,
+    { indent: 1, width: palette.width },
+  )) {
+    process.stdout.write(palette.dim(line) + '\n');
+  }
   process.stdout.write('\n');
 }
 
