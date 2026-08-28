@@ -99,24 +99,45 @@ describe('the demo fixture', () => {
 });
 
 describe('plain renderer', () => {
-  it('renders one grep-friendly line per finding', () => {
-    const line = renderFindingLine({
-      id: 'f1',
-      file: 'src/config.py',
-      line: 14,
-      severity: 'critical',
-      rule_id: 'SIR-SEC-001',
-      category: 'secrets',
-      message: 'Hardcoded Stripe secret key',
-      compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
-      validity: 'verified_live',
-      money_at_risk_inr: 4_200_000,
-    } as Finding);
+  const hero = {
+    id: 'f1',
+    file: 'src/config.py',
+    line: 14,
+    severity: 'critical',
+    rule_id: 'SIR-SEC-001',
+    category: 'secrets',
+    message: 'Hardcoded Stripe secret key',
+    compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
+    validity: 'verified_live',
+    money_at_risk_inr: 4_200_000,
+  } as Finding;
 
-    expect(line).toBe(
-      'CRITICAL SIR-SEC-001 src/config.py:14 Hardcoded Stripe secret key ' +
-        '[PCI-DSS:8.6.2, DPDP:8] (VERIFIED LIVE, ₹42,00,000 at risk)',
+  it('renders one grep-friendly line per finding', () => {
+    expect(renderFindingLine(hero)).toBe(
+      '✗ CRITICAL   SIR-SEC-001   src/config.py:14  Hardcoded Stripe secret key  ' +
+        'PCI-DSS 8.6.2 · DPDP §8  ⚠ VERIFIED LIVE · ₹42,00,000',
     );
+  });
+
+  it('drops compliance refs first when a line will not fit', () => {
+    const line = renderFindingLine(hero, { width: 90 });
+    expect(line).not.toContain('PCI-DSS');
+    // The two strings the product is selling survive the squeeze.
+    expect(line).toContain('VERIFIED LIVE');
+    expect(line).toContain('₹42,00,000');
+  });
+
+  it('shortens the message rather than the money, however narrow it gets', () => {
+    for (const width of [80, 70, 60]) {
+      const line = renderFindingLine(hero, { width });
+      expect(line).toContain('₹42,00,000');
+      expect(line).toContain('VERIFIED LIVE');
+    }
+  });
+
+  it('emits no escapes unless colour is asked for', () => {
+    expect(renderFindingLine(hero)).not.toContain('\u001b');
+    expect(renderFindingLine(hero, { color: true })).toContain('\u001b');
   });
 
   it('emits no ANSI escapes', async () => {
@@ -140,9 +161,9 @@ describe('plain renderer', () => {
 
     // eslint-disable-next-line no-control-regex
     expect(report).not.toMatch(/\x1b\[/);
-    expect(report).toContain('Money@risk: ₹51,20,000');
-    expect(report).toContain('Compliance: 72/100');
-    expect(report).toContain('-> BLOCKED (exit 1)');
+    expect(report).toContain('Money@risk ₹51,20,000');
+    expect(report).toContain('72/100');
+    expect(report).toContain('BLOCKED');
   });
 
   it('sorts most severe first so output is stable regardless of arrival order', async () => {
@@ -158,8 +179,8 @@ describe('plain renderer', () => {
 
     const severities = report
       .split('\n')
-      .filter((l) => /^(CRITICAL|HIGH|MEDIUM|LOW)/.test(l))
-      .map((l) => l.split(' ')[0]);
+      .filter((l) => /^[✗▲■○·] (CRITICAL|HIGH|MEDIUM|LOW)/.test(l))
+      .map((l) => l.split(/\s+/)[1]);
 
     expect(severities.slice(0, 2)).toEqual(['CRITICAL', 'CRITICAL']);
     expect(severities.at(-1)).toBe('LOW');

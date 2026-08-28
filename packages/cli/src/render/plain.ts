@@ -1,11 +1,16 @@
 /**
- * The plain renderer: what you get when stdout is not a terminal.
+ * The line-based renderer: what you get when stdout is not a terminal, and what
+ * the full-screen shell captures into its transcript.
  *
  * The PRD mocks up the rich view only, so this layout is a deliberate decision
- * rather than a fallback that fell out of broken box-drawing. One line per
- * finding, grep-friendly, stable enough to snapshot in tests:
+ * rather than a fallback that fell out of broken box-drawing.
  *
- *   CRITICAL SIR-SEC-001 src/config.py:14 Hardcoded Stripe secret key [PCI-DSS:8.6.2, DPDP:8] (VERIFIED LIVE, Rs 42,00,000 at risk)
+ * Two things drive the design. It stays **one line per finding** so it is
+ * grep-friendly and stable to snapshot. And when a line will not fit, it drops
+ * the *least* valuable field first: an earlier version truncated from the right
+ * and cut off `₹42,00,000 at risk` and `VERIFIED LIVE` — the two strings the
+ * whole product is selling. Compliance refs go first, then the message is
+ * shortened; the money and the validity are never dropped.
  */
 
 import { formatScore } from '../gate.js';
@@ -15,25 +20,147 @@ import type { Finding, Severity } from '../domain.js';
 import type { GateResult } from '../gate.js';
 import type { ScanOutcome } from '../ui/ScanView.js';
 
-export function renderFindingLine(finding: Finding): string {
-  const parts = [
-    finding.severity.toUpperCase().padEnd(8),
-    finding.rule_id,
-    `${finding.file}:${finding.line}`,
-    finding.message,
-  ];
+// Design tokens, duplicated as ANSI because this renderer writes strings rather
+// than Ink elements. Kept in sync with ui/theme.ts by hand — there are five.
+const SEVERITY_ANSI: Record<Severity, string> = {
+  critical: '\u001b[38;5;203m',
+  high: '\u001b[38;5;215m',
+  medium: '\u001b[38;5;221m',
+  low: '\u001b[38;5;117m',
+  info: '\u001b[38;5;245m',
+};
 
-  const refs = finding.compliance_ref ?? [];
-  if (refs.length > 0) parts.push(`[${refs.join(', ')}]`);
+const DIM = '\u001b[38;5;244m';
+const BOLD = '\u001b[1m';
+const RESET = '\u001b[0m';
+const GREEN = '\u001b[38;5;42m';
 
+const GLYPH: Record<Severity, string> = {
+  critical: '✗',
+  high: '▲',
+  medium: '■',
+  low: '○',
+  info: '·',
+};
+
+export interface RenderOptions {
+  color?: boolean;
+  unicode?: boolean;
+  /** Available columns. Lines are composed to fit rather than being cut. */
+  width?: number;
+}
+
+/** Width of a string once escape sequences are discounted. */
+function visibleLength(text: string): number {
+  // eslint-disable-next-line no-control-regex
+  return text.replace(/\u001b\[[0-9;]*m/g, '').length;
+}
+
+function paint(text: string, color: string, enabled: boolean): string {
+  return enabled ? `${color}${text}${RESET}` : text;
+}
+
+/** `["PCI-DSS:8.6.2","DPDP:8"]` → `PCI-DSS 8.6.2 · DPDP §8` */
+function formatRefs(refs: readonly string[] | undefined, separator: string): string {
+  if (!refs || refs.length === 0) return '';
+  return refs
+    .map((ref) => {
+      const [scheme, clause] = ref.split(':');
+      if (!clause) return scheme ?? ref;
+      if (scheme === 'DPDP') return `DPDP §${clause}`;
+      if (scheme === 'CWE') return `CWE-${clause}`;
+      return `${scheme} ${clause}`;
+    })
+    .join(separator);
+}
+
+export function renderFindingLine(finding: Finding, options: RenderOptions = {}): string {
+  const color = options.color ?? false;
+  const unicode = options.unicode ?? true;
+  const width = options.width && options.width > 20 ? options.width : 0;
+  const sep = unicode ? ' · ' : ' | ';
+
+  const glyph = unicode ? GLYPH[finding.severity] : ' ';
+  const severity = `${glyph} ${finding.severity.toUpperCase()}`.padEnd(11);
+  const head = paint(severity, SEVERITY_ANSI[finding.severity], color);
+  const rule = paint(finding.rule_id.padEnd(12), BOLD, color);
+  const location = paint(`${finding.file}:${finding.line}`, DIM, color);
+
+  // The parts that must survive: a live secret and a rupee figure are the
+  // findings a person acts on first.
   const annotations: string[] = [];
-  if (finding.validity === 'verified_live') annotations.push('VERIFIED LIVE');
+  if (finding.validity === 'verified_live') annotations.push(`${unicode ? '⚠ ' : '! '}VERIFIED LIVE`);
   else if (finding.validity === 'inactive') annotations.push('inactive');
   const money = formatInr(finding.money_at_risk_inr);
-  if (money) annotations.push(`${money} at risk`);
-  if (annotations.length > 0) parts.push(`(${annotations.join(', ')})`);
+  if (money) annotations.push(money);
 
-  return parts.join(' ');
+  const annotation =
+    annotations.length > 0
+      ? paint(
+          annotations.join(sep),
+          finding.validity === 'verified_live' ? SEVERITY_ANSI.critical : SEVERITY_ANSI[finding.severity],
+          color,
+        )
+      : '';
+
+  const refs = formatRefs(finding.compliance_ref, sep);
+  const refsText = refs ? paint(refs, DIM, color) : '';
+
+  // Compose widest-first, then shed the least valuable part until it fits.
+  const assemble = (message: string, withRefs: boolean, place = location) =>
+    [head, rule, place, message, withRefs ? refsText : '', annotation]
+      .filter((part) => part !== '')
+      .join('  ');
+
+  // No width constraint (a pipe, a file, a test): emit everything.
+  if (!width) return assemble(finding.message, true);
+
+  const ellipsis = unicode ? '…' : '.';
+  const basename = finding.file.split('/').pop() ?? finding.file;
+  const shortPlace = paint(`${basename}:${finding.line}`, DIM, color);
+
+  /**
+   * Fits the message into whatever the rest of the layout leaves.
+   *
+   * Measured with a one-character stand-in rather than an empty string: an empty
+   * message is filtered out of the join along with its separator, understating
+   * the layout by two columns. That is what let lines overflow, so the terminal
+   * truncated the rupee figure off the end — the one thing that must never be
+   * cut.
+   */
+  const fitMessage = (place: string): string | null => {
+    const budget = width - (visibleLength(assemble('x', false, place)) - 1);
+    if (budget < 4) return null;
+    const message =
+      budget >= finding.message.length ? finding.message : finding.message.slice(0, budget - 1) + ellipsis;
+    return assemble(message, false, place);
+  };
+
+  // Shed the least valuable thing first, and stop at the first fit.
+  const candidates = [
+    assemble(finding.message, true), // everything
+    assemble(finding.message, false), // minus compliance refs
+    fitMessage(location), // minus part of the message
+    fitMessage(shortPlace), // minus the directory path too
+    assemble('', false, shortPlace), // severity, rule, file, annotation
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate !== null && visibleLength(candidate) <= width) return candidate;
+  }
+
+  // Narrower than the irreducible line. Keep the glyph and drop the severity
+  // word, which is the only remaining redundancy — the colour already says it.
+  const terse = [
+    paint(glyph, SEVERITY_ANSI[finding.severity], color),
+    paint(finding.rule_id, BOLD, color),
+    shortPlace,
+    annotation,
+  ]
+    .filter((part) => part !== '')
+    .join(' ');
+
+  return terse;
 }
 
 export interface PlainReportInput {
@@ -42,6 +169,7 @@ export interface PlainReportInput {
   counts: Partial<Record<Severity, number>>;
   /** Set when findings were streamed as they arrived, so only the summary is wanted. */
   findingsAlreadyPrinted?: boolean;
+  options?: RenderOptions;
 }
 
 export function renderPlainReport({
@@ -49,7 +177,12 @@ export function renderPlainReport({
   gate,
   counts,
   findingsAlreadyPrinted = false,
+  options = {},
 }: PlainReportInput): string {
+  const color = options.color ?? false;
+  const unicode = options.unicode ?? true;
+  const rule = (unicode ? '─' : '-').repeat(Math.min(64, Math.max(24, (options.width ?? 64))));
+
   const lines: string[] = [];
 
   if (!findingsAlreadyPrinted) {
@@ -60,35 +193,55 @@ export function renderPlainReport({
       if (bySeverity !== 0) return bySeverity;
       return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
     });
-
-    for (const finding of sorted) lines.push(renderFindingLine(finding));
+    for (const finding of sorted) lines.push(renderFindingLine(finding, options));
   }
 
-  if (outcome.findings.length > 0) lines.push('');
+  if (outcome.findings.length > 0 || findingsAlreadyPrinted) lines.push('');
+  lines.push(paint(rule, DIM, color));
 
   const counted = [...SEVERITY_ORDER]
     .reverse()
     .filter((severity) => (counts[severity] ?? 0) > 0)
-    .map((severity) => `${counts[severity]} ${severity}`);
-  lines.push(`Findings:   ${counted.length > 0 ? counted.join(', ') : 'none'}`);
+    .map((severity) =>
+      paint(`${unicode ? GLYPH[severity] : ''} ${counts[severity]} ${severity}`, SEVERITY_ANSI[severity], color),
+    );
+  lines.push(` ${paint('Findings'.padEnd(11), DIM, color)}${counted.length > 0 ? counted.join('   ') : 'none'}`);
 
   const verifiedLive = outcome.findings.filter((f) => f.validity === 'verified_live').length;
   const inactive = outcome.findings.filter((f) => f.validity === 'inactive').length;
   if (verifiedLive + inactive > 0) {
-    lines.push(`Secrets:    ${verifiedLive} verified-live, ${inactive} inactive`);
+    lines.push(
+      ` ${paint('Secrets'.padEnd(11), DIM, color)}` +
+        paint(`${verifiedLive} verified-live`, verifiedLive > 0 ? SEVERITY_ANSI.critical : DIM, color) +
+        paint(`  ${inactive} inactive`, DIM, color),
+    );
   }
 
   const money = formatInr(outcome.moneyAtRisk);
-  if (money) lines.push(`Money@risk: ${money}`);
-  if (typeof outcome.complianceScore === 'number') {
-    lines.push(`Compliance: ${formatScore(outcome.complianceScore)}/100`);
-  }
-  if (outcome.errors.length > 0) {
-    lines.push(`Skipped:    ${outcome.errors.length} file(s) could not be parsed`);
+  const scorePart =
+    typeof outcome.complianceScore === 'number'
+      ? `${paint('     Compliance', DIM, color)} ${paint(`${formatScore(outcome.complianceScore)}/100`, BOLD, color)}`
+      : '';
+  if (money || scorePart) {
+    lines.push(` ${paint('Money@risk'.padEnd(11), DIM, color)}${paint(money || '—', BOLD, color)}${scorePart}`);
   }
 
-  lines.push(`Gate:       ${gate.predicate} -> ${gate.blocked ? 'BLOCKED' : 'PASSED'} (exit ${gate.exitCode})`);
-  for (const reason of gate.reasons) lines.push(`            - ${reason}`);
+  if (outcome.errors.length > 0) {
+    lines.push(` ${paint('Skipped'.padEnd(11), DIM, color)}${paint(`${outcome.errors.length} file(s) unparsed`, DIM, color)}`);
+  }
+
+  const verdict = gate.blocked ? 'BLOCKED' : 'PASSED';
+  lines.push(
+    ` ${paint(`Exit ${gate.exitCode}`.padEnd(11), DIM, color)}` +
+      paint(gate.predicate, DIM, color) +
+      paint(` ${unicode ? '→' : '->'} `, DIM, color) +
+      paint(verdict, gate.blocked ? SEVERITY_ANSI.critical : GREEN, color),
+  );
+  for (const reason of gate.reasons) {
+    lines.push(` ${' '.repeat(11)}${paint(`${unicode ? '·' : '-'} ${reason}`, DIM, color)}`);
+  }
+
+  lines.push(paint(rule, DIM, color));
 
   return lines.join('\n') + '\n';
 }

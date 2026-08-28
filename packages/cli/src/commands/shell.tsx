@@ -221,6 +221,10 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
                 // and for findings to stream out line by line as they arrive.
                 FORCE_COLOR: capabilities.color ? '1' : '0',
                 SIRIUS_STREAM_PLAIN: '1',
+                // The child is a pipe and cannot measure the terminal, so hand
+                // it the transcript's usable width. Two columns for the gutter.
+                SIRIUS_WIDTH: String(Math.max(40, capabilities.width - 2)),
+                ...(capabilities.unicode ? { SIRIUS_UNICODE: '1' } : {}),
               },
             },
           );

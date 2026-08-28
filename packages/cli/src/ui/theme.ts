@@ -39,9 +39,14 @@ export function detectCapabilities(options: CapabilityOptions = {}): Capabilitie
 
   const asciiForced = env.SIRIUS_ASCII === '1' || env.SIRIUS_ASCII === 'true';
   const utf8 = /UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '');
+  // The counterpart to FORCE_COLOR: the full-screen shell captures child output
+  // through a pipe, so the child cannot see a terminal and would fall back to
+  // ASCII even though the box drawing it into does support unicode.
+  const unicodeForced = env.SIRIUS_UNICODE === '1';
   // Windows Terminal and modern macOS/Linux terminals are fine; a bare TERM=dumb
   // or a non-UTF-8 locale is not.
-  const unicode = !asciiForced && tty && env.TERM !== 'dumb' && (utf8 || process.platform === 'darwin');
+  const unicode =
+    !asciiForced && (unicodeForced || (tty && env.TERM !== 'dumb' && (utf8 || process.platform === 'darwin')));
 
   return {
     color,

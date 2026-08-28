@@ -21,6 +21,7 @@ import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
 import { renderFindingLine, renderPlainReport } from '../render/plain.js';
+import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
 import { ScanView, countBySeverity } from '../ui/ScanView.js';
@@ -163,7 +164,10 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
   const outcome = capabilities.tty
     ? await renderInteractive({ frames, config, glyphs, capabilities, computeGate, flags })
-    : await collect(frames, { stream: process.env.SIRIUS_STREAM_PLAIN === '1' });
+    : await collect(frames, {
+        stream: process.env.SIRIUS_STREAM_PLAIN === '1',
+        render: lineRenderOptions(capabilities),
+      });
 
   const gate = computeGate(outcome);
 
@@ -193,7 +197,13 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     // Findings were already streamed line by line in that mode; printing the
     // full report again would duplicate every one of them.
     process.stdout.write(
-      renderPlainReport({ outcome, gate, counts, findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1' }),
+      renderPlainReport({
+        outcome,
+        gate,
+        counts,
+        findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1',
+        options: lineRenderOptions(capabilities),
+      }),
     );
   }
 
@@ -275,7 +285,10 @@ function renderInteractive(args: {
 }
 
 /** Consume a stream headlessly, for pipes and machine modes. */
-async function collect(frames: AsyncIterable<WsFrame>, options: { stream?: boolean } = {}): Promise<ScanOutcome> {
+async function collect(
+  frames: AsyncIterable<WsFrame>,
+  options: { stream?: boolean; render?: RenderOptions } = {},
+): Promise<ScanOutcome> {
   const outcome: ScanOutcome = {
     findings: [],
     counts: {},
@@ -292,7 +305,7 @@ async function collect(frames: AsyncIterable<WsFrame>, options: { stream?: boole
         // The full-screen shell captures this pipe and renders each line into
         // its transcript as it arrives, so findings still stream in live rather
         // than appearing all at once when the scan ends.
-        if (options.stream) process.stdout.write(renderFindingLine(frame.finding) + '\n');
+        if (options.stream) process.stdout.write(renderFindingLine(frame.finding, options.render) + '\n');
         break;
       case 'error':
         outcome.errors.push({ code: frame.code, path: frame.path, detail: frame.detail });
@@ -307,6 +320,22 @@ async function collect(frames: AsyncIterable<WsFrame>, options: { stream?: boole
   }
 
   return outcome;
+}
+
+/**
+ * Line-renderer settings.
+ *
+ * When the full-screen shell captures this output it is not a TTY, so the width
+ * has to be handed over explicitly — `SIRIUS_WIDTH` — or every line would be
+ * composed for a default 80 columns and then wrapped by the transcript.
+ */
+function lineRenderOptions(capabilities: ReturnType<typeof detectCapabilities>): RenderOptions {
+  const declared = Number.parseInt(process.env.SIRIUS_WIDTH ?? '', 10);
+  return {
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: Number.isFinite(declared) && declared > 20 ? declared : capabilities.width,
+  };
 }
 
 /** UUIDs make a poor banner subtitle; show a recognizable stub. */
