@@ -32,6 +32,8 @@ import type { FailOn, Severity, WsFrame } from '../domain.js';
 const VERSION = '0.4.0';
 
 interface ScanFlags {
+  local?: boolean;
+  threat?: boolean;
   diff?: boolean;
   baseline?: string;
   severityThreshold?: Severity;
@@ -109,6 +111,12 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   let scanId: string | null = null;
   let fallbackReason: string | undefined;
 
+  // The local engine is the default. It needs no backend, and it is what makes
+  // `sirius scan .` an actual scanner rather than a client for one — the Core
+  // API is an option for teams that want history and policy, not a requirement
+  // for detection.
+  const useLocalEngine = flags.local === true || (!flags.replay && !config.projectId);
+
   if (flags.replay) {
     const fixture = isAbsolute(flags.replay) ? flags.replay : resolve(process.cwd(), flags.replay);
     if (!existsSync(fixture)) {
@@ -118,10 +126,15 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     }
     const speed = process.env.SIRIUS_REPLAY_SPEED ? Number(process.env.SIRIUS_REPLAY_SPEED) : 1;
     frames = replayStream(fixture, Number.isFinite(speed) ? speed : 1);
+  } else if (useLocalEngine) {
+    const { scanDirectory } = await import('../engine/scanner.js');
+    frames = scanDirectory(target, { ignorePatterns: config.exclude });
   } else {
+    // Unreachable in practice — a missing project id routes to the local engine
+    // above — but the API needs one and the type system is right to insist.
     if (!config.projectId) {
-      throw new CliError('No project id configured.', {
-        hint: 'Run `sirius init`, pass --project <id>, or set SIRIUS_PROJECT_ID.',
+      throw new CliError('No project id configured for a hosted scan.', {
+        hint: 'Run `sirius init --project <id>`, or drop --project to scan locally.',
       });
     }
 
@@ -205,6 +218,54 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         options: lineRenderOptions(capabilities),
       }),
     );
+  }
+
+  // ---- Threat stage
+  //
+  // Runs after detection because it reasons *about* findings: which are
+  // reachable, which are live, and how long they have been exposed.
+  if (!flags.json && outcome.findings.length > 0) {
+    const { buildAttackPaths, checkExposure, findIntroduction } = await import('../engine/threat.js');
+    const { renderThreatReport } = await import('../render/threat.js');
+
+    const exposure = new Map<string, { exposure: string; provider?: string; detail?: string }>();
+    const provenance = new Map<string, ReturnType<typeof findIntroduction>>();
+
+    const secrets = outcome.findings.filter((f) => f.category === 'secrets');
+
+    for (const finding of secrets) {
+      // Opt-in only: probing uses someone else's credential against their API.
+      if (config.validateSecrets && finding.snippet) {
+        exposure.set(finding.id, await checkExposure(finding.snippet));
+      }
+      // git needs a path it can resolve from the repo, not one relative to the
+      // scan target, which may be several directories inside it.
+      const origin = findIntroduction(target, resolve(target, finding.file), finding.snippet ?? '');
+      if (origin) provenance.set(finding.id, origin);
+    }
+
+    // Exposure feeds back into detection: a live key is a different finding
+    // from a leaked one, and the attack paths are chained on that distinction.
+    for (const finding of outcome.findings) {
+      const verdict = exposure.get(finding.id);
+      if (verdict?.exposure === 'verified_live') finding.validity = 'verified_live';
+      else if (verdict?.exposure === 'inactive') finding.validity = 'inactive';
+    }
+
+    const threatLines = renderThreatReport(
+      outcome.findings,
+      {
+        paths: buildAttackPaths(outcome.findings),
+        provenance: provenance as Map<string, NonNullable<ReturnType<typeof findIntroduction>>>,
+        exposure,
+        validated: config.validateSecrets,
+      },
+      lineRenderOptions(capabilities),
+    );
+
+    if (threatLines.length > 0 && !capabilities.tty) {
+      process.stdout.write(threatLines.join('\n') + '\n');
+    }
   }
 
   if (fallbackReason && !flags.json) {

@@ -63,6 +63,7 @@ export function buildProgram(): Command {
     .option('--validate-secrets', 'check whether found secrets are still live (rate-limited)')
     .option('--report <format>', 'download a signed report: pdf | json')
     .option('--replay <fixture>', 'replay a recorded frame timeline instead of calling the API')
+    .option('--local', 'force the built-in engine even when a project is configured')
     .option('--max-findings <n>', 'stop rendering cards after n findings', (v) => Number.parseInt(v, 10))
     .action(async (path: string, options: Record<string, unknown>, command: Command) => {
       const { runScan } = await import('./commands/scan.js');
