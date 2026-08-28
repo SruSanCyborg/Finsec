@@ -164,7 +164,22 @@ export async function* validateFrames(
   root: string,
   options: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
 ): AsyncGenerator<WsFrame> {
+  // Repricing a finding without correcting the headline leaves the footer
+  // quoting a total its own findings no longer add up to — and the gap is
+  // silent, because both numbers look plausible on their own. `applyPolicy`
+  // has the same problem and solves it this way; the delta is tracked as it
+  // goes past and applied to the completed frame at the end.
+  let repriced = 0;
+
   for await (const frame of frames) {
+    if (frame.type === 'scan.completed') {
+      const total = (frame as { money_at_risk_inr?: number }).money_at_risk_inr;
+      if (typeof total === 'number' && repriced !== 0) {
+        yield { ...frame, money_at_risk_inr: Math.max(0, total + repriced) } as WsFrame;
+        continue;
+      }
+    }
+
     if (frame.type === 'finding' && frame.finding?.category === 'secrets') {
       const finding = frame.finding;
       const verdict = await checkExposureAt(resolve(root, finding.file), finding.line, options);
@@ -183,6 +198,7 @@ export async function* validateFrames(
           severity: finding.severity,
           ...(verdict.exposure === 'verified_live' ? { verifiedLive: true } : { confirmedInactive: true }),
         });
+        repriced += revised.amount - finding.money_at_risk_inr;
         finding.money_at_risk_inr = revised.amount;
       }
     }

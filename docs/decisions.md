@@ -1572,3 +1572,41 @@ documented use case; the absence is now reported as plainly as a result.
 The existing test named "catches a report signed by a different key" asserted
 `ok === true`. It documented the hole rather than closing it, and it used the
 attacker's *honest* key id — so it never touched the case that was the attack.
+
+## D-047 — A number is never shortened to fit
+
+Two cold reviews drove the CLI in real ptys and found the same class of bug in
+two places: a fixed-width layout quietly removing the part of a line that
+carried the meaning.
+
+**The footer clipped the money.** The money row is an Ink flex row, and Ink
+shrinks flex children to make a row fit. At 64 columns `₹89,30,000` rendered as
+`₹89,30,00` — not a visible truncation but a plausible, differently-valued,
+wrongly-grouped number, and the number the whole product is about. A clipped
+sentence announces itself; a clipped figure does not. Money now never shrinks,
+and below the width where the figure and the score stop fitting together the
+score moves to its own row rather than squeezing its neighbour.
+
+**The Cerebus panel was a hard 62 columns** whatever the terminal was, and
+elided its rows into that. It cut `re-ran SIR-SEC-001, no match — nothing would
+select it again` at "noth…" on a 120-column terminal with fifty columns spare.
+That clause *is* the security argument the 45-second beat exists to make, and a
+conclusion always sits at the end of its sentence, so eliding from the end
+removes precisely the words worth reading. The panel now takes the width it is
+given up to 96, and wraps under the value column instead of truncating. The
+narrow fallback below 68 columns wrapped nothing at all — 91 characters at 56
+columns — so it wraps too.
+
+Also D-032's rule, restated because it was violated in a new place: **layout
+gives way, content does not.** A column may narrow, a row may stack, a value may
+wrap. Nothing may be shortened into something that still reads as a valid value.
+
+### The test that nearly did not test anything
+
+The first version of `ink-width.test.tsx` passed against the unfixed code.
+`ink-testing-library`'s fake stdout hard-codes `columns = 100`, so every width
+in the file laid out at 100 and the assertions never saw a narrow terminal. It
+was caught only by deliberately reverting each fix and watching the suite stay
+green — which is now the standard for a regression test on this branch: a test
+that has not been seen to fail has not been shown to test anything. The file
+renders through Ink directly with a stdout that reports the width under test.

@@ -59,6 +59,13 @@ export function Summary({
   const money = formatInr(moneyAtRisk);
   const hasScore = typeof complianceScore === 'number';
 
+  // Where the money and the score stop fitting on one line together. The row is
+  // 3 indent + 11 label + the figure + 8 gap + 18 "Compliance score" + 8 for
+  // the score + a 7-wide meter, so a wide figure needs the high sixties. Below
+  // that the score moves to its own row rather than squeezing its neighbour —
+  // a split pane or a projector at a large font reaches this width easily.
+  const stacked = capabilities.width < money.length + 55;
+
   return (
     <Box flexDirection="column" marginTop={1}>
       <Text color={muted}>{`  ${rule}`}</Text>
@@ -84,8 +91,16 @@ export function Summary({
 
       <Box>
         <Text color={muted}>{`   ${'Money@risk'.padEnd(LABEL_WIDTH)}`}</Text>
-        <Text bold>{money || '—'}</Text>
-        {hasScore ? (
+        {/*
+          A flex child, and Ink shrinks flex children to make a row fit. On this
+          row that meant clipping *digits off a currency figure*: at 64 columns
+          `₹89,30,000` rendered as `₹89,30,00`, which is not a truncation the
+          eye catches — it is a plausible, differently-valued, wrongly-grouped
+          number, and it is the number the whole product is about. Nothing may
+          shorten money. If the row cannot fit, it stacks below instead.
+        */}
+        <Text bold wrap="truncate-end">{money || '—'}</Text>
+        {hasScore && !stacked ? (
           <>
             <Text color={muted}>{'        Compliance score  '}</Text>
             <Text bold>{`${formatScore(complianceScore)}/100  `}</Text>
@@ -95,6 +110,16 @@ export function Summary({
           </>
         ) : null}
       </Box>
+
+      {hasScore && stacked ? (
+        <Box>
+          <Text color={muted}>{`   ${'Compliance'.padEnd(LABEL_WIDTH)}`}</Text>
+          <Text bold>{`${formatScore(complianceScore)}/100  `}</Text>
+          <Text color={capabilities.color ? COLOR.success : undefined}>
+            {meter(complianceScore / 100, SCORE_METER_WIDTH, glyphs)}
+          </Text>
+        </Box>
+      ) : null}
 
       <Box>
         <Text color={gate.blocked && capabilities.color ? SEVERITY_COLOR.critical : muted}>

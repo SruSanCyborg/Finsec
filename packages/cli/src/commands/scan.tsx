@@ -171,6 +171,29 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
     ruleCount = rules.length;
 
+    // Nothing to scan is not a clean bill of health.
+    //
+    // A directory holding no supported file used to stream zero findings and
+    // land on `Compliance 100/100 · PASSED`, exit 0 — a perfect score for a
+    // scan that opened nothing. Point CI at the wrong subdirectory and it goes
+    // green, which is the one answer a security tool must never give by
+    // accident. `NoTargetError`'s own docstring already claimed to cover "an
+    // empty directory"; only the missing-path branch ever raised it.
+    //
+    // Checked here rather than after the stream, so no score is computed and
+    // no verdict is rendered over a scan that never happened.
+    const { collectFiles } = await import('../engine/scanner.js');
+    const { SUPPORTED_EXTENSIONS } = await import('../engine/parse.js');
+    const ignorePatterns = [...config.exclude, ...loadIgnorePatterns(findProjectRoot(target)?.dir ?? target)];
+
+    if (collectFiles(target, { manifests: true, ignorePatterns }).length === 0) {
+      throw new NoTargetError(
+        `Nothing to scan under ${path} — no supported files found.`,
+        `Looked for ${SUPPORTED_EXTENSIONS.join(' ')} and package manifests. ` +
+          `Check the path, or whether .siriusignore and \`exclude:\` rule everything out.`,
+      );
+    }
+
     // Both halves counted, not written down. The catalogue grew to 13 while this
     // read `rules.length < 12`, so selecting twelve of thirteen rules narrowed
     // the scan and said nothing — the failure mode of every number kept by hand.
@@ -184,7 +207,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       // `.siriusignore` as well as the config's `exclude:`. AGENTS.md documents
       // the file as one of three suppression layers and `init` writes one, but
       // nothing was reading it during a scan — only `watch` ever did.
-      ignorePatterns: [...config.exclude, ...loadIgnorePatterns(findProjectRoot(target)?.dir ?? target)],
+      ignorePatterns,
       rules,
     });
 

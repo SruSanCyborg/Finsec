@@ -103,8 +103,13 @@ PLAIN="$STAGE/transcript.txt"
 sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$OUT" >"$PLAIN"
 
 fails=0
+# Markers are matched as extended regexes, so runs of whitespace can be written
+# as `[[:space:]]+` rather than as a literal count of spaces. A marker that
+# spelled the gap between two columns as exactly two spaces went stale the day
+# the column widened to three, and then reported the feature broken for months
+# while the feature worked — the check failing, not the thing checked.
 check() {
-  if grep -q "$2" "$PLAIN"; then
+  if grep -Eq "$2" "$PLAIN"; then
     printf '  ok    %s\n' "$1"
   else
     printf '  FAIL  %s   (no "%s" in the transcript)\n' "$1" "$2"
@@ -132,7 +137,7 @@ check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
 check "/reconcile"               "EXCEPTIONS"
 check "/triage asks inline"      "a accept   d dismiss   s suppress"
-check "/triage records"          "accepted  SIR-SEC"
+check "/triage records"          "accepted[[:space:]]+SIR-SEC"
 check "/watch handover"          "handed the terminal to /watch"
 check "/watch came back"         "/watch finished"
 # Not "12 rules": the catalogue grows, and a marker pinned to its size fails the

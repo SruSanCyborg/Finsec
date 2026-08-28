@@ -31,6 +31,9 @@ const EXTENSIONS: Record<string, SupportedLanguage> = {
   '.go': 'go',
 };
 
+/** The extensions a scan will actually open, for saying so when none matched. */
+export const SUPPORTED_EXTENSIONS: readonly string[] = Object.keys(EXTENSIONS);
+
 export function languageOf(path: string): SupportedLanguage | undefined {
   return EXTENSIONS[extname(path).toLowerCase()];
 }

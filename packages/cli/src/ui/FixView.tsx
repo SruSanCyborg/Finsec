@@ -71,24 +71,84 @@ export function CerebusPanel({ ruleId, suggestion, glyphs, capabilities }: Cereb
       ];
   const labelWidth = Math.max(...rows.map(([label]) => label.length));
 
-  // A long target — `card.get("number")` — used to push the row past the right
-  // border and break the box. Elided from the end, since the head of an
-  // expression identifies it and the tail is the part that repeats.
-  const valueRoom = INNER_WIDTH - labelWidth - 5;
-  for (const row of rows) {
-    if (row[1].length > valueRoom) row[1] = `${row[1].slice(0, Math.max(4, valueRoom - 1))}…`;
-  }
+  // The box used to be a hard 62 columns whatever the terminal was, and the
+  // rows were elided to fit it. That cut the wrong half of the only sentence
+  // this panel exists to deliver: `re-ran SIR-SEC-001, no match — nothing
+  // would select it again` arrived as `re-ran SIR-SEC-001, no match — noth…`,
+  // on a 120-column terminal with fifty columns spare. The clause that carries
+  // the argument is always at the end, because that is where the conclusion
+  // goes.
+  //
+  // So the panel takes the width it is given, up to a readable maximum, and a
+  // value too long for one line wraps onto the next under the same column
+  // instead of losing its tail.
+  const inner = Math.min(Math.max(INNER_WIDTH, capabilities.width - 6), 96);
+  const valueRoom = Math.max(12, inner - labelWidth - 5);
+
+  /** Splits on spaces, keeping the continuation aligned under the value. */
+  const wrapValue = (value: string): string[] => {
+    if (value.length <= valueRoom) return [value];
+    const lines: string[] = [];
+    let line = '';
+    for (const word of value.split(' ')) {
+      if (line && `${line} ${word}`.length > valueRoom) {
+        lines.push(line);
+        line = word;
+      } else {
+        line = line ? `${line} ${word}` : word;
+      }
+      // A single word longer than the column — a path, or a long expression —
+      // is hard-broken rather than allowed to push the border out.
+      while (line.length > valueRoom) {
+        lines.push(line.slice(0, valueRoom));
+        line = line.slice(valueRoom);
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  };
 
   const title = ` Cerebus fix ${glyphs.separator.trim()} ${ruleId} `;
-  const topRule = glyphs.horizontal.repeat(Math.max(0, INNER_WIDTH - title.length - 1));
+  const topRule = glyphs.horizontal.repeat(Math.max(0, inner - title.length - 1));
 
+  // Too narrow for a box: drop the border, keep every word. This branch used to
+  // print each row on one unwrapped line, so the narrowest terminals — the ones
+  // that most needed the help — got a 91-character line at 56 columns and lost
+  // the end of it to the terminal's own wrap.
   if (capabilities.width < INNER_WIDTH + 6) {
+    const plainRoom = Math.max(12, capabilities.width - labelWidth - 6);
+    const wrapPlain = (value: string): string[] => {
+      if (value.length <= plainRoom) return [value];
+      const lines: string[] = [];
+      let line = '';
+      for (const word of value.split(' ')) {
+        if (line && `${line} ${word}`.length > plainRoom) {
+          lines.push(line);
+          line = word;
+        } else {
+          line = line ? `${line} ${word}` : word;
+        }
+        while (line.length > plainRoom) {
+          lines.push(line.slice(0, plainRoom));
+          line = line.slice(plainRoom);
+        }
+      }
+      if (line) lines.push(line);
+      return lines;
+    };
+
     return (
       <Box flexDirection="column" marginBottom={1}>
         <Text bold>{`Cerebus fix ${ruleId}`}</Text>
-        {rows.map(([label, value]) => (
-          <Text key={label}>{`  ${label.padEnd(labelWidth)} ${glyphs.rightArrow} ${value}`}</Text>
-        ))}
+        {rows.flatMap(([label, value]) =>
+          wrapPlain(value).map((part, line) => (
+            <Text key={`${label}-${line}`}>
+              {line === 0
+                ? `  ${label.padEnd(labelWidth)} ${glyphs.rightArrow} ${part}`
+                : `  ${' '.repeat(labelWidth + 2)} ${part}`}
+            </Text>
+          )),
+        )}
       </Box>
     );
   }
@@ -103,30 +163,28 @@ export function CerebusPanel({ ruleId, suggestion, glyphs, capabilities }: Cereb
         {`${topRule}${glyphs.boxTopRight}`}
       </Text>
 
-      {rows.map(([label, value], index) => {
+      {rows.flatMap(([label, value], index) => {
         const isVerifier = index === rows.length - 1;
-        const content = ` ${label.padEnd(labelWidth)} ${glyphs.rightArrow} ${value}`;
-        return (
-          <Text key={label} color={border}>
-            {`  ${glyphs.vertical}`}
-            <Text
-              color={
-                isVerifier && capabilities.color
-                  ? passed
-                    ? COLOR.success
-                    : SEVERITY_COLOR.high
-                  : undefined
-              }
-            >
-              {content.padEnd(INNER_WIDTH)}
+        const highlight =
+          isVerifier && capabilities.color ? (passed ? COLOR.success : SEVERITY_COLOR.high) : undefined;
+
+        return wrapValue(value).map((part, line) => {
+          // Continuation lines drop the label and the arrow, so the value
+          // reads as one column rather than as a second row of its own.
+          const gutter = line === 0 ? `${label.padEnd(labelWidth)} ${glyphs.rightArrow}` : ' '.repeat(labelWidth + 2);
+          const content = ` ${gutter} ${part}`;
+          return (
+            <Text key={`${label}-${line}`} color={border}>
+              {`  ${glyphs.vertical}`}
+              <Text color={highlight}>{content.padEnd(inner)}</Text>
+              {glyphs.vertical}
             </Text>
-            {glyphs.vertical}
-          </Text>
-        );
+          );
+        });
       })}
 
       <Text color={border}>
-        {`  ${glyphs.boxBottomLeft}${glyphs.horizontal.repeat(INNER_WIDTH)}${glyphs.boxBottomRight}`}
+        {`  ${glyphs.boxBottomLeft}${glyphs.horizontal.repeat(inner)}${glyphs.boxBottomRight}`}
       </Text>
     </Box>
   );

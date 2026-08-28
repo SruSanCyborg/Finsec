@@ -355,7 +355,25 @@ export async function main(argv: string[] = process.argv): Promise<void> {
   assertWorkingDirectory();
 
   const program = buildProgram();
-  program.exitOverride();
+
+  // Every command, not just the root. `exitOverride` applies to the command it
+  // is called on, and the subcommands were all constructed inside
+  // `buildProgram` before this ran — so they kept commander's default
+  // `process.exit(1)` and a mistyped flag came back as exit 1, the code this
+  // CLI documents as "findings at or above threshold". A pipeline could not
+  // tell a blocked gate from a typo, and `sirius scan . || true` — the escape
+  // hatch in the README — swallowed the typo entirely and went green having
+  // scanned nothing.
+  //
+  // `showHelpAfterError` rather than the full help body: commander's default
+  // prints twenty-five lines of options after the error, which on a short
+  // terminal scrolls the one line that matters off the top.
+  const applyExitOverride = (command: Command): void => {
+    command.exitOverride();
+    command.showHelpAfterError(`(run \`${command.name()} --help\` for options)`);
+    for (const child of command.commands) applyExitOverride(child as Command);
+  };
+  applyExitOverride(program);
 
   // Bare `sirius` in a terminal opens the shell rather than printing help.
   // Piped or redirected, it still prints help, so scripts and `sirius | less`
