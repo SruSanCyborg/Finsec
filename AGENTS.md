@@ -136,26 +136,26 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Area | State |
 |---|---|
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
-| Local engine | Real. tree-sitter AST, 13 rules, intra-procedural taint tracking, fingerprints, money model. `rule-gallery` fires every one |
+| Local engine | Real. tree-sitter AST, 13 rules, taint tracking (intra- and inter-procedural), fingerprints, money model. `rule-gallery` fires every one, in Python **and JavaScript** |
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
 | `rules list\|show\|validate\|test` | Done, from the compiled catalogue. `validate` checks schema, vocabularies and clause numbers offline; `test` runs a YAML rule against an annotated fixture |
 | `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
-| `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2. `--format pdf` writes the page itself, no renderer |
-| `ledger` | Done — RFC 6962 Merkle log of every report. `--verify` proves inclusion; `ledger verify` proves the history only ever appended |
+| `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2 and binds `key_id` to the key. `--key` pins the signer; without it a pass says *unmodified*, never *by whom*. `--format pdf` writes the page itself, no renderer |
+| `ledger` | Done — RFC 6962 Merkle log of every report. `--verify` proves inclusion; `ledger verify` proves the history only ever appended. The leaf covers the whole entry, so the metadata an auditor reads is chained too |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
 | `triage` | Done — inline in the shell, one keypress per finding, revisable; or full-screen standalone. Decisions to `.sirius/`, or PATCHed to the API |
 | `doctor` | Done — reports against the mode the scan will actually run in, self-tests both engines, and fails on a signing key that is not 0600 |
 | `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
-| `watch`, `explain` | Done |
+| `watch`, `explain` | Done — `explain score` derives the compliance figure and works the example against the last scan |
 | **`revenue detect\|eval\|explain`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost, and a per-record evidence ladder |
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`revenue stress`** | Done — six distribution shifts applied to the generator; the money edge holds in 3 of 6, the compliance rule in 6 of 6 |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 662 passing |
+| Tests | 829 passing |
 
 **The API is required for nothing.** `rules test` and PDF reports were the last
 two holdouts and both reasons were wrong. `rules test` — it did not need an
@@ -179,6 +179,40 @@ been run against a file at all. Each was found by *running* it, never by the
 suite — and the pty rehearsal caught a regression the 363 green tests did not. Two habits follow:
 `pnpm rehearse` drives the real shell in a real pty before believing any of
 this, and a row here says what was verified, not what was written.
+
+**Two cold reviews, and what a green suite still hid.** 748 tests passed while
+all of this was true, none of it caught by any of them:
+
+- A signed report or audit trail could be rewritten, re-signed with a fresh
+  keypair keeping the legitimate `key_id`, and the verifier answered `OK` and
+  printed the *trusted* fingerprint over the *attacker's* key. The docstring
+  even told auditors to pin `key_id` — the one field the forger had most reason
+  to copy (D-046).
+- Eleven of thirteen rules gated on tree-sitter's Python node names, so a
+  JavaScript file with SQL injection, command injection, MD5 over a PAN and a
+  card number in a log came back clean — while `rules show` advertised
+  `javascript, typescript` and `doctor` advertised `go`, which no rule declares
+  (D-048).
+- `--validate-secrets` repriced findings and left the footer total alone, so one
+  scan printed six findings summing to ₹53,60,000 under a total of ₹89,30,000
+  (D-047's sibling; `money-agrees.test.ts`).
+- A directory with nothing scannable in it reported `100/100 · PASSED · exit 0`
+  — a perfect score for a scan that opened nothing.
+- A mistyped flag exited 1, the code reserved for *findings found*, so
+  `sirius scan . || true` swallowed the typo and went green having scanned
+  nothing (D-050).
+- At 64 columns the footer rendered `₹89,30,000` as `₹89,30,00`, and the Cerebus
+  panel cut `nothing would select it again` at 120 columns with fifty spare
+  (D-047).
+- `SIRIUS_ASCII=1`, documented here as the projector fallback, did not convert
+  `₹` anywhere on the scan surface — while `doctor`'s glyph self-test rendered
+  `Rs.42,00,000` through a different code path and passed (D-049).
+
+Every one was found by running the binary and testing the *negative* case. So a
+third habit: a regression test that has not been *seen to fail* has not been
+shown to test anything. The first `ink-width.test.tsx` passed against the
+unfixed code, because `ink-testing-library`'s fake stdout hard-codes
+`columns = 100`.
 
 A first run on a real repo looks like:
 
@@ -258,7 +292,12 @@ duration):
    rest is narration. `--kind payment` shows the rails-and-failure-codes view;
    the default money ranking puts invoices on top.
 
-Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
+Both must survive the presentation machine's terminal font (`₹`, braille
+spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`, and
+it is checked by asserting that *no non-ASCII byte survives* a scan or a
+`doctor` run, in both directions. It used to be checked by `doctor`'s glyph
+sample, which rendered through a different path from the scanner it vouched for
+and so passed while the scanner emitted nine rupee signs (D-049).
 
 **And its width.** Every view is laid out through `ui/kit.ts` against the real
 terminal width: tables take their columns from the content, the nominated column
