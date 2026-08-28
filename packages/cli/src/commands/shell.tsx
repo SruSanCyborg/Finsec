@@ -19,6 +19,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -138,7 +139,13 @@ export function parseLine(line: string): ParsedCommand | null {
     name,
     args,
     command,
-    local: name === 'exit' || name === 'quit' || name === 'clear' || name === 'help' || !command,
+    local:
+      name === 'exit' ||
+      name === 'quit' ||
+      name === 'clear' ||
+      name === 'cd' ||
+      name === 'help' ||
+      !command,
   };
 }
 
@@ -210,8 +217,19 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           });
         };
 
+        // A printable marker, not a NUL byte: this has to be greppable in a
+        // log and typeable in a test, and an invisible one was neither.
+        const DETAIL = '::sirius-why::';
         const append = (text: string, kind: TranscriptLine['kind'] = 'output') => {
-          pending.current.push({ id: nextId++, text, kind });
+          // Evidence arrives inline, marked. It is stored hidden and revealed
+          // by Ctrl+O rather than re-running the scan to answer "why?".
+          const isDetail = text.startsWith(DETAIL);
+          pending.current.push({
+            id: nextId++,
+            text: isDetail ? text.slice(DETAIL.length) : text,
+            kind,
+            ...(isDetail ? { detail: true } : {}),
+          });
           if (!flushTimer.current) flushTimer.current = setTimeout(flush, FLUSH_MS);
         };
 
@@ -235,6 +253,17 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
 
           if (parsed.name === 'clear') {
             setLines([]);
+            return;
+          }
+
+          if (parsed.name === 'cd') {
+            const to = parsed.args[0] ?? homedir();
+            try {
+              process.chdir(to);
+              append(`now scanning ${process.cwd()}`, 'note');
+            } catch {
+              append(`no such directory: ${to}`, 'error');
+            }
             return;
           }
 

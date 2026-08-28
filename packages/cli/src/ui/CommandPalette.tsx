@@ -36,6 +36,7 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'init', summary: 'Scaffold sirius.yaml and .siriusignore' },
   { name: 'login', summary: 'Store an API key', usage: '/login --api-key <key>' },
   { name: 'logout', summary: 'Remove a stored profile' },
+  { name: 'cd', summary: 'Change the directory that /scan targets', usage: '/cd ../other-repo', local: true },
   { name: 'help', summary: 'Show this list', local: true },
   { name: 'clear', summary: 'Clear the screen', local: true },
   { name: 'exit', summary: 'Leave the shell', local: true },

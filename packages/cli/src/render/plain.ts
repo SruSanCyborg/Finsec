@@ -15,6 +15,7 @@
 
 import { formatScore } from '../gate.js';
 import { formatInr } from '../money.js';
+import { EXPOSURE_MODEL } from '../engine/exposure-model.js';
 import { SEVERITY_ORDER } from '../domain.js';
 import type { Finding, Severity } from '../domain.js';
 import type { GateResult } from '../gate.js';
@@ -90,6 +91,78 @@ function formatRefs(refs: readonly string[] | undefined, separator: string): str
  * The message gets a whole line, so it is readable; the details get their own,
  * where compliance refs are dropped first if space runs short.
  */
+/**
+ * The evidence behind one finding: why the rule matched, what it cost, and
+ * where that figure came from.
+ *
+ * Kept separate from the finding line because it is only wanted on demand —
+ * the shell hides it behind Ctrl+O. "Why did you flag that, and where did the
+ * number come from" should be one keystroke, not a separate command.
+ */
+export function renderFindingDetail(finding: Finding, options: RenderOptions = {}): string[] {
+  const color = options.color ?? false;
+  const unicode = options.unicode ?? true;
+  const width = options.width && options.width > 20 ? options.width : 80;
+  const lines: string[] = [];
+
+  const label = (text: string) => paint(text.padEnd(10), DIM, color);
+
+  if (finding.snippet) {
+    lines.push(`      ${label('source')}${paint(`${finding.file}:${finding.line}`, DIM, color)}`);
+    lines.push(`      ${label('')}${finding.snippet}`);
+  }
+
+  lines.push(`      ${label('rule')}${paint(`${finding.rule_id} · ${finding.category}`, DIM, color)}`);
+
+  if (finding.compliance_ref?.length) {
+    lines.push(`      ${label('clauses')}${paint(finding.compliance_ref.join(', '), DIM, color)}`);
+  }
+
+  if (finding.money_at_risk_inr) {
+    const model = EXPOSURE_MODEL[finding.rule_id];
+    lines.push(
+      `      ${label('exposure')}${paint(formatInr(finding.money_at_risk_inr), BOLD, color)}` +
+        paint(`  — estimate, not a measurement`, DIM, color),
+    );
+    if (model) {
+      for (const [i, chunk] of wrapText(model.basis, width - 18).entries()) {
+        lines.push(`      ${label(i === 0 ? 'basis' : '')}${paint(chunk, DIM, color)}`);
+      }
+      lines.push(`      ${label('anchor')}${paint(model.anchor, DIM, color)}`);
+    }
+  }
+
+  if (finding.fix_action) {
+    lines.push(
+      `      ${label('fix')}${paint(finding.fix_action, GREEN, color)}` +
+        paint(`   sirius fix ${finding.rule_id}`, DIM, color),
+    );
+  }
+
+  if (finding.fingerprint) {
+    lines.push(`      ${label('id')}${paint(finding.fingerprint.slice(0, 16), DIM, color)}`);
+  }
+
+  return lines.concat(unicode ? [''] : ['']);
+}
+
+function wrapText(text: string, width: number): string[] {
+  if (width < 20) return [text];
+  const words = text.split(/\s+/);
+  const out: string[] = [];
+  let current = '';
+  for (const word of words) {
+    if (current === '') current = word;
+    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
+    else {
+      out.push(current);
+      current = word;
+    }
+  }
+  if (current) out.push(current);
+  return out;
+}
+
 export function renderFinding(finding: Finding, options: RenderOptions = {}): string[] {
   const color = options.color ?? false;
   const unicode = options.unicode ?? true;

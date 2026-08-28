@@ -20,7 +20,7 @@ import { loadConfig, findProjectRoot } from '../config/load.js';
 import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
-import { renderFinding, renderPlainReport } from '../render/plain.js';
+import { renderFinding, renderFindingDetail, renderPlainReport } from '../render/plain.js';
 import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
@@ -377,6 +377,12 @@ async function collect(
         // than appearing all at once when the scan ends.
         if (options.stream) {
           process.stdout.write(renderFinding(frame.finding, options.render).join('\n') + '\n');
+          // Evidence, emitted always but marked so the shell can keep it folded
+          // away until Ctrl+O. Sending it up front avoids re-running the scan
+          // just to answer "why did you flag that?".
+          for (const line of renderFindingDetail(frame.finding, options.render)) {
+            process.stdout.write(`::sirius-why::${line}\n`);
+          }
         }
         break;
       case 'error':

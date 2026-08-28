@@ -16,7 +16,10 @@ const ENTER_ALT = '\u001b[?1049h';
 const LEAVE_ALT = '\u001b[?1049l';
 const HIDE_CURSOR = '\u001b[?25l';
 const SHOW_CURSOR = '\u001b[?25h';
-const CLEAR = '\u001b[2J\u001b[H';
+// 3J clears the scrollback as well as the visible screen. Without it, some
+// terminals leave the previous session's output sitting above ours, so the
+// takeover looks half-finished.
+const CLEAR = '\u001b[3J\u001b[2J\u001b[H';
 
 let active = false;
 let teardownRegistered = false;

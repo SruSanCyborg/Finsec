@@ -24,6 +24,8 @@ export interface TranscriptLine {
   id: number;
   text: string;
   kind: 'input' | 'output' | 'error' | 'note';
+  /** Evidence, hidden until Ctrl+O. */
+  detail?: boolean;
 }
 
 export interface FullScreenShellProps {
@@ -66,6 +68,8 @@ export function FullScreenShell({
   // null means "follow the tail"; a number pins the viewport to that offset.
   const [scrollOffset, setScrollOffset] = useState<number | null>(null);
   const [spinner, setSpinner] = useState(0);
+  // Ctrl+O, the same gesture other agent CLIs use to open a transcript.
+  const [expanded, setExpanded] = useState(false);
   const lastCtrlC = useRef(0);
 
   // `|| 24`, not `?? 24`: a pty that has not been sized reports 0, which is not
@@ -83,11 +87,12 @@ export function FullScreenShell({
     return () => clearInterval(timer);
   }, [busy, glyphs.spinner.length]);
 
-  const maxOffset = Math.max(0, lines.length - viewportHeight);
+  const shown = expanded ? lines : lines.filter((l) => !l.detail);
+  const maxOffset = Math.max(0, shown.length - viewportHeight);
   const offset = scrollOffset === null ? maxOffset : Math.min(scrollOffset, maxOffset);
   const following = scrollOffset === null;
-  const visible = lines.slice(offset, offset + viewportHeight);
-  const hiddenBelow = lines.length - (offset + visible.length);
+  const visible = shown.slice(offset, offset + viewportHeight);
+  const hiddenBelow = shown.length - (offset + visible.length);
 
   const scrollBy = useCallback(
     (delta: number) => {
@@ -114,6 +119,34 @@ export function FullScreenShell({
 
     if (key.pageUp) return scrollBy(-halfPage);
     if (key.pageDown) return scrollBy(halfPage);
+    if (key.ctrl && input === 'o') {
+      // Toggling changes how many lines exist, so a naive toggle jumps the
+      // viewport to the tail and hides the very evidence it just revealed.
+      // Anchor on the line currently at the top and keep it there.
+      const anchorId = visible[0]?.id;
+      const wasFollowing = following;
+
+      setExpanded((wasExpanded) => {
+        const next = !wasExpanded;
+        const nextShown = next ? lines : lines.filter((l) => !l.detail);
+        const nextMax = Math.max(0, nextShown.length - viewportHeight);
+
+        if (next && wasFollowing) {
+          // Expanding from the tail is the common case, and anchoring there
+          // would show the summary the user has already read. Jump to the first
+          // piece of evidence — pressing "why" should answer "why".
+          const firstEvidence = nextShown.findIndex((l) => l.detail);
+          setScrollOffset(firstEvidence < 0 ? null : Math.max(0, Math.min(firstEvidence - 2, nextMax)));
+          return next;
+        }
+
+        // Otherwise keep the line under the cursor where it is.
+        const index = anchorId === undefined ? -1 : nextShown.findIndex((l) => l.id === anchorId);
+        if (index >= 0) setScrollOffset(index >= nextMax ? null : index);
+        return next;
+      });
+      return;
+    }
     if (key.ctrl && input === 'u') return scrollBy(-halfPage);
     if (key.ctrl && input === 'd' && value !== '') return scrollBy(halfPage);
     if (key.shift && key.upArrow) return scrollBy(-1);
@@ -281,7 +314,7 @@ export function FullScreenShell({
           {following
             ? busy
               ? ' ctrl-c cancel · shift-↑↓ scroll'
-              : ' / commands · ↑ history · shift-↑↓ scroll · ctrl-c ctrl-c exit'
+              : ` / commands · ↑ history · shift-↑↓ scroll · ctrl-o ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
             : ` ${hiddenBelow} line${hiddenBelow === 1 ? '' : 's'} below · shift-↑↓ scroll · esc back to bottom`}
         </Text>
       </Box>
