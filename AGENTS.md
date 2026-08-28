@@ -80,15 +80,44 @@ CLI flags > env (FINSEC_*) > .finseclintrc (nearest dir, walking up)
 ## Running things
 
 ```bash
-pnpm mock                    # Prism REST mock :4010 + WS frame-replay mock :4011
-pnpm --filter cli build      # tsc → packages/cli/dist
-pnpm --filter cli test       # vitest + ink-testing-library
-
-FINSEC_API_URL=http://localhost:4010 node packages/cli/dist/cli.js scan .
-node packages/cli/dist/cli.js scan . --replay contract/fixtures/demo.jsonl   # no network at all
+pnpm install
+pnpm mock                      # Prism REST :4010 + WS frame replay :4011
+pnpm --filter finsec build     # tsc → packages/cli/dist
+pnpm --filter finsec test      # vitest
+pnpm fixtures                  # regenerate contract/fixtures/demo.jsonl
+pnpm contract:lint             # redocly lint
+pnpm contract:types            # regenerate packages/cli/src/api/types.ts
+node contract/mock/smoke.mjs   # assert the mock still matches the PRD mockup
 ```
 
-`--replay` exists because the PRD's risk register calls WebSocket instability a stage risk. The same JSONL fixture format feeds the mock server, `--replay`, and the deterministic streaming tests — write it once.
+Against the live mock:
+
+```bash
+env FINSEC_API_URL=http://localhost:4010 FINSEC_WS_URL=http://localhost:4011 \
+    FINSEC_API_KEY=demo-key FINSEC_PROJECT_ID=11111111-1111-4111-8111-111111111111 \
+    node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo
+```
+
+Fully offline, no backend at all:
+
+```bash
+node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
+     --replay contract/fixtures/demo.jsonl
+```
+
+`--replay` exists because the PRD's risk register calls WebSocket instability a stage risk. The same JSONL fixture format feeds the mock server, `--replay`, and the deterministic streaming tests — write it once. `FINSEC_REPLAY_SPEED=0` replays instantly; `0.15` is a good pace for rehearsal.
+
+## Status
+
+| Area | State |
+|---|---|
+| Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
+| `finsec scan` | Done — streaming TTY view, plain renderer, `--json`, `--sarif`, `--replay`, exit codes |
+| `finsec fix` | Done — Cerebus panel, diff, interactive apply with backup |
+| Everything else in the command tree | Scaffolded in `--help`, throws "not implemented" |
+| Tests | 73 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals) |
+
+Not started: `login`/`logout`, `init`, `triage`, `watch`, `rules`, `suppress`, `baseline`, `report`, `badge`. Cut order if time runs short: `watch` → `triage` → `rules test` → `report pdf` → `badge`. Never cut: `scan` streaming, exit codes, `fix`, `--sarif`.
 
 ---
 
