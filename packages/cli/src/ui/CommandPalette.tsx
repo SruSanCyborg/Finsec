@@ -17,6 +17,14 @@ export interface ShellCommand {
   name: string;
   summary: string;
   usage?: string;
+  /**
+   * Words that should find this command, beyond its name and summary.
+   *
+   * Mostly subcommands. `/revenue sweep` is one palette entry, so somebody who
+   * knows they want a sweep and types `/sweep` would otherwise be told there is
+   * no such command — which is true and useless.
+   */
+  keywords?: string[];
   /** Handled by the shell itself rather than dispatched to the CLI. */
   local?: boolean;
 }
@@ -27,17 +35,23 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'triage', summary: 'Review findings interactively', usage: '/triage [--severity <level>]' },
   { name: 'watch', summary: 'Re-scan on file change', usage: '/watch [path]' },
   { name: 'doctor', summary: 'Check config, connectivity, and terminal' },
-  { name: 'explain', summary: 'Show how a money-at-risk figure was derived', usage: '/explain SIR-SEC-001' },
+  {
+    name: 'explain',
+    summary: 'Show how a money-at-risk figure was derived — for a record, /revenue explain',
+    usage: '/explain SIR-SEC-001',
+  },
   { name: 'rules', summary: 'List, show, or validate rules', usage: '/rules [list|show|validate] [target]' },
   {
     name: 'revenue',
     summary: 'Find, price and recover revenue at risk',
-    usage: '/revenue [detect|eval|recover|gen] [batch]',
+    usage: '/revenue [gen|detect|eval|recover|explain|sweep|audit] [batch]',
+    keywords: ['gen', 'detect', 'eval', 'recover', 'explain', 'sweep', 'audit', 'payments', 'invoices', 'churn'],
   },
   {
     name: 'reconcile',
     summary: 'Match the ledger against settlements and the bank',
-    usage: '/reconcile [books] [--exceptions]',
+    usage: '/reconcile [books] [--gen] [--exceptions]',
+    keywords: ['settlement', 'bank', 'ledger', 'close', 'match', 'utr'],
   },
   { name: 'report', summary: 'Download a signed compliance report', usage: '/report [scan-id] [--format json]' },
   { name: 'suppress', summary: 'Suppress a rule, with a reason', usage: '/suppress <rule> --reason "…"' },
@@ -52,7 +66,14 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'exit', summary: 'Leave the shell', local: true },
 ];
 
-/** Matches on the command name, then its summary, so `/secret` finds nothing but `/rule` finds rules. */
+/**
+ * Name first, then everything else.
+ *
+ * The exact-name pass wins outright so `/explain` is the rule explainer and not
+ * a list of every command mentioning the word. Only when nothing matches by
+ * name does it widen to summaries and keywords, which is what lets `/sweep` and
+ * `/utr` find the commands that actually do those things.
+ */
 export function filterCommands(query: string): ShellCommand[] {
   const needle = query.replace(/^\//, '').trim().split(/\s+/)[0]?.toLowerCase() ?? '';
   if (!needle) return SHELL_COMMANDS;
@@ -61,7 +82,10 @@ export function filterCommands(query: string): ShellCommand[] {
   if (byName.length > 0) return byName;
 
   return SHELL_COMMANDS.filter(
-    (c) => c.name.includes(needle) || c.summary.toLowerCase().includes(needle),
+    (c) =>
+      c.name.includes(needle) ||
+      c.summary.toLowerCase().includes(needle) ||
+      (c.keywords ?? []).some((keyword) => keyword.startsWith(needle)),
   );
 }
 

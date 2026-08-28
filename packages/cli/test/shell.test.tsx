@@ -165,3 +165,45 @@ describe('Prompt', () => {
     expect(onSubmit).toHaveBeenCalledWith(null);
   });
 });
+
+/**
+ * Finding a command you know the name of half of.
+ *
+ * `/revenue sweep` is one palette entry, so somebody who knows they want a
+ * sweep and types `/sweep` would be told there is no such command — which is
+ * true and useless. Keywords widen the search without adding command surface
+ * the CLI itself does not have.
+ */
+describe('the palette finds subcommands', () => {
+  const names = (query: string) => filterCommands(query).map((command) => command.name);
+
+  it('finds the revenue subcommands by their own names', () => {
+    for (const query of ['/sweep', '/audit', '/recover', '/detect']) {
+      expect(names(query), query).toContain('revenue');
+    }
+  });
+
+  it('finds reconciliation by the words the job is called', () => {
+    for (const query of ['/settlement', '/utr', '/close', '/ledger']) {
+      expect(names(query), query).toContain('reconcile');
+    }
+  });
+
+  it('lets an exact name win outright', () => {
+    // `/explain` is the rule explainer. It must not turn into a list of every
+    // command that happens to mention explaining.
+    expect(names('/explain')).toEqual(['explain']);
+    expect(names('/scan')).toEqual(['scan']);
+  });
+
+  it('lists every subcommand the CLI accepts in the usage hint', () => {
+    const revenue = SHELL_COMMANDS.find((command) => command.name === 'revenue');
+    for (const sub of ['gen', 'detect', 'eval', 'recover', 'explain', 'sweep', 'audit']) {
+      expect(revenue?.usage, sub).toContain(sub);
+    }
+  });
+
+  it('still returns everything for an empty query', () => {
+    expect(filterCommands('/').length).toBe(SHELL_COMMANDS.length);
+  });
+});

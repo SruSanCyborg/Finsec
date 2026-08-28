@@ -24,7 +24,6 @@ import { CliError } from '../api/errors.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import { detectCapabilities } from '../ui/theme.js';
 import { paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
-import { DEFAULT_COSTS } from '../revenue/cost.js';
 import { evaluate } from '../revenue/evaluate.js';
 import { analyzeBatch } from '../revenue/features.js';
 import { assessBatch, defaultCapacity, fitModel, isHeld } from '../revenue/model.js';
@@ -296,13 +295,19 @@ async function evaluateBatch(
   const { batch, model, assessments, capacity } = await scoreBatch(target, flags, split);
   const truth = loadTruth(dir);
 
+  // The project's cost model, not the built-in one. `recover` and `sweep` both
+  // read it and `eval` did not, so the three disagreed about what a false
+  // positive costs — and the number a team would gate on was the one computed
+  // from somebody else's assumptions.
+  const { costsFrom } = await import('../revenue/policy.js');
+
   const evaluation = evaluate({
     records: batch.records,
     assessments,
     truth,
     threshold: model.threshold,
     split,
-    costs: DEFAULT_COSTS,
+    costs: costsFrom(projectConfig().revenue),
     capacity,
   });
 

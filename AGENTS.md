@@ -90,6 +90,9 @@ pnpm fixtures                  # regenerate contract/fixtures/demo.jsonl
 pnpm contract:lint             # redocly lint
 pnpm contract:types            # regenerate packages/cli/src/api/types.ts
 node contract/mock/smoke.mjs   # assert the mock still matches the PRD mockup
+pnpm rehearse                  # the scan/fix beat, in a real pty
+pnpm rehearse:revenue          # the revenue beat, with per-beat timings
+pnpm shell:check               # every slash command, dispatched by the shell
 ```
 
 Against the live mock:
@@ -130,7 +133,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 528 passing |
+| Tests | 533 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
