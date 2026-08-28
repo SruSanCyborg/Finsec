@@ -789,9 +789,10 @@ export function renderExplanation(explanation: RecordExplanation, palette: Palet
       palette.dim(describe(record)),
   );
   lines.push(
-    `  ${palette.dim(
+    ...note(
       `scored against split=${explanation.split} — capacity and ranking are relative to the records it competed with`,
-    )}`,
+      { indent: 2, width: palette.width },
+    ).map((line) => palette.dim(line)),
   );
   lines.push('');
 
@@ -831,10 +832,17 @@ export function renderExplanation(explanation: RecordExplanation, palette: Palet
       )}`,
     );
   }
-  lines.push(
-    `    ${palette.bold('score'.padEnd(22))}${palette.bold(String(assessment.score).padStart(6))}  ` +
-      palette.dim('the chance this comes back BECAUSE the agent acts'),
-  );
+  {
+    const head = `    ${palette.bold(padVisible('score', 22))}${palette.bold(
+      padVisible(String(assessment.score), 6, 'right'),
+    )}  `;
+    lines.push(
+      head +
+        palette.dim(
+          truncate('the chance this comes back BECAUSE the agent acts', Math.max(0, palette.width - visibleWidth(head))),
+        ),
+    );
+  }
   lines.push('');
 
   // ---- the money
@@ -864,9 +872,10 @@ export function renderExplanation(explanation: RecordExplanation, palette: Palet
   } else if (assessment.flagged) {
     lines.push(`    ${palette.violet(palette.glyph('flag'))} ${palette.bold(explanation.action)}`);
     lines.push(
-      `    ${palette.dim(
+      ...note(
         `inside this run's capacity of ${explanation.capacity.max_actions} (${explanation.capacity.rule})`,
-      )}`,
+        { indent: 4, width: palette.width },
+      ).map((line) => palette.dim(line)),
     );
   } else if (assessment.score < explanation.floor) {
     lines.push(
@@ -983,26 +992,31 @@ export function renderSweep(summary: SweepSummary, palette: Palette): string {
 
   const wins = `${summary.wins} of ${summary.rows.length}`;
   lines.push(
-    `  ${palette.dim(
+    ...note(
       `beat every capacity-matched heuristic on ${wins} batches · mean calibration gap ${pct(
         summary.mean.calibration_error,
       )}`,
-    )}`,
+      { indent: 2, width: palette.width },
+    ).map((line) => palette.dim(line)),
   );
   lines.push(
-    `  ${palette.dim(
-      `over the same batches the heuristics touched ${summary.heuristic_forbidden_touched} records nothing may touch; this touched ${summary.forbidden_touched}`,
-    )}`,
+    ...note(
+      `over the same batches the heuristics touched ${summary.heuristic_forbidden_touched} records ` +
+        `nothing may touch; this touched ${summary.forbidden_touched}`,
+      { indent: 2, width: palette.width },
+    ).map((line) => palette.dim(line)),
   );
   lines.push('');
 
   if (summary.wins < summary.rows.length) {
     lines.push(
-      palette.dim(
-        `  It does not win every batch, and the rows say which. A mean built from ` +
-          `disagreement\n  is a weaker claim than the same mean built from agreement.\n`,
-      ),
+      ...note(
+        `It does not win every batch, and the rows say which. A mean built from disagreement ` +
+          `is a weaker claim than the same mean built from agreement.`,
+        { indent: 2, width: palette.width },
+      ).map((line) => palette.dim(line)),
     );
+    lines.push('');
   }
 
   return lines.join('\n');

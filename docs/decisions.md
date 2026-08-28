@@ -1036,6 +1036,14 @@ recovery trail's path under a temp directory is a hundred and fifty characters
 with no spaces in it, and a wrapper that only breaks at spaces emitted it whole
 and overflowed by exactly its own length.
 
+**`doctor` was the worst of them, at 172 columns**, which is the command a
+person runs *because* something looks wrong — its longest hint, the sentence
+explaining what to do about a problem, ran off the side of the terminal
+reporting the problem. Its detail and hint now wrap under the label, at a gutter
+measured from the head's visible width rather than guessed at, because the
+status mark carries colour and a guess put every continuation four columns left
+of the text it continued.
+
 `render-width.test.ts` renders every view at 60, 80, 100 and 120 columns and in
 colour, and asserts nothing overflows — plus one case that the narrowest layout
 still contains `INFEASIBLE`, `this detector` and `perfect foresight`, because a

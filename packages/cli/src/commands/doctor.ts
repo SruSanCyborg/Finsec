@@ -27,6 +27,7 @@ import { loadConfig, configTomlPath, findProjectRoot, loadIgnorePatterns } from 
 import { maskKey } from '../config/write.js';
 import { loadLastScan } from '../session.js';
 import { detectCapabilities, glyphsFor } from '../ui/theme.js';
+import { note, padVisible, visibleWidth } from '../ui/kit.js';
 import { nativeSelectionKey } from '../ui/screen.js';
 
 interface GlobalFlags {
@@ -272,6 +273,7 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   // ---- report
 
   const width = Math.max(...checks.map((c) => c.label.length));
+  const termWidth = process.stdout.columns && process.stdout.columns > 20 ? process.stdout.columns : 80;
   const mark: Record<Status, string> = {
     ok: capabilities.unicode ? '✓' : 'ok  ',
     info: capabilities.unicode ? '·' : 'note',
@@ -289,10 +291,26 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   const { writeLinesPaced } = await import('../engine/pace.js');
   const perLine = process.stdout.isTTY || process.env.SIRIUS_STREAM_PLAIN === '1' ? 45 : 0;
 
+  // Detail and hint both wrap under the label rather than running off the
+  // right edge. This is the command a person runs *because* something looks
+  // wrong, and its longest hint was 153 columns — the sentence explaining what
+  // to do about a problem, scrolled off the side of the terminal reporting it.
   const rendered: string[] = [''];
   for (const check of checks) {
-    rendered.push(`  ${mark[check.status]}  ${check.label.padEnd(width)}  ${check.detail}`);
-    if (check.hint) rendered.push(`     ${' '.repeat(width)}  ${check.hint}`);
+    const head = `  ${mark[check.status]}  ${padVisible(check.label, width)}  `;
+    // Measured, not guessed. The status mark carries colour, so the gutter has
+    // to come from the head's visible width or every continuation line sits a
+    // few columns left of the text it continues.
+    const gutter = visibleWidth(head);
+    const room = Math.max(24, termWidth - gutter);
+
+    const [first, ...rest] = note(check.detail, { indent: 0, width: room });
+    rendered.push(head + (first ?? ''));
+    for (const line of rest) rendered.push(' '.repeat(gutter) + line);
+
+    if (check.hint) {
+      for (const line of note(check.hint, { indent: gutter, width: termWidth })) rendered.push(line);
+    }
   }
   await writeLinesPaced(rendered, perLine);
 
