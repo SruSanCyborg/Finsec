@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { attest, canonicalise, loadOrCreateKey, verifyAttested } from '../src/engine/attest.js';
+import { attest, canonicalise, fingerprint, loadOrCreateKey, verifyAttested } from '../src/engine/attest.js';
 
 let dir: string;
 let key: ReturnType<typeof loadOrCreateKey>;
@@ -106,15 +106,61 @@ describe('tampering is caught', () => {
     expect(verifyAttested(doc).ok).toBe(false);
   });
 
-  it('catches a report signed by a different key', () => {
+  it('reports a different signer as a different signer', () => {
     const attacker = loadOrCreateKey(join(dir, 'attacker.pem'));
     const doc = { ...payload, attestation: attest(payload, attacker) };
 
-    // It verifies against its own embedded key, so this passes the maths —
-    // which is precisely why the caller is told to pin key_id.
+    // The maths still passes: it is their signature over their document. What
+    // matters is that the id reported is *theirs*, so a pin can reject it.
     const result = verifyAttested(doc);
     expect(result.ok).toBe(true);
-    if (result.ok) expect(result.keyId).not.toBe(key.keyId);
+    if (result.ok) {
+      expect(result.keyId).toBe(attacker.keyId);
+      expect(result.keyId).not.toBe(key.keyId);
+      expect(result.pinned).toBe(false);
+    }
+  });
+
+  it('refuses a forged report that kept the trusted key_id', () => {
+    // The actual attack, and the one the old test walked past: rewrite the
+    // payload, re-sign with your own key, and copy the victim's key_id across.
+    // Before key_id was derived, this returned OK and printed the *trusted*
+    // fingerprint over the *attacker's* key — vouching for the forger under
+    // exactly the name an auditor had been told to check.
+    const attacker = loadOrCreateKey(join(dir, 'forger.pem'));
+    const rewritten = { ...payload, summary: { findings: 0 } };
+    const forged = { ...rewritten, attestation: { ...attest(rewritten, attacker), key_id: key.keyId } };
+
+    const result = verifyAttested(forged);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain('not the fingerprint of the key');
+  });
+
+  it('rejects a signer the caller did not ask for', () => {
+    // Pinning is only meaningful because key_id is now derived from the key
+    // material rather than read out of the document.
+    const attacker = loadOrCreateKey(join(dir, 'other.pem'));
+    const doc = { ...payload, attestation: attest(payload, attacker) };
+
+    const result = verifyAttested(doc, { expectKey: key.keyId });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toContain('was required');
+  });
+
+  it('accepts the signer the caller asked for, and says it was pinned', () => {
+    const doc = { ...payload, attestation: attest(payload, key) };
+    const result = verifyAttested(doc, { expectKey: key.keyId });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.pinned).toBe(true);
+  });
+
+  it('fingerprints a key the same however its PEM is spelled', () => {
+    // The id is written into the attestation trimmed but was computed from the
+    // raw export, so a text-based fingerprint disagreed with itself over a
+    // trailing newline. Hashing the DER makes the id a property of the key.
+    expect(fingerprint(key.publicPem)).toBe(fingerprint(`${key.publicPem.trim()}\n\n`));
+    expect(fingerprint(key.publicPem)).toBe(key.keyId);
   });
 });
 

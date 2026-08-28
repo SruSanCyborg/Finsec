@@ -1532,3 +1532,43 @@ is where they are read, and a usage line has to name the command it belongs to
 review forever because both halves look right on their own.
 
 ---
+
+## D-046 — `key_id` is derived from the key, never read from the document
+
+A cold audit forged a signed audit trail: delete all 37 compliance refusals,
+rebuild the hash chain, re-sign with a freshly generated keypair, and *keep the
+legitimate `key_id`*. `revenue audit --verify` answered `OK … signed by key
+6947844440ba90c4`, exit 0. The same forgery passed `report --verify` with every
+finding removed and the score forced to 100.
+
+`verifyAttested` checked the signature against the public key embedded in the
+document — correct as far as it goes — and then returned `att.key_id` verbatim.
+The id was attacker-controlled string data sitting beside the key it claimed to
+name.
+
+The docstring made this worse rather than better. It acknowledged key
+substitution and said "whoever gates on this must pin `key_id`". But `key_id`
+travelled *inside the document the forger controls*, so the advice named the one
+field an attacker had most reason to copy, and following it produced the trusted
+fingerprint printed over the attacker's key.
+
+So: `key_id` is now derived (`fingerprint(public_key)`) and checked against what
+the document claims; a mismatch is a hard failure. Fingerprinting moved from the
+PEM text to the decoded SPKI bytes, because the key was fingerprinted at load
+from the raw export and written into the attestation trimmed — a text hash
+disagreed with itself over a trailing newline.
+
+That makes pinning mean what it always claimed, so pinning now exists: `--key
+<fingerprint>` on both `report --verify` and `revenue audit --verify`. Without
+it the result is marked unpinned and both surfaces say so in as many words —
+*ANY key verifies its own report* — rather than implying an identity nothing
+established.
+
+Also: a missing ledger was a silent `return`, so a forged report verified on any
+machine but the one holding `.sirius/ledger.json` printed a bare `OK` with no
+sign the stronger check had been skipped. A report that travels is the
+documented use case; the absence is now reported as plainly as a result.
+
+The existing test named "catches a report signed by a different key" asserted
+`ok === true`. It documented the hole rather than closing it, and it used the
+attacker's *honest* key id — so it never touched the case that was the attack.

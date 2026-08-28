@@ -99,12 +99,12 @@ function localRoot(globals: GlobalFlags, explicit?: string): string | undefined 
 
 export async function runReport(
   scanId: string | undefined,
-  flags: { format?: string; output?: string; verify?: string; target?: string },
+  flags: { format?: string; output?: string; verify?: string; target?: string; key?: string },
   globals: GlobalFlags,
 ): Promise<void> {
   // Verifying is the other half of signing, and it must work on a machine that
   // has never run a scan — a CI gate checks an artefact someone else produced.
-  if (flags.verify) return verifyReport(flags.verify);
+  if (flags.verify) return verifyReport(flags.verify, flags.key);
 
   const format = (flags.format ?? 'json') as 'pdf' | 'json' | 'sarif';
   if (!['pdf', 'json', 'sarif'].includes(format)) {
@@ -453,7 +453,7 @@ async function writeLocalReport(
 }
 
 /** Checks a signed report and says exactly what the check does and does not prove. */
-async function verifyReport(path: string): Promise<void> {
+async function verifyReport(path: string, expectKey?: string): Promise<void> {
   const file = isAbsolute(path) ? path : resolve(process.cwd(), path);
   if (!existsSync(file)) {
     throw new CliError(`No such report: ${path}`, { hint: 'Generate one with `sirius report`.' });
@@ -470,7 +470,7 @@ async function verifyReport(path: string): Promise<void> {
     });
   }
 
-  const result = verifyAttested(document);
+  const result = verifyAttested(document, { expectKey });
 
   if (!result.ok) {
     process.stdout.write(`FAILED  ${path}\n        ${result.reason}\n`);
@@ -481,11 +481,16 @@ async function verifyReport(path: string): Promise<void> {
 
   process.stdout.write(`OK      ${path}\n`);
   process.stdout.write(`        signed ${result.signedAt} by key ${result.keyId}\n`);
-  // Say what was proved. A tick that implies more than it earned is worse than
-  // no tick, in a report whose whole purpose is being trusted downstream.
+  // Say what was proved and, just as important, what was not. A tick that
+  // implies more than it earned is worse than no tick, in a report whose whole
+  // purpose is being trusted downstream.
   process.stdout.write(
-    `        the report is unmodified since signing. Pin key ${result.keyId} to\n` +
-      `        also prove who signed it — the key travels inside the file.\n`,
+    result.pinned
+      ? `        unmodified since signing, by the key you required.\n`
+      : `        unmodified since signing — but ANY key verifies its own report.\n` +
+          `        This does not say who signed it. To establish that, re-run with\n` +
+          `        --key ${result.keyId} once you have confirmed that\n` +
+          `        fingerprint from somewhere other than this file.\n`,
   );
 
   // The second question, which the signature cannot answer: is this the report
@@ -505,7 +510,18 @@ async function verifyReport(path: string): Promise<void> {
     return;
   }
 
-  if (!digest || ledger.entries.length === 0) return;
+  // Skipping this quietly is how a forged report passes everywhere except the
+  // one machine that happens to hold the log. A report that travels is the
+  // documented use case, so the absence of the stronger check is reported as
+  // plainly as its result would have been.
+  if (!digest || ledger.entries.length === 0) {
+    process.stdout.write(
+      `        No ledger here, so it was not checked against the log of reports\n` +
+        `        actually produced. Run this where .sirius/ledger.json lives to\n` +
+        `        prove this report is the one that was recorded.\n`,
+    );
+    return;
+  }
 
   const evidence = evidenceFor(ledger, digest);
   if (!evidence) {

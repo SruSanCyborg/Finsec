@@ -111,7 +111,7 @@ function hashOf(entry: Omit<AuditEntry, 'hash'>): string {
 }
 
 export type AuditVerification =
-  | { ok: true; entries: number; signedAt: string; keyId: string; mode: string }
+  | { ok: true; entries: number; signedAt: string; keyId: string; mode: string; pinned: boolean }
   | { ok: false; reason: string; brokenAt?: number };
 
 /**
@@ -120,7 +120,7 @@ export type AuditVerification =
  * In that order deliberately: a broken link says *where* the trail was altered,
  * which is more useful than a signature failure that only says *that* it was.
  */
-export function verifyTrail(document: unknown): AuditVerification {
+export function verifyTrail(document: unknown, expectKey?: string): AuditVerification {
   if (!isTrail(document)) return { ok: false, reason: 'not a sirius audit trail' };
 
   let previous = GENESIS;
@@ -140,7 +140,7 @@ export function verifyTrail(document: unknown): AuditVerification {
     previous = hash;
   }
 
-  const signature = verifyAttested(document);
+  const signature = verifyAttested(document, { expectKey });
   if (!signature.ok) return { ok: false, reason: signature.reason };
 
   return {
@@ -149,6 +149,7 @@ export function verifyTrail(document: unknown): AuditVerification {
     signedAt: signature.signedAt,
     keyId: signature.keyId,
     mode: document.mode,
+    pinned: signature.pinned,
   };
 }
 

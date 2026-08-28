@@ -37,8 +37,18 @@ export interface SigningKey {
   keyId: string;
 }
 
-function fingerprint(publicPem: string): string {
-  return createHash('sha256').update(publicPem).digest('hex').slice(0, 16);
+/**
+ * The key's identity, over its DER bytes rather than its PEM text.
+ *
+ * PEM is a text encoding, so the same key can be written with or without a
+ * trailing newline and hash to two different values. That is not hypothetical:
+ * the key is fingerprinted at load from the raw export, and written into the
+ * attestation trimmed. Fingerprinting the decoded SPKI bytes makes the id a
+ * property of the key rather than of how it happened to be spelled.
+ */
+export function fingerprint(publicPem: string): string {
+  const der = createPublicKey(publicPem).export({ type: 'spki', format: 'der' });
+  return createHash('sha256').update(der).digest('hex').slice(0, 16);
 }
 
 /**
@@ -112,18 +122,50 @@ export function attest(payload: unknown, key: SigningKey = loadOrCreateKey()): A
 }
 
 export type VerifyResult =
-  | { ok: true; keyId: string; signedAt: string }
+  | {
+      ok: true;
+      keyId: string;
+      signedAt: string;
+      /** Whether the caller named the key it expected, or merely read one off. */
+      pinned: boolean;
+    }
   | { ok: false; reason: string };
+
+export interface VerifyOptions {
+  /**
+   * The key fingerprint the caller requires. Without it a pass says the
+   * document is internally consistent, not who signed it.
+   */
+  expectKey?: string;
+}
 
 /**
  * Verifies a signed report.
  *
- * The signature is checked against the public key *embedded in the report*,
- * which detects tampering with the payload but not substitution of the whole
- * key. Whoever gates on this must pin `key_id` — the caller is told so rather
- * than being handed an unqualified pass.
+ * Two separate questions, and conflating them is how a verifier ends up
+ * vouching for the forger:
+ *
+ *   *Was this altered?*   The signature over the canonical payload answers it.
+ *   *Who signed it?*      Only a key the verifier already trusts answers it.
+ *
+ * The second is not answered by anything inside the document. Anyone can
+ * generate a keypair, re-sign a payload they rewrote, and embed their own
+ * public key — the maths then checks out perfectly, because it is their
+ * signature over their document.
+ *
+ * This used to say "whoever gates on this must pin `key_id`", which was worse
+ * than no advice: `key_id` was free-text sitting in the same document, so a
+ * forger kept the victim's id, and the verifier printed the trusted
+ * fingerprint over the attacker's key. Pinning defeated nothing — it named the
+ * one field the attacker had most reason to copy.
+ *
+ * So `key_id` is now *derived* and checked, never read. It must be the
+ * fingerprint of the key beside it, which makes it an identity rather than a
+ * label, and makes pinning mean what it always claimed to. `expectKey` is how
+ * a caller pins; without it the result is marked unpinned and every surface
+ * that prints it has to say the signer is unverified.
  */
-export function verifyAttested(document: unknown): VerifyResult {
+export function verifyAttested(document: unknown, options: VerifyOptions = {}): VerifyResult {
   if (typeof document !== 'object' || document === null) {
     return { ok: false, reason: 'not a JSON object' };
   }
@@ -139,6 +181,24 @@ export function verifyAttested(document: unknown): VerifyResult {
   }
   if (!att.signature || !att.public_key) {
     return { ok: false, reason: 'attestation is missing its signature or public key' };
+  }
+
+  // The id has to be the key's own fingerprint, not a label sitting beside it.
+  // Without this the field is decorative: a forger re-signs with their own key
+  // and copies the id across, and the verifier prints the *trusted* fingerprint
+  // over the *attacker's* key — the worst possible outcome, since it is exactly
+  // the string an auditor was told to check.
+  let derived: string;
+  try {
+    derived = fingerprint(att.public_key);
+  } catch {
+    return { ok: false, reason: 'the embedded public key is not a readable key' };
+  }
+  if (att.key_id && att.key_id !== derived) {
+    return {
+      ok: false,
+      reason: `key_id ${att.key_id} is not the fingerprint of the key it is attached to (${derived})`,
+    };
   }
 
   const canonical = canonicalise(payload);
@@ -162,5 +222,20 @@ export function verifyAttested(document: unknown): VerifyResult {
 
   if (!good) return { ok: false, reason: 'signature does not match the report' };
 
-  return { ok: true, keyId: att.key_id ?? 'unknown', signedAt: att.signed_at ?? 'unknown' };
+  // A pin is the only thing here that establishes *who*. Checked after the
+  // maths so a wrong signer is reported as a wrong signer rather than as a
+  // broken signature.
+  if (options.expectKey && options.expectKey !== derived) {
+    return {
+      ok: false,
+      reason: `signed by key ${derived}, but ${options.expectKey} was required`,
+    };
+  }
+
+  return {
+    ok: true,
+    keyId: derived,
+    signedAt: att.signed_at ?? 'unknown',
+    pinned: Boolean(options.expectKey),
+  };
 }

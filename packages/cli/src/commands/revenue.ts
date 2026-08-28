@@ -51,6 +51,8 @@ interface RevenueFlags {
   maxSteps?: number;
   output?: string;
   verify?: string;
+  /** The signer fingerprint the caller requires; without it identity is unproven. */
+  key?: string;
   /** `explain` takes the record id as its argument, so the batch moves to a flag. */
   batch?: string;
   seeds?: number;
@@ -844,7 +846,7 @@ async function auditTrail(target: string | undefined, flags: RevenueFlags): Prom
   if (!existsSync(file)) throw new CliError(`No such trail: ${path}`);
 
   const { verifyTrail } = await import('../revenue/audit.js');
-  const result = verifyTrail(JSON.parse(readFileSync(file, 'utf8')));
+  const result = verifyTrail(JSON.parse(readFileSync(file, 'utf8')), flags.key);
 
   if (!result.ok) {
     process.stdout.write(`FAILED  ${path}\n        ${result.reason}\n`);
@@ -857,9 +859,15 @@ async function auditTrail(target: string | undefined, flags: RevenueFlags): Prom
   process.stdout.write(`        ${result.entries} entries, chained and unbroken\n`);
   process.stdout.write(`        signed ${result.signedAt} by key ${result.keyId}\n`);
   process.stdout.write(
-    `        This proves the trail has not been altered since it was signed. It does\n` +
-      `        not prove the actions were right, and the run was ${result.mode} —\n` +
-      `        no gateway was called and no message was sent.\n`,
+    result.pinned
+      ? `        Unaltered since signing, by the key you required. It does not prove\n` +
+          `        the actions were right, and the run was ${result.mode} — no gateway\n` +
+          `        was called and no message was sent.\n`
+      : `        Unaltered since signing — but ANY key verifies its own trail, so\n` +
+          `        this does not say who signed it. A rewritten trail re-signed with\n` +
+          `        a fresh key passes here. Re-run with --key ${result.keyId}\n` +
+          `        once you have that fingerprint from outside this file.\n` +
+          `        The run was ${result.mode} — nothing was called or sent.\n`,
   );
 }
 

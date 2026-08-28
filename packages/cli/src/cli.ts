@@ -159,6 +159,7 @@ export function buildProgram(): Command {
     .option('--format <format>', 'pdf | json | sarif', 'json')
     .option('-o, --output <file>', 'where to write it')
     .option('--verify <file>', 'check a signed report instead of producing one')
+    .option('--key <fingerprint>', 'require this signer — without it, a pass does not say who signed')
     .option('--target <dir>', 'the directory that was scanned, when it was not this one')
     .action(async (scanId: string | undefined, options: Record<string, unknown>, command: Command) => {
       const { runReport } = await import('./commands/governance.js');
@@ -210,6 +211,7 @@ export function buildProgram(): Command {
     .option('--max-steps <n>', 'times one record may be worked', (v) => Number.parseInt(v, 10))
     .option('--output <file>', 'where to write the audit trail')
     .option('--verify <file>', 'check a signed audit trail instead of running')
+    .option('--key <fingerprint>', 'require this signer — without it, a pass does not say who signed')
     .option('--batch <dir>', 'batch directory, when the argument is a record id')
     .option('--seeds <n>', 'batches to sweep over (default 8)', (v) => Number.parseInt(v, 10))
     .option('--capacity-share <fraction>', 'act on this share of each split, e.g. 0.05', Number.parseFloat)
