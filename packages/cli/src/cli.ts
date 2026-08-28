@@ -166,6 +166,14 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('doctor')
+    .description('Check config, connectivity, and terminal before you rely on them')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runDoctor } = await import('./commands/doctor.js');
+      await runDoctor(options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('triage')
     .description('Review findings interactively (j/k move, a/d/s decide, / filter)')
     .option('--scan <id>', 'scan to review (defaults to the last one)')

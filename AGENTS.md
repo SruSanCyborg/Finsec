@@ -5,7 +5,7 @@ A security & compliance linter **for money-handling code**. It scans API specs a
 Built for a hackathon demo. The credibility strategy is deliberate: copy proven conventions wholesale — Semgrep (YAML rules, `--baseline-commit`, SARIF, inline suppression), Snyk (`--severity-threshold`, `--fail-on`, 0/1/2/3 exit codes, expiring ignores), TruffleHog (live secret validation), Simon Willison's dual-LLM pattern.
 
 **Canonical spec:** [`docs/original-prd.md`](docs/original-prd.md) (588 lines — the full PRD, architecture, API spec, and per-surface design report).
-Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md)
+Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md) · [`docs/handoff-to-auto.md`](docs/handoff-to-auto.md)
 
 ---
 
@@ -119,9 +119,10 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `suppress`, `baseline`, `report`, `badge` | Done |
 | `triage` | Done — keyboard review, optimistic updates, reason required to dismiss or suppress |
 | `watch` | Done — 400ms debounce, one queued follow-up, ignores its own writes |
+| `doctor` | Done — preflight: config sources, connectivity, stream handshake, glyph rendering |
 | Tests | 116 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals, expiry parsing, credential storage, watch filtering, triage keymap) |
 
-All twelve commands are implemented. Verified as a published package too: `npm pack` produces a 68.8 kB tarball whose `sirius` bin resolves and runs, so the `npx sirius scan` zero-install demo path works.
+All thirteen commands are implemented (`doctor` was added beyond the PRD tree; run it before a demo). A full rehearsal of the demo script runs green: scan streams in ~6s with the first finding at ~120ms, fix applies and writes .env.example, SARIF validates, report downloads. Verified as a published package too: `npm pack` produces a 68.8 kB tarball whose `sirius` bin resolves and runs, so the `npx sirius scan` zero-install demo path works.
 
 A first run on a real repo looks like:
 
