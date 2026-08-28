@@ -8,12 +8,46 @@
  */
 
 import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const REST_PORT = process.env.REST_PORT ?? '4010';
 const WS_PORT = process.env.WS_PORT ?? '4011';
+
+/** Resolves true when nothing is listening on the port. */
+function portFree(port) {
+  return new Promise((resolve) => {
+    const probe = createServer();
+    probe.once('error', () => resolve(false));
+    probe.once('listening', () => probe.close(() => resolve(true)));
+    probe.listen(Number(port), '0.0.0.0');
+  });
+}
+
+// Check both ports up front. Starting one half and having the other die leaves
+// a confusing partial backend and a stack trace, which is exactly what happens
+// when a previous `pnpm mock` was not shut down cleanly.
+const busy = [];
+for (const [name, port] of [
+  ['REST', REST_PORT],
+  ['WS', WS_PORT],
+]) {
+  if (!(await portFree(port))) busy.push({ name, port });
+}
+
+if (busy.length > 0) {
+  const list = busy.map((b) => `${b.port} (${b.name})`).join(' and ');
+  console.error(`\n  Port ${list} already in use — a previous mock is probably still running.\n`);
+  console.error('  Stop it:');
+  console.error('    pkill -f contract/mock\n');
+  console.error('  Or see what is holding it:');
+  console.error(`    lsof -nP ${busy.map((b) => `-iTCP:${b.port}`).join(' ')} -sTCP:LISTEN\n`);
+  console.error('  Or run on different ports:');
+  console.error('    REST_PORT=4020 WS_PORT=4021 pnpm mock\n');
+  process.exit(1);
+}
 
 const children = [];
 

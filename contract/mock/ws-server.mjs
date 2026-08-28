@@ -88,3 +88,17 @@ wss.on('listening', () => {
   console.log(`ws mock  ws://localhost:${PORT}/api/v1/scans/{id}/stream`);
   console.log(`         fixture ${FIXTURE}${SPEED === 1 ? '' : ` (speed ×${SPEED})`}`);
 });
+
+// Without this, a port clash prints a twenty-line stack trace that buries the
+// one fact worth knowing: something else is already listening.
+wss.on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`\nPort ${PORT} is already in use — another mock is probably still running.\n`);
+    console.error(`  Find it:  lsof -nP -iTCP:${PORT} -sTCP:LISTEN`);
+    console.error(`  Stop it:  pkill -f contract/mock`);
+    console.error(`  Or use a different port:  WS_PORT=4021 pnpm mock\n`);
+  } else {
+    console.error(`\nWebSocket mock failed: ${error.message}\n`);
+  }
+  process.exit(1);
+});
