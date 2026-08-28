@@ -27,6 +27,7 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'triage', summary: 'Review findings interactively', usage: '/triage [--severity <level>]' },
   { name: 'watch', summary: 'Re-scan on file change', usage: '/watch [path]' },
   { name: 'doctor', summary: 'Check config, connectivity, and terminal' },
+  { name: 'explain', summary: 'Show how a money-at-risk figure was derived', usage: '/explain SIR-SEC-001' },
   { name: 'rules', summary: 'List, show, or validate rules', usage: '/rules [list|show|validate] [target]' },
   { name: 'report', summary: 'Download a signed compliance report', usage: '/report [scan-id] [--format json]' },
   { name: 'suppress', summary: 'Suppress a rule, with a reason', usage: '/suppress <rule> --reason "…"' },

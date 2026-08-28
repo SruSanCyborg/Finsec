@@ -12,6 +12,7 @@
  */
 
 import { enclosing, walk } from './parse.js';
+import { estimateExposure } from './exposure-model.js';
 import type { ParsedFile, SyntaxNode } from './parse.js';
 import type { Category, Severity } from '../domain.js';
 
@@ -60,7 +61,16 @@ function base(
   file: ParsedFile,
   node: SyntaxNode,
   overrides: Partial<RawFinding> = {},
+  provider?: string,
 ): RawFinding {
+  // Money comes from the documented model in exposure-model.ts, never from a
+  // number written inline. A figure nobody can interrogate is worse than none.
+  const modelled = estimateExposure({
+    ruleId: rule.id,
+    severity: rule.severity,
+    ...(provider ? { provider } : {}),
+  });
+
   return {
     rule_id: rule.id,
     severity: rule.severity,
@@ -71,6 +81,7 @@ function base(
     endLine: node.endPosition.row + 1,
     snippet: snippetFor(file, node),
     compliance_ref: rule.compliance_ref,
+    money_at_risk_inr: modelled.amount,
     ...(rule.fix_action ? { fix_action: rule.fix_action } : {}),
     ...overrides,
   };
@@ -127,14 +138,14 @@ export function shannonEntropy(value: string): number {
  * Provider key shapes. Prefixes are far stronger evidence than entropy alone,
  * which is why these are matched first and rated critical.
  */
-const PROVIDER_PATTERNS: Array<{ name: string; pattern: RegExp; money: number }> = [
-  { name: 'Stripe secret key', pattern: /\b(sk|rk)_live_[0-9a-zA-Z]{16,}/, money: 4_200_000 },
-  { name: 'Stripe test key', pattern: /\bsk_test_[0-9a-zA-Z]{16,}/, money: 0 },
-  { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/, money: 3_000_000 },
-  { name: 'Razorpay key', pattern: /\brzp_(live|test)_[0-9a-zA-Z]{10,}/, money: 2_500_000 },
-  { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/, money: 500_000 },
-  { name: 'Slack token', pattern: /\bxox[baprs]-[0-9A-Za-z-]{10,}/, money: 250_000 },
-  { name: 'private key block', pattern: /-----BEGIN (RSA |EC )?PRIVATE KEY-----/, money: 5_000_000 },
+const PROVIDER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+  { name: 'Stripe secret key', pattern: /\b(sk|rk)_live_[0-9a-zA-Z]{16,}/ },
+  { name: 'Stripe test key', pattern: /\bsk_test_[0-9a-zA-Z]{16,}/ },
+  { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/ },
+  { name: 'Razorpay key', pattern: /\brzp_(live|test)_[0-9a-zA-Z]{10,}/ },
+  { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/ },
+  { name: 'Slack token', pattern: /\bxox[baprs]-[0-9A-Za-z-]{10,}/ },
+  { name: 'private key block', pattern: /-----BEGIN (RSA |EC )?PRIVATE KEY-----/ },
 ];
 
 /** Identifiers that make a high-entropy string look like a credential. */
@@ -159,9 +170,8 @@ const hardcodedSecret: Rule = {
           base(this, file, node, {
             message: `Hardcoded ${provider.name}`,
             validity: 'unknown',
-            money_at_risk_inr: provider.money,
             tags: ['secret', 'credential'],
-          }),
+          }, provider.name),
         );
         break;
       }
@@ -199,7 +209,6 @@ const highEntropySecret: Rule = {
         findings.push(
           base(this, file, child, {
             validity: 'unknown',
-            money_at_risk_inr: 80_000,
             tags: ['secret'],
           }),
         );

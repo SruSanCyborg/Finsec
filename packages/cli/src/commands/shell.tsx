@@ -83,11 +83,14 @@ function sessionContext(glyphs: Glyphs, globals: GlobalFlags): string {
       cwd,
       overrides: { apiUrl: globals.apiUrl, projectId: globals.project, profile: globals.profile },
     });
+    // The directory comes first, because `/scan` takes no argument and scans
+    // here — "what am I even pointed at?" should never need asking.
+    const here = cwd.split('/').pop() || cwd;
     const project = findProjectRoot(cwd);
     return [
+      `scanning ${here}/`,
       project ? `project ${project.dir.split('/').pop()}` : 'no sirius.yaml',
-      config.apiKey ? 'authenticated' : 'no key',
-      config.apiUrl.replace(/^https?:\/\//, ''),
+      config.projectId ? `api ${config.apiUrl.replace(/^https?:\/\//, '')}` : 'local engine',
     ].join(glyphs.separator);
   } catch {
     // A broken config should not stop the shell opening — /doctor is exactly

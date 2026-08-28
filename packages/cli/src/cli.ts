@@ -175,6 +175,17 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('explain')
+    .description('Show how a money-at-risk figure was derived')
+    .argument('[rule]', 'rule id, e.g. SIR-SEC-001; omit for the whole model')
+    .option('--live', 'price it as a confirmed-live credential')
+    .option('--json', 'machine-readable output')
+    .action(async (rule: string | undefined, options: Record<string, unknown>, command: Command) => {
+      const { runExplain } = await import('./commands/explain.js');
+      await runExplain(rule, options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('doctor')
     .description('Check config, connectivity, and terminal before you rely on them')
     .action(async (options: Record<string, unknown>, command: Command) => {
