@@ -1,0 +1,169 @@
+# Decision log (ADRs)
+
+Decisions taken while building the `cli` surface. Anything touching the shared contract is a **proposal to the `auto` branch owner**, not a unilateral change to shared truth — but it is what the CLI implements today so that work never stalls waiting for an answer.
+
+---
+
+## D-001 — CLI stack: Ink (TypeScript + React-for-terminal)
+
+**Status:** accepted.
+
+Chosen over the PRD's two stated alternatives.
+
+| | Ink (chosen) | Python Rich/Textual | Go Bubble Tea |
+|---|---|---|---|
+| Mockup parity | Highest — the PRD's ANSI mockups are the agent-CLI idiom, and that idiom is Ink | Close; different default box glyphs | Precise, via Lip Gloss |
+| Language unity | Diverges from the Python worker | **Single language with worker/Core** | Third language in the stack |
+| Distribution | `npm`, **`npx finsec scan` zero-install demo**, Docker | `pipx`, Docker; no `npx` | Best single-binary story |
+| Local toolchain | **Node v26.5.0, pnpm 11.18 ready** | **Python 3.9.6 system-only, no uv/pipx** | Go not installed |
+| PRD support | §7 and §13 both name Ink explicitly | named as "acceptable fallback" | named as "the alternative" |
+
+The deciding factors were the `npx` demo beat (only Ink gets it free) and that the Python path required installing a modern Python + packaging toolchain before hour one of a two-day build. The real cost accepted: the CLI is TypeScript while the worker is Python, so the client is generated from the OpenAPI spec rather than sharing Pydantic models.
+
+Ink 7.1.1 requires Node ≥22 and React ≥19.2.0; both satisfied.
+
+---
+
+## D-002 — The CLI computes its own exit code
+
+**Status:** accepted. **Contract impact:** `POST /scans` gains `severity_threshold` and `fail_on`.
+
+The PRD has `scan.completed` carry a server-computed `exit_code`, but `--severity-threshold` and `--fail-on` are CLI flags and server-side `policies` rows also gate. Nobody owned the number.
+
+The CLI sends both flags up, and computes its own exit code locally in `gate.ts` from the findings it received. The server's `exit_code` is a cross-check — a mismatch logs a warning, it does not change the result.
+
+Rationale: the CLI must produce a correct exit code against the mock, offline, under `--replay`, and with `--json` piped. A pure local function is deterministic and unit-testable as a truth table; deferring to the server makes CI behavior depend on a service being right.
+
+---
+
+## D-003 — `--severity-threshold` and `--fail-on` are different axes
+
+**Status:** accepted.
+
+The PRD's mockup footer prints `gate: fail-on=high`, but `--fail-on` is documented as `<all|new|verified-secrets>` while severity levels belong to `--severity-threshold`. The mockup conflates two flags.
+
+Resolution: `--severity-threshold` sets the **bar** (which severities count). `--fail-on` selects the **predicate** (all findings / only `baseline_state=new` / only `validity=verified_live`). The footer renders both honestly:
+
+```
+Exit 1 · gate: severity≥high, fail-on=verified-secrets → BLOCKED
+```
+
+Note `--fail-on`'s value set intentionally diverges from Snyk's own `all|upgradable|patchable` — finsec redefines it, and that is fine as long as it is consistent.
+
+---
+
+## D-004 — WebSocket auth
+
+**Status:** accepted. **Contract impact:** documented in `openapi.yaml`.
+
+The PRD specifies only the `4401` close code for WS auth failure, not how credentials are presented.
+
+`Authorization: Bearer <key>` header on the upgrade request. `?token=` query-param fallback for browser clients, which cannot set headers on a WebSocket handshake.
+
+---
+
+## D-005 — `col` must be added to the `finding` WS frame
+
+**Status:** proposed, with a fallback shipped.
+
+The `╰──` underline annotation in the scan mockup points at a specific column of the offending line. `findings.col` exists in the DDL but is **absent from the WS `finding` frame schema**, so the CLI cannot align the elbow.
+
+Requested: add `col` (and `end_line`) to the frame. Until then the CLI locates the matched token inside `snippet` by search, and degrades to a non-aligned annotation line if that fails. Never crash over it.
+
+---
+
+## D-006 — Severity → SARIF level mapping
+
+**Status:** accepted.
+
+SARIF 2.1.0 has three levels; finsec has five severities. The PRD never specifies the collapse.
+
+| finsec | SARIF |
+|---|---|
+| `critical`, `high` | `error` |
+| `medium` | `warning` |
+| `low`, `info` | `note` |
+
+`baseline_state` passes through unchanged — `new|unchanged|absent` are already SARIF's exact `baselineState` tokens, which is evidently why the DDL uses them.
+
+---
+
+## D-007 — Rule-id → finding resolution via a last-scan cache
+
+**Status:** accepted.
+
+The demo script invokes `finsec fix FIN-SEC-001` — a **rule id**, with no scan id — but the endpoint is `POST /scans/{id}/findings/{fid}/fix`, keyed by two UUIDs.
+
+Every scan writes `.finsec/last-scan.json` (scan id, project id, and the finding index: id, rule id, file, line). `fix` resolves the rule id against it. Multiple findings for one rule → prompt to pick, or `--all` to walk them in order. `.finsec/` is gitignored.
+
+---
+
+## D-008 — Project id and source resolution
+
+**Status:** accepted.
+
+`POST /scans` requires `project_id`, but `finsec scan .` takes only a path.
+
+Resolution order: `--project` flag → `finsec.yaml` → `FINSEC_PROJECT_ID` → a clear error pointing at `finsec init`.
+
+For getting code to the server, `source` defaults to `upload`: tar the working tree, filtered by `.finsecignore` and `.gitignore`, with a size cap and a progress line. Use `source: git` when the tree is clean and a remote is configured. (The PRD's §2.4 threat model requires path-traversal guards on uploaded archives — that is the server's job, but the CLI should not construct pathological archives either.)
+
+---
+
+## D-009 — `FINSEC_API_URL` / `--api-url`
+
+**Status:** accepted.
+
+The plan requires the CLI to work against a mock from hour one and swap to the real Core later, but the PRD specifies no way to point it anywhere. `FINSEC_API_URL` env var, `--api-url` flag override. Default is the production URL.
+
+---
+
+## D-010 — `--replay <fixture.jsonl>` is a first-class flag
+
+**Status:** accepted.
+
+The PRD's risk register prescribes "pre-scan the repo and replay" as the WebSocket-instability fallback but gives no affordance for it.
+
+`--replay` reads a recorded JSONL frame timeline and drives the exact same renderer with no network at all. This is demo insurance *and* the deterministic test harness — **one fixture format, three consumers** (WS mock server, `--replay`, streaming tests).
+
+---
+
+## D-011 — `info` severity presentation
+
+**Status:** accepted.
+
+`info` exists in the DB enum but the mockup gives it no glyph, no color token, and no footer counter. Glyph `·`, color `--text-muted #8a8f98`, omitted from the footer counter row unless at least one is present.
+
+---
+
+## D-012 — `[e] edit` in the fix prompt
+
+**Status:** accepted, with a defined degradation.
+
+Behavior is unspecified in the PRD. Opens `$EDITOR` on the proposed patch, then re-submits the edited patch for verification before applying — the verifier, not the model, is the safety net, so an edited patch must be re-verified. If this proves fiddly inside the two-day window, it degrades to an explicit "not implemented" message rather than shipping half-working.
+
+---
+
+## D-013 — Fix application safety
+
+**Status:** accepted.
+
+Applying a diff is the only place the CLI mutates the user's files, so:
+
+- Interactive confirmation by default; `--apply` for non-interactive, `--all --apply` as the CI form.
+- **Never auto-apply** when `verifier_status` is `fail` or `escalated`. The PRD mocks only the `✓ PASS` branch; the failure branch gets a visible escalation state.
+- The API returns a diff against a **snippet**, not the file. Re-locate the hunk by content, abort if the file changed since the scan, back up before writing.
+
+---
+
+## Blocked on the `auto` branch
+
+Not ours to decide. Tracked here so no one re-derives them.
+
+1. **Compliance-score formula.** Arrives as `72.5`, renders `72/100`. Severity-weighted? Category coverage? Both the CLI footer meter and the web gauge depend on it.
+2. **Fingerprint algorithm.** Drives baseline diffing, dedup, and suppression matching across all four surfaces. Presumably rule id + path + normalized snippet hash, deliberately line-number-insensitive — but it must be defined once, server-side.
+3. **Money-at-risk model.** Explicitly a heuristic table per the PRD, but no table, no per-rule multipliers, and only one `money_at_risk_model` value (`provider_key`) is named.
+4. **The K/S auth contradiction.** `PATCH /scans/{id}/findings/{fid}` (triage), `GET/POST /rules`, `POST /rules/validate`, `GET/POST /suppressions`, `GET/POST /baselines`, and `GET/PUT /projects/{id}/policy` are marked **S = session/JWT only**, but `finsec triage`, `suppress`, `baseline`, and `rules` are CLI commands authenticating with **K = Bearer API key**. As specified, those commands cannot work in CI. Either those endpoints accept `K`, or the command tree is wrong.
+5. **Device-flow endpoints.** `login` is specified as "OAuth device flow" but no `/auth/device/code` or `/auth/device/token` endpoints exist in the API table. Also unstated: the `config.toml` schema, the env var name for an API key in CI, and profile support.
+6. **`rules test`** has no backing endpoint and would require either a local engine (violating the golden rule) or a new endpoint.
+7. **Pagination convention** for `GET /scans/{id}/results` and `GET /scans` — cursor vs offset, param names, envelope shape — and how paginated results reconcile with findings already delivered over WebSocket.

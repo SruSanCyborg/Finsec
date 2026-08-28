@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+dist/
+*.tsbuildinfo
+.pnpm-store/
+
+# CLI runtime state
+.finsec/
+*.sarif
+finsec-report.*
+
+# Local config / secrets
+.env
+.env.local
+config.toml
+
+# Editor
+.vscode/
+.idea/
