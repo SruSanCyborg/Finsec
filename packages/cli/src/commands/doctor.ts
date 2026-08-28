@@ -153,13 +153,20 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
       ? {
           status: 'ok',
           label: 'mouse',
-          detail: 'wheel scrolls the shell',
+          detail: 'fully captured — clicks handled in-app',
           hint:
             process.env.TERM_PROGRAM === 'Apple_Terminal'
-              ? 'Hold Fn to select text natively, or set SIRIUS_NO_MOUSE=1.'
-              : 'Hold Shift (Option in iTerm2) to select text natively, or set SIRIUS_NO_MOUSE=1.',
+              ? 'Hold Fn to select text, or unset SIRIUS_MOUSE for native selection.'
+              : 'Hold Shift (Option in iTerm2) to select text, or unset SIRIUS_MOUSE.',
         }
-      : { status: 'ok', label: 'mouse', detail: 'not captured — native selection intact' },
+      : {
+          status: 'ok',
+          label: 'mouse',
+          detail: 'wheel scrolls via alternate scroll; click and drag stay native',
+          hint:
+            'If the wheel does nothing, your terminal lacks alternate scroll — ' +
+            'use the arrows, or SIRIUS_MOUSE=1 to capture it (costs selection).',
+        },
   );
 
   // Render the glyphs that carry the demo, so a font problem is visible now.

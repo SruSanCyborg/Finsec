@@ -30,8 +30,17 @@ const CLEAR = '\u001b[3J\u001b[2J\u001b[H';
 const ENABLE_MOUSE = '\u001b[?1000h\u001b[?1006h';
 const DISABLE_MOUSE = '\u001b[?1006l\u001b[?1000l';
 
+// Alternate scroll: while the alternate screen is active, the terminal turns
+// wheel events into arrow keys itself. That is the whole trick — the wheel
+// scrolls without us capturing the mouse, so click, drag and copy keep working
+// exactly as they normally do. Full mouse capture buys click handling on top,
+// and costs text selection, which is why it stays opt-in.
+const ENABLE_ALT_SCROLL = '\u001b[?1007h';
+const DISABLE_ALT_SCROLL = '\u001b[?1007l';
+
 let active = false;
 let mouseEnabled = false;
+let altScrollEnabled = false;
 let teardownRegistered = false;
 
 /**
@@ -70,8 +79,13 @@ export function leaveAlternateScreen(): void {
   // terminal left in mouse-reporting mode prints escape gibberish on every
   // click and cannot select text, which is worse than never having had the
   // feature.
-  const restore = (mouseEnabled ? DISABLE_MOUSE : '') + SHOW_CURSOR + LEAVE_ALT;
+  const restore =
+    (mouseEnabled ? DISABLE_MOUSE : '') +
+    (altScrollEnabled ? DISABLE_ALT_SCROLL : '') +
+    SHOW_CURSOR +
+    LEAVE_ALT;
   mouseEnabled = false;
+  altScrollEnabled = false;
   try {
     writeSync(1, restore);
   } catch {
@@ -84,6 +98,8 @@ export function enterAlternateScreen(): void {
   active = true;
   process.stdout.write(ENTER_ALT);
   process.stdout.write(CLEAR);
+  process.stdout.write(ENABLE_ALT_SCROLL);
+  altScrollEnabled = true;
   if (mouseReportingAvailable()) {
     mouseEnabled = true;
     process.stdout.write(ENABLE_MOUSE);
