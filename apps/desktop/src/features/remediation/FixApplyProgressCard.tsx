@@ -30,7 +30,10 @@ export const FixApplyProgressCard: React.FC<FixApplyProgressCardProps> = ({ stag
     { label: 'Prepare Patch', done: stage !== 'preparing' },
     { label: 'Create Atomic Backup', done: ['applying', 'reverifying', 'applied'].includes(stage) },
     { label: 'Apply Hunk Patch', done: ['reverifying', 'applied'].includes(stage) },
-    { label: 'Re-Verify Repository', done: stage === 'applied' },
+    // No rescan runs automatically here — "done" means the write completed,
+    // not that a repository-wide reverification happened. The button below
+    // is what actually triggers one.
+    { label: 'Write Confirmed', done: stage === 'applied' },
   ];
 
   return (
@@ -59,7 +62,7 @@ export const FixApplyProgressCard: React.FC<FixApplyProgressCardProps> = ({ stag
       {stage === 'applied' && (
         <div style={{ padding: '12px 14px', backgroundColor: 'rgba(74, 222, 128, 0.12)', border: '1px solid rgba(74, 222, 128, 0.3)', borderRadius: 'var(--radius-md)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontSize: '12.5px', color: 'var(--text-primary)' }}>
-            {message || 'Patch applied successfully. Core scanner re-verified 0 violations. Finding resolved.'}
+            {message || 'Patch written to disk. Nothing has re-scanned the project yet — run a verification scan to confirm the finding is actually resolved.'}
           </div>
           {onRunRescan && (
             <button

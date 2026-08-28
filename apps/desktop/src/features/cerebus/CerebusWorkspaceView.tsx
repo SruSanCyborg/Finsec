@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { useFindingsQuery, useProjectsQuery, useCerebusMutation } from '../../api/queries';
+import { useFindingsQuery, useProjectsQuery, useFixProposalQuery, useAskCerebusMutation } from '../../api/queries';
 import { CerebusMessage } from '@sirius/types';
 import { StatusPulse, Button } from '@sirius/ui';
 import { CerebusContextPanel } from './CerebusContextPanel';
@@ -15,85 +15,133 @@ export const CerebusWorkspaceView: React.FC = () => {
 
   const { data: findings = [] } = useFindingsQuery();
   const { data: projects = [] } = useProjectsQuery();
-  const cerebusMutation = useCerebusMutation();
 
   const selectedFinding = findings.find((f) => f.id === findingId) || null;
   const selectedProject = projects.find((p) => p.id === (projectId || selectedFinding?.projectId)) || projects[0];
 
+  // `engine/fix.ts`'s template engine and verifier, always tried first — a
+  // model only gets asked when nothing there covers the rule. See `engine/ask.ts`
+  // for the separate, real Groq-backed Q&A path the composer below talks to.
+  const fixQuery = useFixProposalQuery({
+    scanId: selectedFinding?.scanId,
+    findingId: selectedFinding?.id,
+    projectId: selectedProject?.id,
+    finding: selectedFinding ?? undefined,
+  });
+  const askMutation = useAskCerebusMutation();
+
   const [messages, setMessages] = useState<CerebusMessage[]>([]);
 
-  const mutateCerebus = cerebusMutation.mutate;
-
-  // Initial welcome or finding context analysis load
   useEffect(() => {
-    if (selectedFinding) {
-      const initialUserMsg: CerebusMessage = {
-        id: `msg-${Date.now()}-user`,
-        role: 'user',
-        content: `Analyze finding ${selectedFinding.ruleId} (${selectedFinding.title}) in ${selectedFinding.filePath}:${selectedFinding.startLine}.`,
-        state: 'complete',
-        timestamp: new Date().toISOString(),
-      };
-
-      setMessages([initialUserMsg]);
-
-      // Automatically trigger initial analysis for target finding
-      mutateCerebus(
-        { findingId: selectedFinding.id, query: 'Analyze finding' },
-        {
-          onSuccess: (res) => {
-            const assistantMsg: CerebusMessage = {
-              id: `msg-${Date.now()}-assistant`,
-              role: 'assistant',
-              content: res.message,
-              response: res,
-              state: 'complete',
-              timestamp: new Date().toISOString(),
-            };
-            setMessages((prev) => [...prev, assistantMsg]);
-          },
-        }
-      );
-    } else {
+    if (!selectedFinding) {
       setMessages([
         {
           id: 'msg-welcome',
           role: 'assistant',
-          content: `Welcome to Cerebus AI Security Analyst workspace. I am ready to evaluate repository risks, explain technical vulnerabilities, and generate read-only remediation proposals for your codebase.`,
+          content: 'Select a finding to see the fix Cerebus built for it, or ask it a question about one.',
+          state: 'complete',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
+
+    const userMsg: CerebusMessage = {
+      id: `msg-${selectedFinding.id}-user`,
+      role: 'user',
+      content: `${selectedFinding.ruleId} — ${selectedFinding.title} (${selectedFinding.filePath}:${selectedFinding.startLine})`,
+      state: 'complete',
+      timestamp: new Date().toISOString(),
+    };
+
+    if (fixQuery.isLoading) {
+      setMessages([userMsg]);
+      return;
+    }
+
+    if (fixQuery.isError) {
+      setMessages([
+        userMsg,
+        {
+          id: `msg-${selectedFinding.id}-error`,
+          role: 'assistant',
+          content: fixQuery.error instanceof Error ? fixQuery.error.message : 'No fix template covers this rule yet.',
+          state: 'error',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+      return;
+    }
+
+    if (fixQuery.data) {
+      const fix = fixQuery.data;
+      setMessages([
+        userMsg,
+        {
+          id: `msg-${selectedFinding.id}-fix`,
+          role: 'assistant',
+          content:
+            `${fix.title}. ${fix.summary}. ` +
+            `Verifier: ${fix.verifierStatus}${fix.verifierMessage ? ` — ${fix.verifierMessage}` : ''}.`,
           state: 'complete',
           timestamp: new Date().toISOString(),
         },
       ]);
     }
-  }, [findingId, selectedFinding, mutateCerebus]);
+  }, [selectedFinding, fixQuery.isLoading, fixQuery.isError, fixQuery.data, fixQuery.error]);
 
+  const handleAsk = (question: string) => {
+    // Every complete user/assistant turn so far, in order — this is what
+    // gives the chat memory: the daemon threads it straight into the model
+    // call as real conversation, not a fresh, context-free question each time.
+    const history = messages
+      .filter((m): m is CerebusMessage & { role: 'user' | 'assistant' } =>
+        (m.role === 'user' || m.role === 'assistant') && m.state === 'complete',
+      )
+      .map((m) => ({ role: m.role, content: m.content }));
 
-  const handleSendMessage = (text: string) => {
     const userMsg: CerebusMessage = {
-      id: `msg-${Date.now()}-user`,
+      id: `msg-ask-${Date.now()}-user`,
       role: 'user',
-      content: text,
+      content: question,
       state: 'complete',
       timestamp: new Date().toISOString(),
     };
-
     setMessages((prev) => [...prev, userMsg]);
 
-    cerebusMutation.mutate(
-      { findingId: selectedFinding?.id, query: text, projectId: selectedProject?.id },
+    askMutation.mutate(
       {
-        onSuccess: (res) => {
-          const assistantMsg: CerebusMessage = {
-            id: `msg-${Date.now()}-assistant`,
-            role: 'assistant',
-            content: res.message,
-            response: res,
-            state: 'complete',
-            timestamp: new Date().toISOString(),
-          };
-          setMessages((prev) => [...prev, assistantMsg]);
+        question,
+        history,
+        projectId: selectedProject?.id,
+        ...(selectedFinding ? { finding: { scanId: selectedFinding.scanId, id: selectedFinding.id } } : {}),
+      },
+      {
+        onSuccess: (answer) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-ask-${Date.now()}-assistant`,
+              role: 'assistant',
+              content: answer,
+              state: 'complete',
+              timestamp: new Date().toISOString(),
+            },
+          ]);
         },
-      }
+        onError: (err) => {
+          setMessages((prev) => [
+            ...prev,
+            {
+              id: `msg-ask-${Date.now()}-error`,
+              role: 'assistant',
+              content: err instanceof Error ? err.message : 'Cerebus could not answer that.',
+              state: 'error',
+              timestamp: new Date().toISOString(),
+            },
+          ]);
+        },
+      },
     );
   };
 
@@ -102,7 +150,7 @@ export const CerebusWorkspaceView: React.FC = () => {
       {
         id: `msg-welcome-${Date.now()}`,
         role: 'assistant',
-        content: `Session cleared. Ask Cerebus anything about workspace security or select a finding to begin context analysis.`,
+        content: 'Session cleared. Select a finding to see the fix Cerebus built for it.',
         state: 'complete',
         timestamp: new Date().toISOString(),
       },
@@ -147,8 +195,8 @@ export const CerebusWorkspaceView: React.FC = () => {
                 </div>
               )}
               <StatusPulse
-                status={cerebusMutation.isPending ? 'Scanning' : 'Success'}
-                label={cerebusMutation.isPending ? 'ANALYZING' : 'READY'}
+                status={fixQuery.isFetching ? 'Scanning' : 'Success'}
+                label={fixQuery.isFetching ? 'BUILDING FIX' : 'READY'}
               />
             </div>
           </div>
@@ -159,8 +207,8 @@ export const CerebusWorkspaceView: React.FC = () => {
         </Button>
       </div>
 
-      {/* Analyzing Banner */}
-      {cerebusMutation.isPending && (
+      {/* Building Banner */}
+      {fixQuery.isFetching && (
         <div
           style={{
             padding: '12px 18px',
@@ -177,9 +225,9 @@ export const CerebusWorkspaceView: React.FC = () => {
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <Cpu size={18} className="sirius-spin" />
-            <span style={{ fontWeight: 600 }}>Cerebus is analyzing security context & synthesizing remediation plan...</span>
+            <span style={{ fontWeight: 600 }}>Cerebus is building and verifying a fix...</span>
           </div>
-          <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', opacity: 0.8 }}>EVALUATING AST & RISK EXPOSURE</span>
+          <span style={{ fontSize: '11px', fontFamily: 'var(--font-code)', opacity: 0.8 }}>TEMPLATE, OR MODEL IF NONE COVERS IT</span>
         </div>
       )}
 
@@ -242,16 +290,18 @@ export const CerebusWorkspaceView: React.FC = () => {
             ))}
           </div>
 
-          {/* Prompt Composer */}
+          {/* Ask Cerebus a real question, or re-run the fix for the selected finding */}
           <CerebusComposer
-            onSend={handleSendMessage}
-            isLoading={cerebusMutation.isPending}
+            onAsk={handleAsk}
+            onRerunFix={() => fixQuery.refetch()}
+            isAsking={askMutation.isPending}
+            isBuildingFix={fixQuery.isFetching}
             hasFindingContext={Boolean(selectedFinding)}
           />
         </div>
 
         {/* Right Collapsible Security Context Panel */}
-        <CerebusContextPanel finding={selectedFinding} projectName={selectedProject?.name} />
+        <CerebusContextPanel finding={selectedFinding} project={selectedProject ?? null} />
       </div>
     </div>
   );

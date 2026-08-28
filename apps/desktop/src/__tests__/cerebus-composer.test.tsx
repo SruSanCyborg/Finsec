@@ -4,17 +4,17 @@ import { CerebusComposer } from '../features/cerebus/CerebusComposer';
 
 describe('CerebusComposer Component', () => {
   it('renders quick prompts and handles submission', () => {
-    const handleSend = vi.fn();
-    render(<CerebusComposer onSend={handleSend} hasFindingContext={true} />);
+    const handleAsk = vi.fn();
+    render(<CerebusComposer onAsk={handleAsk} onRerunFix={vi.fn()} hasFindingContext={true} />);
 
-    expect(screen.getByText('Explain why this finding is critical')).toBeTruthy();
+    expect(screen.getByText('Explain why this matters in plain language')).toBeTruthy();
 
-    const input = screen.getByPlaceholderText(/Ask Cerebus security analyst/i);
+    const input = screen.getByPlaceholderText(/Ask Cerebus about this finding/i);
     fireEvent.change(input, { target: { value: 'How do I fix this?' } });
 
-    const sendBtn = screen.getByText('Send');
+    const sendBtn = screen.getByText('Ask');
     fireEvent.click(sendBtn);
 
-    expect(handleSend).toHaveBeenCalledWith('How do I fix this?');
+    expect(handleAsk).toHaveBeenCalledWith('How do I fix this?');
   });
 });

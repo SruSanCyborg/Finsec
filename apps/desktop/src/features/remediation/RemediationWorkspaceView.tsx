@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useFindingsQuery, useFixProposalQuery, useApplyFixMutation, useRejectFixMutation } from '../../api/queries';
+import { useFindingsQuery, useFixProposalQuery, useApplyFixMutation } from '../../api/queries';
 import { StatusPulse, SeverityChip, Badge, GradientButton, Button, LoadingState, ErrorState } from '@sirius/ui';
 import { FixSafetyBanner } from './FixSafetyBanner';
 import { DiffReviewer } from './DiffReviewer';
@@ -16,9 +16,13 @@ export const RemediationWorkspaceView: React.FC = () => {
   const { data: findings = [] } = useFindingsQuery();
   const targetFinding = findings.find((f) => f.id === paramFindingId) || findings[0];
 
-  const { data: fixProposal, isLoading: isLoadingProposal, isError, refetch } = useFixProposalQuery(targetFinding?.id);
+  const { data: fixProposal, isLoading: isLoadingProposal, isError, refetch } = useFixProposalQuery({
+    scanId: targetFinding?.scanId,
+    findingId: targetFinding?.id,
+    projectId: targetFinding?.projectId,
+    finding: targetFinding,
+  });
   const applyFixMutation = useApplyFixMutation();
-  const rejectFixMutation = useRejectFixMutation();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [applyStage, setApplyStage] = useState<'none' | 'preparing' | 'backup' | 'applying' | 'reverifying' | 'applied' | 'failed'>('none');
@@ -49,26 +53,22 @@ export const RemediationWorkspaceView: React.FC = () => {
     setTimeout(() => setApplyStage('reverifying'), 900);
 
     setTimeout(() => {
-      applyFixMutation.mutate(targetFinding.id, {
-        onSuccess: () => {
-          setApplyStage('applied');
+      applyFixMutation.mutate(
+        { scanId: targetFinding.scanId, findingId: targetFinding.id, projectId: targetFinding.projectId, finding: targetFinding },
+        {
+          onSuccess: () => setApplyStage('applied'),
+          onError: () => setApplyStage('failed'),
         },
-        onError: () => {
-          setApplyStage('failed');
-        },
-      });
+      );
     }, 1200);
   };
 
+  // There is no server-side "reject a fix proposal" — the fix was never
+  // written, so there is nothing to undo. Declining it is local UI state, not
+  // an action the daemon needs to record; a finding someone actually wants
+  // dismissed goes through triage instead.
   const handleReject = () => {
-    rejectFixMutation.mutate(
-      { findingId: targetFinding.id, reason: 'Rejected by security engineer review' },
-      {
-        onSuccess: () => {
-          setRejectionReason('Proposal rejected.');
-        },
-      }
-    );
+    setRejectionReason('Proposal declined. It was never written to disk — there is nothing to revert.');
   };
 
   return (

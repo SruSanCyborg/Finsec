@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { Finding } from '@sirius/types';
+import { Finding, Project } from '@sirius/types';
 import { GlassCard, SeverityChip, Badge, MoneyTicker } from '@sirius/ui';
 import { ShieldAlert, FileCode, Layers, DollarSign, ChevronRight, ChevronLeft, CheckCircle2 } from 'lucide-react';
 
 export interface CerebusContextPanelProps {
   finding: Finding | null;
-  projectName?: string;
+  project?: Project | null;
 }
 
-export const CerebusContextPanel: React.FC<CerebusContextPanelProps> = ({ finding, projectName }) => {
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'] as const;
+
+export const CerebusContextPanel: React.FC<CerebusContextPanelProps> = ({ finding, project }) => {
   const [collapsed, setCollapsed] = useState(false);
 
   if (collapsed) {
@@ -37,6 +39,14 @@ export const CerebusContextPanel: React.FC<CerebusContextPanelProps> = ({ findin
   }
 
   if (!finding) {
+    // The same grounding `/cerebus/ask` falls back to when no finding is
+    // selected — the project's most recent scan. Showing it here means the
+    // panel reflects what the chat is actually answering from, rather than a
+    // placeholder that says nothing happens until you pick a finding.
+    const hasScan = Boolean(project?.lastScanId);
+    const counts = project?.openFindingsCount;
+    const nonZeroCounts = SEVERITY_ORDER.map((sev) => [sev, counts?.[sev] ?? 0] as const).filter(([, n]) => n > 0);
+
     return (
       <GlassCard padding="lg" style={{ width: '320px', flexShrink: 0, height: '100%', display: 'flex', flexDirection: 'column', gap: '16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -49,12 +59,51 @@ export const CerebusContextPanel: React.FC<CerebusContextPanelProps> = ({ findin
         </div>
 
         <div className="sirius-caption">
-          Workspace: <strong style={{ color: 'var(--color-text-primary)' }}>{projectName || 'finsec-core-gateway'}</strong>
+          Workspace: <strong style={{ color: 'var(--color-text-primary)' }}>{project?.name || 'no project open'}</strong>
         </div>
 
-        <div style={{ padding: '16px', backgroundColor: 'var(--color-bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
-          No active finding selected. General security context active.
-        </div>
+        {!hasScan ? (
+          <div style={{ padding: '16px', backgroundColor: 'var(--color-bg-surface)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '12px', color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+            No finding selected, and no scan yet to summarise — run one to give Cerebus something to answer from.
+          </div>
+        ) : (
+          <>
+            <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+              No finding selected — answering from the most recent scan instead.
+            </div>
+
+            <div style={{ backgroundColor: 'var(--color-bg-surface)', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <DollarSign size={12} color="var(--color-text-secondary)" /> Money at Risk
+              </div>
+              <MoneyTicker amountUSD={project?.moneyAtRiskUSD ?? 0} durationMs={0} variant="compact" />
+            </div>
+
+            <div style={{ backgroundColor: 'var(--color-bg-surface)', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <ShieldAlert size={12} color="var(--color-primary)" /> Open Findings
+              </div>
+              <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                {nonZeroCounts.length ? (
+                  nonZeroCounts.map(([sev, n]) => (
+                    <Badge key={sev} variant={sev === 'critical' || sev === 'high' ? 'emerald' : 'neutral'} size="sm">
+                      {n} {sev}
+                    </Badge>
+                  ))
+                ) : (
+                  <Badge variant="neutral" size="sm">none</Badge>
+                )}
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '11px' }}>
+              <span style={{ color: 'var(--color-text-muted)' }}>Compliance Score:</span>
+              <span style={{ color: 'var(--color-primary)', fontWeight: 600 }}>
+                {project?.complianceScore != null ? `${project.complianceScore}/100` : '—'}
+              </span>
+            </div>
+          </>
+        )}
       </GlassCard>
     );
   }
@@ -92,7 +141,7 @@ export const CerebusContextPanel: React.FC<CerebusContextPanelProps> = ({ findin
         <div style={{ fontSize: '11px', color: 'var(--color-text-secondary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
           <DollarSign size={12} color="var(--color-text-secondary)" /> Estimated Exposure
         </div>
-        <MoneyTicker amountUSD={finding.moneyAtRiskUSD || 1450000} durationMs={0} variant="compact" />
+        <MoneyTicker amountUSD={finding.moneyAtRiskUSD ?? 0} durationMs={0} variant="compact" />
       </div>
 
       {/* Compliance Controls */}

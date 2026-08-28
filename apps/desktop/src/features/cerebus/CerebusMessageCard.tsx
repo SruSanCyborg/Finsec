@@ -3,6 +3,7 @@ import { CerebusMessage } from '@sirius/types';
 import { GlassCard, Badge } from '@sirius/ui';
 import { DiffPreviewCard } from './DiffPreviewCard';
 import { VerificationStatusCard } from './VerificationStatusCard';
+import { renderMarkdownLite } from './markdown-lite';
 import { ShieldCheck, User, Cpu, AlertTriangle, Lightbulb, Shield, Layers } from 'lucide-react';
 
 export interface CerebusMessageCardProps {
@@ -51,22 +52,24 @@ export const CerebusMessageCard: React.FC<CerebusMessageCardProps> = ({ message 
           borderRadius: '4px 16px 16px 16px',
         }}
       >
-        {/* Analyst Header */}
+        {/* Analyst Header — a fix build gets the engine badge, a plain answer doesn't claim to be one */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--border-hairline)', paddingBottom: '10px', marginBottom: '12px' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <Cpu size={18} color="var(--color-primary)" />
             <span style={{ fontSize: '13px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-              Cerebus AI Security Analyst
+              {response ? 'Cerebus Fix Engine' : 'Cerebus'}
             </span>
           </div>
-          <Badge variant="emerald" size="sm" style={{ fontSize: '10px' }}>
-            ANALYST REPORT
-          </Badge>
+          {response && (
+            <Badge variant="emerald" size="sm" style={{ fontSize: '10px' }}>
+              TEMPLATE FIX
+            </Badge>
+          )}
         </div>
 
         {/* Primary Message */}
         <div style={{ fontSize: '13px', color: 'var(--color-text-primary)', lineHeight: 1.6, marginBottom: '12px' }}>
-          {message.content}
+          {renderMarkdownLite(message.content)}
         </div>
 
         {/* Structured Sections */}
