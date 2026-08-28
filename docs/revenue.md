@@ -54,20 +54,21 @@ re-presentments, TRAI caps contact, and analysts are finite.
 
 ### The honest result
 
-On money, across eight seeds, expected-value ranking runs **level** with sorting
-by amount: +0.3% at 20% capacity, winning on five of eight. When amounts span a
-hundredfold and probabilities span threefold, size is already most of the
-answer, and the report says so instead of claiming a lift the data will not
-support.
+On money, across eight seeds, expected-value ranking runs close to **level**
+with sorting by amount: +0.6% at 20% capacity, +5.2% when capacity is tight at
+3%, winning on five seeds of eight. When amounts span a hundredfold and
+probabilities span threefold, size is already most of the answer, and the report
+says so instead of claiming a lift the data will not support. The tighter the
+capacity, the more the choice matters — and capacity is always tight.
 
 Where the policies actually differ is **what gets touched**:
 
 ```
- chase everything    ₹9,79,572  ✗ touched 24 it must not   333 acted on — over capacity
- biggest first       ₹7,55,248  ✗ touched  1 it must not    67 acted on
+ chase everything    ₹9,77,302  ✗ touched 24 it must not   333 acted on — over capacity
+ biggest first       ₹7,54,709  ✗ touched  1 it must not    67 acted on
  newest first        ₹6,46,092  ✗ touched  6 it must not    67 acted on
-→ this detector      ₹7,59,095  ✓ touched none              67 acted on · 82% of what was reachable
- perfect foresight   ₹9,22,048  ✗ touched  1 it must not    67 acted on — the ceiling
+→ this detector      ₹7,67,417  ✓ touched none              67 acted on · 83% of what was reachable
+ perfect foresight   ₹9,19,507  ✗ touched  1 it must not    67 acted on — the ceiling
 ```
 
 Out of bounds means an open dispute, an issuer risk block, or a shared-signal
@@ -116,13 +117,15 @@ the record. Deferrals are capped, which is what guarantees termination.
 ### The number
 
 ```
-  at risk                 ₹29,53,670  the money these records represent
-  recovered                ₹8,84,093  came back during the run
-  would have anyway       -₹2,29,438  the same records recover this much untouched
-  attributable             ₹6,54,655  recovered because the agent acted
-  spent                        -₹855
-  net                      ₹6,53,800
+  at risk                 ₹29,43,248  the money these records represent
+  recovered                ₹8,87,331  came back during the run
+  would have anyway       -₹2,21,666  the same records recover this much untouched
+  attributable             ₹6,65,664  recovered because the agent acted
+  spent                        -₹852
+  net                      ₹6,64,812
 ```
+
+With no agent at all, the same records return ₹3,37,599.
 
 The counterfactual is computed **up front, on the same set**, so it cannot be
 assembled afterwards from whatever looks best.
