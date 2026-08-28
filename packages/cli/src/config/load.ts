@@ -189,6 +189,7 @@ export function loadConfig({ cwd, overrides = {} }: LoadOptions): ResolvedConfig
     baselineCommit: flags.baselineCommit ?? merged.baseline_commit,
     exclude: merged.exclude ?? [],
     policy: merged.policy,
+    revenue: merged.revenue,
     sources,
   };
 }

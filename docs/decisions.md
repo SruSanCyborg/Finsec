@@ -664,6 +664,40 @@ the screen worth less.
 
 ---
 
+## D-025 — A limit nobody can set is not policy
+
+Every stopping rule in the recovery agent was documented as "configured policy,
+not legal advice — the numbers are a compliance team's to change", and the only
+way to change one was to edit `policy.ts`. That is a constant with a good
+comment.
+
+`sirius.yaml` grew a `revenue:` block: capacity, budget, quiet hours and their
+timezone, contacts per day, retry and re-presentment caps, cooldowns, the
+circuit breaker, and the cost model including the annoyance charge. Every field
+optional, so an existing file keeps working and a team pins only the numbers it
+argues about. Rupees in the file, paise in the engine. Bounds are enforced when
+the file is read, naming the file, rather than clamped three layers down.
+
+Two consequences that were not obvious until the feature existed:
+
+**A run under someone's policy says so.** The banner names what moved
+(`contacts/day 1 · quiet hours {"from":20,"to":10}`). Obeying a config file
+silently is how a number nobody remembers setting ends up explaining a result
+nobody expected.
+
+**The rules had to stop reciting the defaults.** With a static `RULES` table, a
+run under `contacts_per_day: 1` refused an action and explained it with "at most
+two messages to one party in a rolling day" — the report contradicting the
+policy it had just enforced, and worse, writing that contradiction into
+`rule_says` in the audit trail, which is the sentence an auditor reads months
+later. `rulesFor(limits)` interpolates the numbers in force; the table is
+memoised per limits object because `check` runs per proposed action.
+
+What is **not** configurable is the `basis`. A project sets its threshold; it
+does not get to edit the obligation the threshold answers to.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch

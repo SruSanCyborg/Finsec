@@ -129,7 +129,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue detect\|eval`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost |
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 494 passing |
+| Tests | 504 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -181,6 +181,12 @@ Three rules this surface does not bend:
 - **Refusing is a first-class action.** Holds, blocked actions and skipped
   records all produce audit entries; "considered and left alone" must be
   distinguishable from "never looked".
+- **The thresholds belong to the project.** Capacity, budget, quiet hours,
+  contact limits, retry caps and the cost model all sit in `sirius.yaml`
+  (`revenue:`, scaffolded by `init`). A run under a project's own policy names
+  what moved, and every rule quotes the limit *actually in force* — in the
+  report and in the trail. The **basis** is not configurable: a team sets its
+  threshold, not the obligation the threshold answers to.
 
 Everything is simulated and says so. There is no `--execute`.
 

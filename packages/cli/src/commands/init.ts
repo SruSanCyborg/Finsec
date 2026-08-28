@@ -86,6 +86,33 @@ validate_secrets: false
 #   require_no_verified_secrets: true
 #   min_compliance_score: 80
 
+# --- the recovery agent ------------------------------------------------------
+# What \`sirius revenue recover\` is allowed to do. Every line is optional and
+# falls back to a documented default, so pin only what you argue about.
+#
+# These are your numbers, not ours. The frameworks named in the output (NPCI
+# NACH re-presentment limits, TRAI contact rules, DPDP §6 consent) are pointers
+# to obligations you should check against your own compliance advice — the
+# thresholds below are what sirius will actually enforce.
+# revenue:
+#   capacity: 200            # interventions available in one run
+#   budget_inr: 50000        # what the run may spend, total
+#   contacts_per_day: 2      # messages to one party in a rolling day
+#   quiet_hours: { from: 21, to: 9 }
+#   timezone: Asia/Kolkata   # the zone quiet hours are read in, not the server's
+#   mandate_attempts: 3      # re-presentments against one mandate per cycle
+#   payment_attempts: 4      # attempts against one payment, all rails
+#   cooldown_hours: { default: 6, insufficient_funds: 30 }
+#   circuit_breaker: { after_attempts: 40, min_realised_share: 0.25 }
+#   costs:
+#     retry_inr: 3
+#     sms_inr: 0.18
+#     human_review_inr: 85
+#     annoyance_inr: 12      # the charge for chasing someone who'd have paid
+#                            # anyway. The most contestable number here, which
+#                            # is why it is yours to set. At zero, the model
+#                            # will happily chase every self-healing payment.
+
 # Scanned project: ${name}
 `;
 }

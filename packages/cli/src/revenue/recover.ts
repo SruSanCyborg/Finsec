@@ -33,8 +33,8 @@ import {
   emptyState,
   isRetry,
   nextAllowedTime,
+  rulesFor,
   DEFAULT_LIMITS,
-  RULES,
 } from './policy.js';
 import type { PolicyLimits } from './policy.js';
 import type { Assessment, GroundTruth, Intervention, RiskRecord } from './types.js';
@@ -102,6 +102,10 @@ interface Task {
 
 export function recover(options: RecoverOptions): RecoveryResult {
   const limits = options.limits ?? DEFAULT_LIMITS;
+  // The rules as this run's limits state them. Writing the built-in wording
+  // into a trail produced under a project's own policy would put a sentence in
+  // the audit record that contradicts the limit actually enforced.
+  const rules = rulesFor(limits);
   const costs = options.costs ?? DEFAULT_COSTS;
   const maxSteps = options.maxSteps ?? 3;
   const runId = randomUUID().slice(0, 8);
@@ -154,8 +158,8 @@ export function recover(options: RecoverOptions): RecoveryResult {
         ...(isHeld(assessment)
           ? {
               rule_id: heldRule(assessment),
-              rule_says: RULES[heldRule(assessment)]?.says,
-              rule_basis: RULES[heldRule(assessment)]?.basis,
+              rule_says: rules[heldRule(assessment)]?.says,
+              rule_basis: rules[heldRule(assessment)]?.basis,
               detail: assessment.evidence[0]?.detail,
             }
           : { detail: `score ${assessment.score} — below the line for this run's capacity` }),
@@ -279,9 +283,9 @@ export function recover(options: RecoverOptions): RecoveryResult {
         step: 0,
         action: 'wait',
         disposition: 'blocked',
-        rule_id: RULES.circuit_breaker?.id,
-        rule_says: RULES.circuit_breaker?.says,
-        rule_basis: RULES.circuit_breaker?.basis,
+        rule_id: rules.circuit_breaker?.id,
+        rule_says: rules.circuit_breaker?.says,
+        rule_basis: rules.circuit_breaker?.basis,
         detail: state.halted,
       });
       break;

@@ -21,7 +21,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
 import { CliError } from '../api/errors.js';
-import { findProjectRoot } from '../config/load.js';
+import { findProjectRoot, loadConfig } from '../config/load.js';
 import { detectCapabilities } from '../ui/theme.js';
 import { paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
 import { DEFAULT_COSTS } from '../revenue/cost.js';
@@ -58,6 +58,17 @@ interface GlobalFlags {
 }
 
 const DEFAULT_BATCH = 'batch';
+
+/**
+ * The project's own settings, read from `sirius.yaml` the same way `scan` reads
+ * its gate. Cached because three subcommands ask for it and walking up the tree
+ * for every one of them is work nobody asked for.
+ */
+let cachedConfig: ReturnType<typeof loadConfig> | undefined;
+function projectConfig(): ReturnType<typeof loadConfig> {
+  cachedConfig ??= loadConfig({ cwd: process.cwd() });
+  return cachedConfig;
+}
 
 /**
  * Whether to pace the output, and by how much.
@@ -329,10 +340,18 @@ async function runRecovery(
   const truth = loadTruth(dir);
 
   const { recover } = await import('../revenue/recover.js');
-  const { DEFAULT_LIMITS, RULES } = await import('../revenue/policy.js');
+  const { costsFrom, describeOverrides, limitsFrom, rulesFor } = await import('../revenue/policy.js');
 
   const startedAt = batch.manifest.as_of ? new Date(batch.manifest.as_of) : new Date();
-  const limits = flags.budget ? { ...DEFAULT_LIMITS, budget_paise: flags.budget * 100 } : DEFAULT_LIMITS;
+
+  // sirius.yaml first, then flags on top of it — the same precedence every
+  // other setting follows. A team pins its policy in the file; an operator
+  // overrides one number for one run.
+  const config = projectConfig();
+  const fromFile = limitsFrom(config.revenue);
+  const limits = flags.budget ? { ...fromFile, budget_paise: flags.budget * 100 } : fromFile;
+  const costs = costsFrom(config.revenue);
+  const maxSteps = flags.maxSteps ?? config.revenue?.max_steps;
 
   const result = recover({
     records: inSplit,
@@ -342,7 +361,8 @@ async function runRecovery(
     batch: batch.dir,
     startedAt,
     limits,
-    ...(flags.maxSteps ? { maxSteps: flags.maxSteps } : {}),
+    costs,
+    ...(maxSteps ? { maxSteps } : {}),
   });
 
   const trailPath = flags.output
@@ -375,14 +395,26 @@ async function runRecovery(
   process.stdout.write(
     `\n ${palette.bold('sirius revenue recover')}  ${palette.dim(
       `run ${result.run_id} · split=${split} · room for ${capacity.max_actions} · nothing here left this machine`,
-    )}\n\n`,
+    )}\n`,
   );
+
+  // A run under someone's own policy says so. Obeying a config file silently is
+  // how a number nobody remembers setting ends up explaining a result nobody
+  // expected.
+  const moved = describeOverrides(limits);
+  if (moved.length > 0) {
+    process.stdout.write(
+      ` ${palette.dim(`under this project's policy — ${moved.join(' · ')}`)}\n`,
+    );
+  }
+  process.stdout.write('\n');
 
   // The timeline first, then the totals. A summary alone says what happened;
   // watching the refusals arrive is what shows the agent stopping.
   await writeLinesPaced(renderRecoveryLog(result.trail.entries, palette, flags.limit ?? 120), pace);
 
-  await writePaced(renderRecovery(result.outcome, RULES, palette, trailPath).split('\n'), pace * 3);
+  // The rules table quotes this run's limits, not the built-in ones.
+  await writePaced(renderRecovery(result.outcome, rulesFor(limits), palette, trailPath).split('\n'), pace * 3);
 }
 
 // ---- audit ------------------------------------------------------------------
@@ -454,9 +486,12 @@ async function scoreBatch(
   const context = analyzeBatch(batch.records);
   const inSplit = batch.records.filter((record) => split === 'all' || splitOf(record.id) === split);
 
+  const configured = projectConfig().revenue?.capacity;
   const capacity = flags.capacity
     ? { max_actions: flags.capacity, rule: 'given with --capacity' }
-    : defaultCapacity(inSplit.length);
+    : configured
+      ? { max_actions: configured, rule: 'set in sirius.yaml' }
+      : defaultCapacity(inSplit.length);
 
   const { assessments } = assessBatch(inSplit, model, { context, capacity });
   return { batch, model, assessments, context, capacity, inSplit };

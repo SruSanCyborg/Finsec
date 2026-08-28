@@ -32,6 +32,68 @@ export const configTomlSchema = z.object({
     .optional(),
 });
 
+/**
+ * What the recovery agent is allowed to do, in the project's own file.
+ *
+ * The stopping rules were described everywhere as "configured policy, not legal
+ * advice — the numbers are a compliance team's to change", and the only way to
+ * change them was to edit TypeScript. A limit nobody can set is not policy, it
+ * is a constant with a good comment.
+ *
+ * Every field is optional and falls back to the built-in default, so an existing
+ * `sirius.yaml` keeps working and a team can pin only the numbers it argues
+ * about. Bounds are enforced here rather than at the call site: a negative
+ * cooldown or a 25-hour quiet-hours window should be rejected when the file is
+ * read, naming the file, not silently clamped three layers down.
+ */
+const hour = z.number().int().min(0).max(23);
+
+export const revenueConfigSchema = z.object({
+  /** Interventions available in one run. */
+  capacity: z.number().int().positive().optional(),
+  /** Rupees the run may spend, converted to paise on load. */
+  budget_inr: z.number().nonnegative().optional(),
+  /** Times one record may be worked before the agent gives up on it. */
+  max_steps: z.number().int().min(1).max(10).optional(),
+  mandate_attempts: z.number().int().min(1).max(10).optional(),
+  payment_attempts: z.number().int().min(1).max(20).optional(),
+  cooldown_hours: z
+    .object({
+      default: z.number().min(0).max(720).optional(),
+      insufficient_funds: z.number().min(0).max(720).optional(),
+    })
+    .optional(),
+  quiet_hours: z.object({ from: hour, to: hour }).optional(),
+  contacts_per_day: z.number().int().min(0).max(20).optional(),
+  /** IANA zone the quiet hours are read in. Not the machine's. */
+  timezone: z.string().optional(),
+  circuit_breaker: z
+    .object({
+      after_attempts: z.number().int().positive().optional(),
+      min_realised_share: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+  /**
+   * What being wrong costs. `annoyance_inr` is the most contestable number in
+   * the whole model — the charge for contacting somebody who would have paid
+   * anyway — which is exactly why it belongs in a file a team can argue over.
+   */
+  costs: z
+    .object({
+      retry_inr: z.number().nonnegative().optional(),
+      email_inr: z.number().nonnegative().optional(),
+      sms_inr: z.number().nonnegative().optional(),
+      whatsapp_inr: z.number().nonnegative().optional(),
+      voice_inr: z.number().nonnegative().optional(),
+      human_review_inr: z.number().nonnegative().optional(),
+      annoyance_inr: z.number().nonnegative().optional(),
+      margin: z.number().min(0).max(1).optional(),
+    })
+    .optional(),
+});
+
+export type RevenueConfig = z.infer<typeof revenueConfigSchema>;
+
 /** `sirius.yaml` — project settings. Also the shape `sirius init` scaffolds. */
 export const projectConfigSchema = z.object({
   project_id: z.string().optional(),
@@ -52,6 +114,7 @@ export const projectConfigSchema = z.object({
       min_compliance_score: z.number().min(0).max(100).nullable().optional(),
     })
     .optional(),
+  revenue: revenueConfigSchema.optional(),
 });
 
 /** `.siriuslintrc` — the same keys, applied per directory. */
@@ -90,6 +153,8 @@ export interface ResolvedConfig {
   baselineCommit: string | undefined;
   exclude: string[];
   policy: NonNullable<ProjectConfig['policy']> | undefined;
+  /** The recovery agent's limits, as far as the project file sets them. */
+  revenue: RevenueConfig | undefined;
   /** Where each value came from, for `sirius config` and for debugging. */
   sources: Record<string, string>;
 }

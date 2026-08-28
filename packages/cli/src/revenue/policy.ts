@@ -19,6 +19,9 @@
  * looked.
  */
 
+import { DEFAULT_COSTS } from './cost.js';
+import type { CostModel } from './cost.js';
+import type { RevenueConfig } from '../config/schema.js';
 import type { BatchContext } from './features.js';
 import type { Channel, Intervention, RiskRecord } from './types.js';
 
@@ -64,73 +67,113 @@ export interface Rule {
   basis: string;
 }
 
-export const RULES: Record<string, Rule> = {
-  dispute_hold: {
-    id: 'dispute_hold',
-    says: 'no contact and no retry while a dispute or chargeback is open',
-    basis: 'card-scheme dispute handling — the case is with the issuer, not the merchant',
-  },
-  risk_hold: {
-    id: 'risk_hold',
-    says: 'no retry after the issuer declined on risk grounds',
-    basis: 'a retry is a second attempt at something already refused',
-  },
-  ring_hold: {
-    id: 'ring_hold',
-    says: 'no automated action on records sharing a device, BIN or network across several parties',
-    basis: 'internal: suspected coordinated abuse goes to a human, never to a retry',
-  },
-  mandate_revoked: {
-    id: 'mandate_revoked',
-    says: 'never re-present a revoked mandate; ask for fresh authorisation instead',
-    basis: 'NPCI e-mandate/NACH rules — debiting on a revoked mandate is an unauthorised debit',
-  },
-  mandate_cap: {
-    id: 'mandate_cap',
-    says: 'at most three re-presentments against one mandate in a cycle',
-    basis: 'NPCI NACH re-presentment limits',
-  },
-  retry_cap: {
-    id: 'retry_cap',
-    says: 'at most four attempts against one payment across all rails',
-    basis: 'card-scheme retry limits and gateway decline-ratio monitoring',
-  },
-  cooldown: {
-    id: 'cooldown',
-    says: 'wait before retrying — and wait for the salary cycle when the account was empty',
-    basis: 'card-scheme retry guidance; a retry into the same empty account is a second decline',
-  },
-  quiet_hours: {
-    id: 'quiet_hours',
-    says: 'no SMS, WhatsApp or voice between 21:00 and 09:00 local time',
-    basis: 'TRAI commercial-communication timing rules',
-  },
-  dnd: {
-    id: 'dnd',
-    says: 'no promotional or transactional push to a party on DND',
-    basis: 'TRAI DND registry',
-  },
-  consent: {
-    id: 'consent',
-    says: 'no contact on a channel the party has not consented to',
-    basis: 'DPDP 2023 §6 — consent is per purpose, per channel, and revocable',
-  },
-  contact_frequency: {
-    id: 'contact_frequency',
-    says: 'at most two messages to one party in a rolling day',
-    basis: 'internal: the line between collection and harassment is a number, so it is written down',
-  },
-  budget: {
-    id: 'budget',
-    says: 'stop when the run has spent its budget',
-    basis: 'internal: a bounded agent is one whose worst case is stated in advance',
-  },
-  circuit_breaker: {
-    id: 'circuit_breaker',
-    says: 'halt the run if realised recovery falls far below what was expected',
-    basis: 'internal: a model that has stopped working should stop acting, not keep spending',
-  },
-};
+/**
+ * The rules, with this project's numbers in them.
+ *
+ * A function rather than a constant because the sentences quote limits a
+ * project can change. With a static table, a run under `contacts_per_day: 1`
+ * refused an action and explained it with "at most two messages to one party in
+ * a rolling day" — the report contradicting the policy it had just enforced.
+ * `rule_says` is what an auditor reads out of the trail months later, so it has
+ * to be what actually happened.
+ */
+export function rulesFor(limits: PolicyLimits = DEFAULT_LIMITS): Record<string, Rule> {
+  const { from, to } = limits.quiet_hours;
+  const clock = (h: number) => `${String(h).padStart(2, '0')}:00`;
+
+  return {
+    dispute_hold: {
+      id: 'dispute_hold',
+      says: 'no contact and no retry while a dispute or chargeback is open',
+      basis: 'card-scheme dispute handling — the case is with the issuer, not the merchant',
+    },
+    risk_hold: {
+      id: 'risk_hold',
+      says: 'no retry after the issuer declined on risk grounds',
+      basis: 'a retry is a second attempt at something already refused',
+    },
+    ring_hold: {
+      id: 'ring_hold',
+      says: 'no automated action on records sharing a device, BIN or network across several parties',
+      basis: 'internal: suspected coordinated abuse goes to a human, never to a retry',
+    },
+    mandate_revoked: {
+      id: 'mandate_revoked',
+      says: 'never re-present a revoked mandate; ask for fresh authorisation instead',
+      basis: 'NPCI e-mandate/NACH rules — debiting on a revoked mandate is an unauthorised debit',
+    },
+    mandate_cap: {
+      id: 'mandate_cap',
+      says: `at most ${limits.mandate_attempts} re-presentments against one mandate in a cycle`,
+      basis: 'NPCI NACH re-presentment limits',
+    },
+    retry_cap: {
+      id: 'retry_cap',
+      says: `at most ${limits.payment_attempts} attempts against one payment across all rails`,
+      basis: 'card-scheme retry limits and gateway decline-ratio monitoring',
+    },
+    cooldown: {
+      id: 'cooldown',
+      says:
+        `wait ${limits.cooldown_hours.default}h before retrying — ` +
+        `${limits.cooldown_hours.insufficient_funds}h when the account was empty`,
+      basis: 'card-scheme retry guidance; a retry into the same empty account is a second decline',
+    },
+    quiet_hours: {
+      id: 'quiet_hours',
+      says: `no SMS, WhatsApp or voice between ${clock(from)} and ${clock(to)} ${limits.timezone} time`,
+      basis: 'TRAI commercial-communication timing rules',
+    },
+    dnd: {
+      id: 'dnd',
+      says: 'no promotional or transactional push to a party on DND',
+      basis: 'TRAI DND registry',
+    },
+    consent: {
+      id: 'consent',
+      says: 'no contact on a channel the party has not consented to',
+      basis: 'DPDP 2023 §6 — consent is per purpose, per channel, and revocable',
+    },
+    contact_frequency: {
+      id: 'contact_frequency',
+      says: `at most ${limits.contacts_per_day} message(s) to one party in a rolling day`,
+      basis: 'internal: the line between collection and harassment is a number, so it is written down',
+    },
+    budget: {
+      id: 'budget',
+      says: `stop once the run has spent ₹${Math.round(limits.budget_paise / 100).toLocaleString('en-IN')}`,
+      basis: 'internal: a bounded agent is one whose worst case is stated in advance',
+    },
+    circuit_breaker: {
+      id: 'circuit_breaker',
+      says:
+        `halt the run if realised recovery falls below ${limits.circuit_breaker.min_realised_share}× ` +
+        `of expected, after ${limits.circuit_breaker.after_attempts} attempts`,
+      basis: 'internal: a model that has stopped working should stop acting, not keep spending',
+    },
+  };
+}
+
+/**
+ * Built once per limits object rather than per decision.
+ *
+ * `check` runs for every proposed action, and rebuilding thirteen strings each
+ * time is work for nobody. Keyed on identity, so a caller that hands in the
+ * same limits — which every caller does — pays for it once.
+ */
+const ruleCache = new WeakMap<PolicyLimits, Record<string, Rule>>();
+
+function rulesCached(limits: PolicyLimits): Record<string, Rule> {
+  let table = ruleCache.get(limits);
+  if (!table) {
+    table = rulesFor(limits);
+    ruleCache.set(limits, table);
+  }
+  return table;
+}
+
+/** The default table, for callers with no project policy of their own. */
+export const RULES: Record<string, Rule> = rulesFor(DEFAULT_LIMITS);
 
 /** Which channel an intervention speaks on, if it speaks at all. */
 export function channelOf(action: Intervention): Channel | undefined {
@@ -257,8 +300,15 @@ export function check(
   limits: PolicyLimits = DEFAULT_LIMITS,
   costPaise = 0,
 ): Verdict {
+  const rules = rulesCached(limits);
+  const deny = (id: string, detail: string): Verdict => ({
+    allowed: false,
+    rule: rules[id] as Rule,
+    detail,
+  });
+
   if (state.halted) {
-    return { allowed: false, rule: RULES.circuit_breaker as Rule, detail: state.halted };
+    return { allowed: false, rule: rules.circuit_breaker as Rule, detail: state.halted };
   }
 
   // Doing nothing is always permitted and costs nothing.
@@ -339,10 +389,6 @@ export function check(
   return { allowed: true };
 }
 
-function deny(id: keyof typeof RULES, detail: string): Verdict {
-  return { allowed: false, rule: RULES[id] as Rule, detail };
-}
-
 function hoursSince(iso: string, at: Date): number {
   return (at.getTime() - Date.parse(iso)) / 3600_000;
 }
@@ -394,4 +440,86 @@ export function nextAllowedTime(
   }
 
   return when;
+}
+
+/**
+ * The project's own limits, laid over the defaults.
+ *
+ * Every rule in this file was described as configured policy that a compliance
+ * team could change, and until this existed the only way to change one was to
+ * edit TypeScript. A limit nobody can set is not policy, it is a constant with
+ * a good comment.
+ *
+ * Partial by design: a team pins the two or three numbers it actually argues
+ * about — usually contacts per day and the annoyance charge — and inherits the
+ * rest. Rupee amounts arrive in rupees, because that is what somebody writing a
+ * config file will type, and are converted here to the paise everything below
+ * this line uses.
+ */
+export function limitsFrom(config: RevenueConfig | undefined, base: PolicyLimits = DEFAULT_LIMITS): PolicyLimits {
+  if (!config) return base;
+
+  return {
+    mandate_attempts: config.mandate_attempts ?? base.mandate_attempts,
+    payment_attempts: config.payment_attempts ?? base.payment_attempts,
+    cooldown_hours: {
+      default: config.cooldown_hours?.default ?? base.cooldown_hours.default,
+      insufficient_funds:
+        config.cooldown_hours?.insufficient_funds ?? base.cooldown_hours.insufficient_funds,
+    },
+    quiet_hours: config.quiet_hours ?? base.quiet_hours,
+    contacts_per_day: config.contacts_per_day ?? base.contacts_per_day,
+    budget_paise: config.budget_inr === undefined ? base.budget_paise : Math.round(config.budget_inr * 100),
+    circuit_breaker: {
+      after_attempts: config.circuit_breaker?.after_attempts ?? base.circuit_breaker.after_attempts,
+      min_realised_share:
+        config.circuit_breaker?.min_realised_share ?? base.circuit_breaker.min_realised_share,
+    },
+    timezone: config.timezone ?? base.timezone,
+  };
+}
+
+/** The same, for the cost model. Rupees in the file, paise in the engine. */
+export function costsFrom(config: RevenueConfig | undefined, base: CostModel = DEFAULT_COSTS): CostModel {
+  const costs = config?.costs;
+  if (!costs) return base;
+
+  const paise = (value: number | undefined, fallback: number) =>
+    value === undefined ? fallback : Math.round(value * 100);
+
+  return {
+    retry_paise: paise(costs.retry_inr, base.retry_paise),
+    email_paise: paise(costs.email_inr, base.email_paise),
+    sms_paise: paise(costs.sms_inr, base.sms_paise),
+    whatsapp_paise: paise(costs.whatsapp_inr, base.whatsapp_paise),
+    voice_paise: paise(costs.voice_inr, base.voice_paise),
+    human_review_paise: paise(costs.human_review_inr, base.human_review_paise),
+    annoyance_paise: paise(costs.annoyance_inr, base.annoyance_paise),
+    margin: costs.margin ?? base.margin,
+  };
+}
+
+/**
+ * Which limits the project moved, in the words the report prints.
+ *
+ * A run under someone's own policy should say so. Silently obeying a config
+ * file is how a number nobody remembers setting ends up explaining a result
+ * nobody expected.
+ */
+export function describeOverrides(limits: PolicyLimits, base: PolicyLimits = DEFAULT_LIMITS): string[] {
+  const changed: string[] = [];
+  const note = (name: string, mine: unknown, theirs: unknown) => {
+    if (JSON.stringify(mine) !== JSON.stringify(theirs)) changed.push(`${name} ${JSON.stringify(mine)}`);
+  };
+
+  note('capacity budget ₹', Math.round(limits.budget_paise / 100), Math.round(base.budget_paise / 100));
+  note('contacts/day', limits.contacts_per_day, base.contacts_per_day);
+  note('quiet hours', limits.quiet_hours, base.quiet_hours);
+  note('timezone', limits.timezone, base.timezone);
+  note('mandate attempts', limits.mandate_attempts, base.mandate_attempts);
+  note('payment attempts', limits.payment_attempts, base.payment_attempts);
+  note('cooldown hours', limits.cooldown_hours, base.cooldown_hours);
+  note('circuit breaker', limits.circuit_breaker, base.circuit_breaker);
+
+  return changed;
 }

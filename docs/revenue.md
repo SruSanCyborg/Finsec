@@ -114,6 +114,36 @@ Cooldowns and quiet hours are a *not yet* rather than a *no*: the run reschedule
 to the first permitted moment, so it comes back at 09:00 rather than abandoning
 the record. Deferrals are capped, which is what guarantees termination.
 
+### They are your numbers
+
+Every threshold above is set in `sirius.yaml`, and `sirius init` scaffolds the
+block commented out. Pin only what you argue about; the rest falls back to a
+documented default.
+
+```yaml
+revenue:
+  capacity: 200
+  budget_inr: 50000
+  contacts_per_day: 2
+  quiet_hours: { from: 21, to: 9 }
+  timezone: Asia/Kolkata        # the zone quiet hours are read in, never the server's
+  mandate_attempts: 3
+  costs:
+    annoyance_inr: 12           # the charge for chasing someone who'd have paid anyway
+```
+
+Two things follow from this that are easy to get wrong. A run under a project's
+own policy **says so** in its banner, naming what moved — obeying a config file
+silently is how a number nobody remembers setting ends up explaining a result
+nobody expected. And the rules quote the limits **actually in force**, in the
+report and in the audit trail: with a static table, a run under
+`contacts_per_day: 1` refused an action and explained it with "at most two
+messages to one party in a rolling day". `rule_says` is what an auditor reads
+months later, so it has to be what happened.
+
+The *basis* is not configurable. A project sets its threshold; it does not get
+to edit the obligation the threshold answers to.
+
 ### The number
 
 ```

@@ -16,7 +16,18 @@ import { describe, expect, it } from 'vitest';
 import { verifyTrail } from '../src/revenue/audit.js';
 import { analyzeBatch } from '../src/revenue/features.js';
 import { assessBatch, defaultCapacity, fitModel } from '../src/revenue/model.js';
-import { channelOf, check, chooseAction, emptyState, inQuietHours, DEFAULT_LIMITS } from '../src/revenue/policy.js';
+import {
+  channelOf,
+  check,
+  chooseAction,
+  costsFrom,
+  describeOverrides,
+  emptyState,
+  inQuietHours,
+  limitsFrom,
+  rulesFor,
+  DEFAULT_LIMITS,
+} from '../src/revenue/policy.js';
 import { recover } from '../src/revenue/recover.js';
 import { generateBatch, splitOf } from '../src/revenue/synth.js';
 import type { RiskRecord } from '../src/revenue/types.js';
@@ -326,5 +337,108 @@ describe('the audit trail', () => {
     const last = tampered.entries[tampered.entries.length - 1];
     tampered.entries.push({ ...last, seq: last.seq + 1, prev_hash: last.hash });
     expect(verifyTrail(tampered).ok).toBe(false);
+  });
+});
+
+/**
+ * A project's own policy.
+ *
+ * Every rule in policy.ts was described as "configured policy, not legal advice
+ * — the numbers are a compliance team's to change", and for three commits the
+ * only way to change one was to edit TypeScript. A limit nobody can set is not
+ * policy, it is a constant with a good comment.
+ */
+describe('limits from sirius.yaml', () => {
+  it('falls back to the defaults when the file says nothing', () => {
+    expect(limitsFrom(undefined)).toEqual(DEFAULT_LIMITS);
+    expect(limitsFrom({})).toEqual(DEFAULT_LIMITS);
+  });
+
+  it('takes only the numbers the project pinned', () => {
+    const limits = limitsFrom({ contacts_per_day: 1 });
+    expect(limits.contacts_per_day).toBe(1);
+    // Everything else inherits, so a team can pin the one number it argues
+    // about without restating the other twelve.
+    expect(limits.mandate_attempts).toBe(DEFAULT_LIMITS.mandate_attempts);
+    expect(limits.quiet_hours).toEqual(DEFAULT_LIMITS.quiet_hours);
+  });
+
+  it('reads rupees from the file and stores paise', () => {
+    // What somebody types in a config file, versus what everything below the
+    // formatter uses.
+    expect(limitsFrom({ budget_inr: 2500 }).budget_paise).toBe(250000);
+    expect(costsFrom({ costs: { annoyance_inr: 400 } }).annoyance_paise).toBe(40000);
+  });
+
+  it('binds at the point of decision', () => {
+    // Asserted here rather than on a whole run: most parties in a batch are
+    // contacted once, so whether one seed happens to produce a second contact
+    // is luck. Whether the limit is *applied* is not.
+    const record = payment({ party: party({ contacts_24h: 1 }) });
+    const at = new Date('2026-08-24T06:30:00.000Z');
+
+    const under = (limits: typeof DEFAULT_LIMITS) =>
+      check('dunning_sms', record, emptyContext, emptyState(), at, limits, 0);
+
+    expect(under(limitsFrom({ contacts_per_day: 2 })).allowed).toBe(true);
+    expect(under(limitsFrom({ contacts_per_day: 1 })).rule?.id).toBe('contact_frequency');
+  });
+
+  it('binds across a whole run too', () => {
+    // A policy of "no messages at all" is the unambiguous version: every
+    // contact the agent proposes has to come back refused.
+    const silent = run('policy-seed', { limits: limitsFrom({ contacts_per_day: 0 }) }).result;
+    const normal = run('policy-seed').result;
+
+    expect(silent.outcome.blocked_by.contact_frequency ?? 0).toBeGreaterThan(
+      normal.outcome.blocked_by.contact_frequency ?? 0,
+    );
+    // And nothing that speaks may have been executed.
+    for (const entry of silent.trail.entries.filter((e) => e.disposition === 'executed')) {
+      expect(channelOf(entry.action)).toBeUndefined();
+    }
+  });
+
+  it('names what the project moved, and says nothing when it moved nothing', () => {
+    expect(describeOverrides(DEFAULT_LIMITS)).toEqual([]);
+    const moved = describeOverrides(limitsFrom({ contacts_per_day: 1, mandate_attempts: 2 }));
+    expect(moved.join(' ')).toContain('contacts/day');
+    expect(moved.join(' ')).toContain('mandate attempts');
+  });
+});
+
+/**
+ * The rules quote the limits actually in force.
+ *
+ * With a static table, a run under `contacts_per_day: 1` refused an action and
+ * explained it with "at most two messages to one party in a rolling day" — the
+ * report contradicting the policy it had just enforced. `rule_says` is what an
+ * auditor reads out of the trail months later.
+ */
+describe('what the rules say', () => {
+  it('quotes the project\'s own contact limit', () => {
+    expect(rulesFor(limitsFrom({ contacts_per_day: 1 })).contact_frequency?.says).toContain('at most 1');
+    expect(rulesFor().contact_frequency?.says).toContain('at most 2');
+  });
+
+  it('quotes the project\'s own quiet hours, with its timezone', () => {
+    const says = rulesFor(limitsFrom({ quiet_hours: { from: 20, to: 10 }, timezone: 'Asia/Kolkata' }))
+      .quiet_hours?.says;
+    expect(says).toContain('20:00');
+    expect(says).toContain('10:00');
+    expect(says).toContain('Asia/Kolkata');
+  });
+
+  it('never changes the basis, only the numbers', () => {
+    // The obligation behind a rule is not a project's to edit; the threshold is.
+    const mine = rulesFor(limitsFrom({ mandate_attempts: 2 }));
+    expect(mine.mandate_cap?.basis).toBe(rulesFor().mandate_cap?.basis);
+    expect(mine.mandate_cap?.says).not.toBe(rulesFor().mandate_cap?.says);
+  });
+
+  it('writes the enforced wording into the audit trail, not the built-in one', () => {
+    const tight = run('policy-seed', { limits: limitsFrom({ contacts_per_day: 1 }) }).result;
+    const blocked = tight.trail.entries.find((entry) => entry.rule_id === 'contact_frequency');
+    expect(blocked?.rule_says).toContain('at most 1');
   });
 });
