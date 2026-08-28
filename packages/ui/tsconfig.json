@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "composite": true,
+    "declaration": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "jsx": "react-jsx",
+    "rootDir": "src",
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@sirius/types": ["../../packages/types/src"],
+      "@sirius/design-system": ["../../packages/design-system/src"],
+      "@sirius/utils": ["../../packages/utils/src"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/**/__tests__/*"],
+  "references": [
+    { "path": "../types" },
+    { "path": "../design-system" },
+    { "path": "../utils" }
+  ]
+}

@@ -1,0 +1,427 @@
+:root {
+  /* --- Day Theme Palette (Signature Green & Light Grey Canvas Base) --- */
+  --color-bg-canvas: #E2E8F0;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-surface-elevated: #F8FAF8;
+  --color-bg-surface-subtle: #F1F4F2;
+
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+  --color-text-dim: #9CA3AF;
+  --color-text-on-accent: #FFFFFF;
+
+  --color-border: #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-border-hairline: #F3F4F6;
+  --color-border-hover: #186544;
+  --color-border-focus: #186544;
+
+  /* Technical Surface Tokens (Code, Console, Technical Inspection) */
+  --color-bg-technical: #000000;
+  --color-bg-technical-elevated: #0B0C0E;
+  --color-text-technical: #F3F4F6;
+  --color-border-technical: rgba(255, 255, 255, 0.14);
+
+  /* Primary Brand Spectrum (Signature Uniform Deep Green) */
+  --color-primary: #186544;
+  --color-primary-hover: #125236;
+  --color-primary-soft: #E6F4ED;
+  --color-primary-deep: #0E402B;
+
+  /* Controlled Semantic Spectrum Tokens */
+  --color-mint: #10B981;
+  --color-cyan: #186544;
+  --color-violet: #186544;
+  --color-magenta: #E11D48;
+  --color-emerald: #186544;
+  --color-teal: #186544;
+  --color-indigo: #186544;
+  --color-amber: #F59E0B;
+  --color-red: #E11D48;
+  --color-rose: #E11D48;
+
+  /* Spectrum RGB Values */
+  --color-primary-rgb: 24, 101, 68;
+  --color-emerald-rgb: 24, 101, 68;
+  --color-mint-rgb: 16, 185, 129;
+  --color-cyan-rgb: 24, 101, 68;
+  --color-violet-rgb: 24, 101, 68;
+  --color-magenta-rgb: 225, 29, 72;
+  --color-amber-rgb: 245, 158, 11;
+  --color-red-rgb: 225, 29, 72;
+
+  /* Semantic Mappings */
+  --color-brand: var(--color-primary);
+  --color-safe: var(--color-emerald);
+  --color-passed: var(--color-emerald);
+  --color-compliant: var(--color-emerald);
+
+  --color-info: var(--color-text-secondary);
+  --color-in-progress: var(--color-primary);
+  --color-low: var(--color-mint);
+  --color-medium: var(--color-primary);
+  --color-active: var(--color-primary);
+  --color-high: var(--color-amber);
+  --color-critical: var(--color-red);
+  --color-ai: var(--color-primary);
+  --color-cerebus: var(--color-primary);
+  --color-money-risk: var(--color-primary);
+
+  /* Legacy Compatibility Aliases */
+  --bg-void: var(--color-bg-canvas);
+  --bg-surface: var(--color-bg-surface);
+  --bg-raised: var(--color-bg-surface-elevated);
+  --bg-grid: var(--color-bg-surface-subtle);
+
+  --surface-0: var(--color-bg-canvas);
+  --surface-1: var(--color-bg-surface);
+  --surface-2: var(--color-bg-surface-elevated);
+  --surface-glass: rgba(255, 255, 255, 0.9);
+  --glass-blur: blur(12px);
+
+  --text-primary: var(--color-text-primary);
+  --text-secondary: var(--color-text-secondary);
+  --text-dim: var(--color-text-dim);
+  --text-muted: var(--color-text-muted);
+  --text-on-accent: var(--color-text-on-accent);
+
+  --border-hairline: var(--color-border-subtle);
+  --border-subtle: var(--color-border);
+  --border-hover: var(--color-border-hover);
+  --border-focus: var(--color-border-focus);
+
+  --bg-hover: rgba(24, 101, 68, 0.05);
+  --bg-active: rgba(24, 101, 68, 0.1);
+  --bg-disabled: #E8ECE9;
+  --bg-overlay: rgba(17, 24, 39, 0.4);
+
+  /* --- Spacing Scale (8, 12, 16, 20, 24, 32, 40, 48) --- */
+  --space-3xs: 2px;
+  --space-2xs: 4px;
+  --space-xs: 8px;
+  --space-sm: 12px;
+  --space-md: 16px;
+  --space-lg: 20px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
+  --space-3xl: 40px;
+  --space-4xl: 48px;
+  --space-5xl: 64px;
+
+  /* --- Standardized Border Radius Scale --- */
+  --radius-xs: 4px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 24px;
+  --radius-pill: 9999px;
+  --radius-full: 9999px;
+
+  /* --- Typography Fonts (Apple System Preferred) --- */
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", "Helvetica Neue", Arial, sans-serif;
+  --font-code: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+
+  /* --- Controlled Elevation Shadow Scale --- */
+  --shadow-small: 0 1px 2px 0 rgba(0, 0, 0, 0.04), 0 1px 3px 0 rgba(0, 0, 0, 0.02);
+  --shadow-medium: 0 4px 12px -2px rgba(0, 0, 0, 0.05), 0 2px 6px -1px rgba(0, 0, 0, 0.03);
+  --shadow-large: 0 16px 32px -4px rgba(0, 0, 0, 0.08), 0 6px 12px -2px rgba(0, 0, 0, 0.04);
+
+  --shadow-subtle: var(--shadow-small);
+  --shadow-card: var(--shadow-small);
+  --shadow-raised: var(--shadow-medium);
+  --shadow-modal: var(--shadow-large);
+
+  --glow-cyan: none;
+  --glow-emerald: 0 0 12px rgba(24, 101, 68, 0.15);
+  --glow-indigo: none;
+  --glow-violet: none;
+
+  /* --- Purposeful Editorial Gradients --- */
+  --gradient-brand: linear-gradient(135deg, var(--color-primary) 0%, #10B981 100%);
+  --gradient-safe: linear-gradient(135deg, var(--color-primary) 0%, #10B981 100%);
+  --gradient-ai: linear-gradient(135deg, var(--color-primary) 0%, #0E402B 100%);
+  --gradient-critical: linear-gradient(135deg, #BE123C 0%, #E11D48 100%);
+
+  /* --- Transitions --- */
+  --transition-fast: 140ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 320ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  --motion-fast: var(--transition-fast);
+  --motion-base: var(--transition-normal);
+  --motion-slow: var(--transition-slow);
+}
+
+/* --- Night Mode Tokens (High-Contrast Borders & Dark Charcoal Canvas Base) --- */
+[data-theme="dark"], [data-theme="night"] {
+  --color-bg-canvas: #16181D;
+  --color-bg-surface: #000000;
+  --color-bg-surface-elevated: #0B0C0E;
+  --color-bg-surface-subtle: #121417;
+
+  --color-text-primary: #F9FAFB;
+  --color-text-secondary: #9CA3AF;
+  --color-text-muted: #6B7280;
+  --color-text-dim: #6B7280;
+  --color-text-on-accent: #000000;
+
+  /* Crisp Visible Borders for Dark Mode Cards and Elements */
+  --color-border: rgba(255, 255, 255, 0.18);
+  --color-border-subtle: rgba(255, 255, 255, 0.12);
+  --color-border-hairline: rgba(255, 255, 255, 0.08);
+  --color-border-hover: #10B981;
+  --color-border-focus: #10B981;
+
+  /* Technical Surface Tokens (Night Mode Pitch Black) */
+  --color-bg-technical: #000000;
+  --color-bg-technical-elevated: #0B0C0E;
+  --color-text-technical: #F9FAFB;
+  --color-border-technical: rgba(255, 255, 255, 0.16);
+
+  /* Primary Brand Spectrum (Brightened Emerald for Dark Surface Contrast) */
+  --color-primary: #10B981;
+  --color-primary-hover: #34D399;
+  --color-primary-soft: rgba(16, 185, 129, 0.14);
+  --color-primary-deep: #064E3B;
+
+  /* Accent Spectrum Tokens (Night Mode Uniform Emerald + Controlled Semantics) */
+  --color-mint: #34D399;
+  --color-cyan: #10B981;
+  --color-violet: #10B981;
+  --color-magenta: #F43F5E;
+  --color-emerald: #10B981;
+  --color-teal: #10B981;
+  --color-indigo: #10B981;
+  --color-amber: #FBBF24;
+  --color-red: #F87171;
+  --color-rose: #F87171;
+
+  /* Spectrum RGB Values */
+  --color-primary-rgb: 16, 185, 129;
+  --color-emerald-rgb: 16, 185, 129;
+  --color-mint-rgb: 52, 211, 153;
+  --color-cyan-rgb: 16, 185, 129;
+  --color-violet-rgb: 16, 185, 129;
+  --color-magenta-rgb: 248, 113, 113;
+  --color-amber-rgb: 251, 191, 36;
+  --color-red-rgb: 248, 113, 113;
+
+  /* Shadows (Tonal Depth in Pitch-Black Night Mode) */
+  --shadow-small: 0 1px 3px 0 rgba(0, 0, 0, 0.6);
+  --shadow-medium: 0 4px 14px 0 rgba(0, 0, 0, 0.7);
+  --shadow-large: 0 16px 36px 0 rgba(0, 0, 0, 0.85);
+
+  --surface-glass: rgba(0, 0, 0, 0.92);
+  --bg-hover: rgba(255, 255, 255, 0.05);
+  --bg-active: rgba(255, 255, 255, 0.09);
+  --bg-disabled: #121417;
+  --bg-overlay: rgba(0, 0, 0, 0.8);
+}
+
+/* Global Theme Transition Rule (200-320ms smooth color transitions) */
+body, header, nav, main, aside, div, article, section, footer, button, input, select, textarea {
+  transition: background-color var(--transition-normal), color var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body, header, nav, main, aside, div, article, section, footer, button, input, select, textarea {
+    transition: none !important;
+  }
+}
+
+/* --- Base Reset & Typography --- */
+body {
+  margin: 0;
+  padding: 0;
+  background-color: var(--color-bg-canvas);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+}
+
+/* --- Typography Hierarchy Classes --- */
+.sirius-display-xl {
+  font-family: var(--font-display);
+  font-size: 36px;
+  font-weight: 700;
+  line-height: 1.15;
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+}
+
+.sirius-display {
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--color-text-primary);
+}
+
+.sirius-heading-1 {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.3;
+  letter-spacing: -0.015em;
+  color: var(--color-text-primary);
+}
+
+.sirius-heading-2 {
+  font-family: var(--font-display);
+  font-size: 18px;
+  font-weight: 600;
+  line-height: 1.35;
+  letter-spacing: -0.01em;
+  color: var(--color-text-primary);
+}
+
+.sirius-heading-3 {
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--color-text-primary);
+}
+
+.sirius-body-lg {
+  font-family: var(--font-body);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.sirius-body {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.sirius-body-sm {
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
+}
+
+.sirius-caption {
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-muted);
+}
+
+.sirius-label {
+  font-family: var(--font-body);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--color-text-muted);
+}
+
+.sirius-mono-lg {
+  font-family: var(--font-code);
+  font-size: 16px;
+}
+
+.sirius-mono {
+  font-family: var(--font-code);
+  font-size: 13px;
+}
+
+.sirius-mono-sm {
+  font-family: var(--font-code);
+  font-size: 11px;
+}
+
+.sirius-numeral-tabular {
+  font-family: var(--font-code);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+/* --- Glass Surface Utilities --- */
+.sirius-glass-surface {
+  background: var(--surface-glass);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-medium);
+}
+
+.sirius-glass-card {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-small);
+  transition: transform var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal), background-color var(--transition-normal);
+}
+
+.sirius-glass-card:hover, .sirius-hover-lift:hover, .sirius-card-hoverable:hover {
+  transform: translateY(-3px) scale(1.008);
+  border-color: var(--color-primary);
+  box-shadow: 0 14px 32px -4px rgba(24, 101, 68, 0.20), var(--shadow-medium);
+}
+
+[data-theme="dark"] .sirius-glass-card:hover, [data-theme="dark"] .sirius-hover-lift:hover, [data-theme="dark"] .sirius-card-hoverable:hover,
+[data-theme="night"] .sirius-glass-card:hover, [data-theme="night"] .sirius-hover-lift:hover, [data-theme="night"] .sirius-card-hoverable:hover {
+  border-color: #10B981;
+  box-shadow: 0 14px 32px -4px rgba(16, 185, 129, 0.32), var(--shadow-medium);
+}
+
+.sirius-hover-lift, .sirius-card-hoverable {
+  transition: transform var(--transition-normal), border-color var(--transition-normal), box-shadow var(--transition-normal), background-color var(--transition-normal);
+}
+
+.sirius-glass-panel {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-medium);
+}
+
+.sirius-glass-modal {
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-2xl);
+  box-shadow: var(--shadow-large);
+}
+
+.sirius-glass-drawer {
+  background: var(--color-bg-surface);
+  border-left: 1px solid var(--color-border);
+  box-shadow: var(--shadow-large);
+}
+
+/* Background grid motif */
+.sirius-pixel-grid {
+  background-color: var(--color-bg-canvas);
+  background-image: 
+    linear-gradient(to right, rgba(14, 107, 74, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(14, 107, 74, 0.03) 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.sirius-pixel-grid-overlay {
+  background-image: 
+    linear-gradient(to right, rgba(14, 107, 74, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(14, 107, 74, 0.03) 1px, transparent 1px);
+  background-size: 16px 16px;
+  pointer-events: none;
+}
+
+/* Focus Visible Outline */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+}

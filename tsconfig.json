@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": ".",
+    "paths": {
+      "@sirius/types": ["packages/types/src"],
+      "@sirius/design-system": ["packages/design-system/src"],
+      "@sirius/api": ["packages/api/src"],
+      "@sirius/mock-api": ["packages/mock-api/src"],
+      "@sirius/state": ["packages/state/src"],
+      "@sirius/utils": ["packages/utils/src"],
+      "@sirius/ui": ["packages/ui/src"]
+    }
+  },
+  "include": [
+    "apps/*/src/**/*",
+    "packages/*/src/**/*"
+  ],
+  "references": [
+    { "path": "packages/types" },
+    { "path": "packages/design-system" },
+    { "path": "packages/utils" },
+    { "path": "packages/api" },
+    { "path": "packages/mock-api" },
+    { "path": "packages/state" },
+    { "path": "packages/ui" }
+  ]
+}
