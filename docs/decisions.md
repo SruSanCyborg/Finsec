@@ -1306,3 +1306,37 @@ failing path gets the same treatment: "1 problem would stop a scan" now adds
 guess whether to re-run it.
 
 ---
+## D-040 — The palette went quiet exactly when it was needed
+
+It filtered commands as you typed and then stopped. `/scan` was as far as it
+would take anybody: every flag after that you had to already know, or go and
+read `--help` somewhere else. Somebody typed `/scan`, got nothing more, and
+asked what else they could put there — which is the question the palette exists
+to answer.
+
+Once the name is complete and a space follows it, the list becomes what can
+*follow* that command: subcommands first and in accent, flags after and muted,
+each with a sentence. `/revenue ` shows the nine subcommands; `/scan ` shows the
+flags that change what a scan does; `/rules ` shows list, show, validate, test.
+Tab completes the highlighted one, and only its literal part — `--sarif <file>`
+inserts `--sarif` and leaves the filename to the person who knows it.
+
+Three details that decide whether it helps or annoys:
+
+**It offers nothing until the name is complete**, so the command list is never
+replaced while somebody is still choosing a command.
+
+**It stops offering what is already on the line.** Suggesting `--json` to
+somebody who has just typed `--json` is the completion equivalent of not
+listening.
+
+**A typo falls back to the full list rather than going blank.** An empty panel
+reads as "there is nothing here", which is a lie: it means "nothing starts with
+what you typed".
+
+A test asserts every subcommand a usage line advertises is actually offered —
+`/revenue [gen|detect|…]` promising nine and listing four would be worse than
+listing none — and that every entry has a real sentence, since a name with no
+explanation leaves you exactly where you were.
+
+---

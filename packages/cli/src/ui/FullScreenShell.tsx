@@ -15,7 +15,7 @@
 import { Box, Text, useApp, useInput, useStdout } from 'ink';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { CommandPalette, filterCommands } from './CommandPalette.js';
+import { ArgPalette, CommandPalette, argCompletions, filterCommands } from './CommandPalette.js';
 import { COLOR } from './theme.js';
 import { copyToClipboard } from './clipboard.js';
 import type { ShellCommand } from './CommandPalette.js';
@@ -135,13 +135,24 @@ export function FullScreenShell({
   // The review panel takes its rows out of the transcript's budget, or the
   // input box is pushed off the bottom of the screen and the whole thing looks
   // broken at exactly the moment the user is being asked a question.
+  // Once the command name is complete, the palette stops offering commands and
+  // starts offering what can follow one. Without this it went quiet exactly
+  // when somebody needed it most: they have chosen `/scan` and now have to
+  // already know every flag it takes.
+  const completions = useMemo(() => (busy ? undefined : argCompletions(value)), [busy, value]);
+
   const reviewHeight = review ? review.body.length + 4 : 0;
+  const completionHeight = completions ? Math.min(completions.args.length, 6) + 2 : 0;
   const viewportHeight = Math.max(
     3,
-    rows - HEADER_HEIGHT - INPUT_HEIGHT - FOOTER_HEIGHT - reviewHeight,
+    rows - HEADER_HEIGHT - INPUT_HEIGHT - FOOTER_HEIGHT - reviewHeight - completionHeight,
   );
 
-  const showPalette = value.startsWith('/') && !busy;
+  // Once the command name is complete, the palette stops offering commands and
+  // starts offering what can follow one. Without this it went quiet exactly
+  // when somebody needed it most: they have chosen `/scan` and now have to
+  // already know every flag it takes.
+  const showPalette = value.startsWith('/') && !busy && !completions;
   const matches = useMemo(() => (showPalette ? filterCommands(value) : []), [showPalette, value]);
 
   useEffect(() => {
@@ -386,6 +397,17 @@ export function FullScreenShell({
       return;
     }
 
+    if (key.tab && completions && completions.args.length > 0) {
+      const arg = completions.args[Math.min(selected, completions.args.length - 1)];
+      // Only the literal part is completed: `--sarif <file>` puts `--sarif` in
+      // and leaves the filename to the person who knows it.
+      const literal = (arg?.name ?? '').split(' ')[0] ?? '';
+      const head = value.replace(/\s*\S*$/, '');
+      setValue(`${head} ${literal} `);
+      setSelected(0);
+      return;
+    }
+
     if (key.tab && showPalette && matches.length > 0) {
       setValue(`/${(matches[Math.min(selected, matches.length - 1)] as ShellCommand).name} `);
       setSelected(0);
@@ -393,6 +415,7 @@ export function FullScreenShell({
     }
 
     if (key.upArrow || (key.ctrl && input === 'p')) {
+      if (completions) return setSelected((s) => Math.max(0, s - 1));
       if (showPalette && matches.length > 0) return setSelected((s) => Math.max(0, s - 1));
       if (history.length > 0) {
         const next = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
@@ -403,6 +426,7 @@ export function FullScreenShell({
     }
 
     if (key.downArrow || (key.ctrl && input === 'n')) {
+      if (completions) return setSelected((s) => Math.min(completions.args.length - 1, s + 1));
       if (showPalette && matches.length > 0) return setSelected((s) => Math.min(matches.length - 1, s + 1));
       if (historyIndex !== null) {
         const next = historyIndex + 1;
@@ -492,6 +516,18 @@ export function FullScreenShell({
             <Text key={`review-${index}`} wrap="truncate-end">{line}</Text>
           ))}
           <Text color={muted} wrap="truncate-end">{review.keys}</Text>
+        </Box>
+      ) : null}
+
+      {completions ? (
+        <Box flexDirection="column">
+          <ArgPalette
+            command={completions.command}
+            args={completions.args}
+            selected={selected}
+            capabilities={capabilities}
+            max={6}
+          />
         </Box>
       ) : null}
 

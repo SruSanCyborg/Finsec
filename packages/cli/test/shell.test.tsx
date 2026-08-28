@@ -230,16 +230,22 @@ describe('the full-screen commands', () => {
     expect(entry('watch')).toBeDefined();
   });
 
-  it('say how to get back rather than how to avoid them', () => {
-    expect(entry('triage')?.summary).toMatch(/comes back/);
+  it('say how to get back from the one that still takes the terminal', () => {
+    // Only `watch` does now. `/triage` asks inline, in a panel above the
+    // prompt, so there is nothing to come back from — and a summary promising
+    // a return from somewhere you never went is worse than no summary.
     expect(entry('watch')?.summary).toMatch(/comes back/);
+    expect(entry('triage')?.summary).not.toMatch(/whole terminal/);
   });
 
-  it('name the key that quits each one, because they differ', () => {
-    // `q` in triage, Ctrl-C in watch. Guessing wrong on a full-screen app that
-    // has taken the terminal is a bad moment to be guessing.
-    expect(entry('triage')?.summary).toContain('q');
+  it('name the key that quits the one that takes over', () => {
+    // Guessing wrong on a full-screen app that has taken the terminal is a bad
+    // moment to be guessing.
     expect(entry('watch')?.summary).toContain('Ctrl-C');
+  });
+
+  it('say that triage stays where the user is', () => {
+    expect(entry('triage')?.summary).toMatch(/without leaving the shell/);
   });
 
   it('no longer send the user away to run them', () => {
