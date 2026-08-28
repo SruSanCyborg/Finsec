@@ -54,6 +54,7 @@ interface RevenueFlags {
   batch?: string;
   seeds?: number;
   debounce?: number;
+  force?: boolean;
   capacityShare?: number;
   save?: string;
   against?: string;
@@ -134,13 +135,49 @@ export async function runRevenue(
 async function generate(target: string | undefined, flags: RevenueFlags): Promise<void> {
   const dir = resolve(process.cwd(), target ?? flags.out ?? DEFAULT_BATCH);
   const seed = flags.seed ?? 'sirius-2026';
-
-  const batch = generateBatch({
-    seed,
+  const counts = {
     payments: flags.payments ?? 700,
     checkouts: flags.checkouts ?? 200,
     invoices: flags.invoices ?? 120,
-  });
+  };
+
+  // The one destructive act in this surface, and it used to be silent.
+  //
+  // A batch is the evidence for every figure reported against it — the labels
+  // most of all, since without them nothing can be scored again. Overwriting it
+  // with a different seed makes yesterday's metrics unreproducible from the
+  // directory they were measured in, and says nothing.
+  //
+  // Regenerating the *same* batch is not destructive: the generator is
+  // deterministic, so the same seed and counts rewrite byte-identical files.
+  // Only a change is refused, which keeps `gen` idempotent for scripts.
+  const existing = existsSync(join(dir, 'manifest.json'))
+    ? (JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8')) as ReturnType<typeof generateBatch>['manifest'])
+    : undefined;
+
+  if (existing && !flags.force) {
+    const sameSeed = String(existing.seed) === String(seed);
+    // Checkouts and invoices only. The manifest's payment count includes the
+    // injected outage burst, so it is never the number that was asked for —
+    // comparing it would refuse every regeneration, including identical ones.
+    const sameCounts =
+      existing.counts.checkouts === counts.checkouts && existing.counts.invoices === counts.invoices;
+
+    if (!sameSeed || !sameCounts) {
+      const total = existing.counts.payments + existing.counts.checkouts + existing.counts.invoices;
+      throw new CliError(`${dir} already holds a different batch.`, {
+        hint:
+          `It was generated from seed "${existing.seed}" (${total} records, ${existing.generated_at.slice(0, 10)}), ` +
+          `and its truth.jsonl is the only thing that can score it.
+` +
+          `  Write it somewhere else:  sirius revenue gen <other-dir> --seed ${seed}
+` +
+          `  Or replace it on purpose: --force`,
+      });
+    }
+  }
+
+  const batch = generateBatch({ seed, ...counts });
 
   writeBatch(dir, batch);
 

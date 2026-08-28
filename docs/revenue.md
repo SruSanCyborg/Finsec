@@ -358,6 +358,26 @@ stale twice in a day — once when the risk-block hold changed the baselines, on
 when the calibration wording changed. A number that has to be copied is a number
 that will be wrong.
 
+## Neither generator will quietly destroy evidence
+
+A batch is what every figure reported against it rests on, and `truth.jsonl` is
+the only thing that can score it again. `links.json` plays the same part for a
+set of books: it is the file that says whether a match was *correct* rather than
+merely confident.
+
+Both generators used to overwrite silently. They refuse now — but only when the
+regeneration would change what is there. The generators are deterministic, so
+rewriting the same seed produces byte-identical files and stays idempotent for
+scripts.
+
+```
+error: …/batch already holds a different batch.
+  It was generated from seed "first" (1050 records, 2026-08-26), and its
+  truth.jsonl is the only thing that can score it.
+    Write it somewhere else:  sirius revenue gen <other-dir> --seed second
+    Or replace it on purpose: --force
+```
+
 ## What is synthetic, and what is not
 
 Every batch and every set of books is generated from a seed, and the same seed

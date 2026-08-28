@@ -28,6 +28,7 @@ interface ReconcileFlags {
   limit?: number;
   json?: boolean;
   exceptions?: boolean;
+  force?: boolean;
 }
 
 interface GlobalFlags {
@@ -39,6 +40,7 @@ const FILES = {
   settlements: 'settlements.jsonl',
   bank: 'bank.jsonl',
   links: 'links.json',
+  seed: 'seed.txt',
 } as const;
 
 export async function runReconcile(
@@ -103,9 +105,34 @@ export async function runReconcile(
 
 function generate(dir: string, flags: ReconcileFlags): void {
   const seed = flags.seed ?? 'sirius-books';
-  const books = generateBooks({ seed, orders: flags.orders ?? 220 });
+  const orders = flags.orders ?? 220;
+  const stamp = `${seed}:${orders}`;
+
+  // The same rule `revenue gen` follows. A set of books is the evidence for a
+  // match rate reported against it, and `links.json` is the only thing that can
+  // say a matcher was *correct* rather than merely confident. Rewriting the
+  // same seed is byte-identical and allowed; changing it is refused.
+  const seedPath = join(dir, FILES.seed);
+  if (existsSync(join(dir, FILES.links)) && !flags.force) {
+    const previous = existsSync(seedPath) ? readFileSync(seedPath, 'utf8').trim() : undefined;
+
+    if (previous !== stamp) {
+      throw new CliError(`${dir} already holds a different set of books.`, {
+        hint:
+          `${previous ? `They came from seed "${previous.split(':')[0]}".` : 'Their seed was not recorded.'} ` +
+          'links.json is the only thing that can say whether a match was correct.\n' +
+          `  Write these somewhere else:  sirius reconcile <other-dir> --gen --seed ${seed}\n` +
+          '  Or replace them on purpose:  --force',
+      });
+    }
+  }
+
+  const books = generateBooks({ seed, orders });
 
   mkdirSync(dir, { recursive: true });
+  // Recorded so a later `--gen` can tell an identical regeneration from a
+  // destructive one. The generated files carry no seed of their own.
+  writeFileSync(seedPath, `${stamp}\n`, 'utf8');
   writeLines(join(dir, FILES.ledger), books.ledger);
   writeLines(join(dir, FILES.settlements), books.settlements);
   writeLines(join(dir, FILES.bank), books.bank);

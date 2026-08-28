@@ -183,6 +183,7 @@ export function buildProgram(): Command {
     // fallback, because they do not want the same one.
     .argument('[target]', 'batch directory — or, for `explain`, a record id')
     .option('--seed <value>', 'seed for `gen` — the same seed is the same batch')
+    .option('--force', 'replace an existing batch that was generated differently')
     .option('--payments <n>', 'payments to generate', (v) => Number.parseInt(v, 10))
     .option('--checkouts <n>', 'checkouts to generate', (v) => Number.parseInt(v, 10))
     .option('--invoices <n>', 'invoices to generate', (v) => Number.parseInt(v, 10))
@@ -214,6 +215,7 @@ export function buildProgram(): Command {
     .description('Match the ledger against gateway settlements and the bank statement')
     .argument('[books]', 'directory holding the three sets of books', 'books')
     .option('--gen', 'generate a set of books to reconcile')
+    .option('--force', 'replace books that were generated differently')
     .option('--seed <value>', 'seed for --gen')
     .option('--orders <n>', 'captures to generate', (v) => Number.parseInt(v, 10))
     .option('--limit <n>', 'exception lines to print per kind', (v) => Number.parseInt(v, 10))
