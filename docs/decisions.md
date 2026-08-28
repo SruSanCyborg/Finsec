@@ -1500,3 +1500,35 @@ algorithm's two loops into one and dropped the "left child with a right sibling
 in the new tree only" branch, which exists precisely where the two trees differ.
 
 ---
+## D-045 — The palette and the CLI cannot drift any more
+
+Three commands shipped missing from the `/` palette — `revenue stress`, `rules
+test`, `ledger` — and all three were caught by somebody using the shell and
+noticing, after the fact, each time. The lists live in different files
+(`cli.ts` and `CommandPalette.tsx`) and nothing made them agree, so they drifted
+whenever either grew. Fixing it a fourth time by hand would have been treating
+the symptom.
+
+`parity.test.ts` reads the commands commander registers straight out of
+`cli.ts` and compares them with `SHELL_COMMANDS`, both directions. Adding a
+command to one without the other now fails the build and names the missing one.
+
+**The exceptions are enumerated with reasons, not allowed as slack.** Four
+commands are shell-only: `cd` (a one-shot process cannot change its parent
+shell's directory, so `sirius cd` would appear to work and do nothing), `clear`
+and `exit` (there is no transcript and nothing to leave outside the shell), and
+`help` (commander's `--help` and `help <command>` are already better). A blanket
+"some commands are shell-only" would let the next real gap through disguised as
+one of these, so the list is closed and a stale entry fails too.
+
+`shell` was the one genuine gap left and is now listed, with the summary "you
+are already in it" — the shell has always answered it, so it was handled and
+invisible at the same time, which is the worst of both.
+
+Three smaller things the same test now holds: every summary has to say more than
+the command's own name, usage strings are written in the slash form because that
+is where they are read, and a usage line has to name the command it belongs to
+— `/report` documenting `/repot [scan-id]` is the kind of typo that survives
+review forever because both halves look right on their own.
+
+---

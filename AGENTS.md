@@ -60,6 +60,14 @@ What this means in practice:
 | `verifier_status` | `pass` `fail` `escalated` |
 | `source` / `trigger` | `upload` `git` `inline` / `manual` `ci` `webhook` `schedule` |
 
+**Every command works both ways.** `sirius x` and `/x` are the same command, and
+`parity.test.ts` fails the build if either list grows without the other. Four
+entries are shell-only and each says why in that file: `cd` (a one-shot process
+cannot change its parent's directory), `clear`, `exit`, and `help` (commander
+already provides `--help`). Nothing is CLI-only. This drifted three times —
+`revenue stress`, `rules test`, `ledger` — each caught by a person rather than
+by the build, which is why the check exists instead of a fourth fix by hand.
+
 **Rule IDs** are `SIR-SEC-NNN`, numbered in blocks of ten by category: `00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain.
 
 Every rule ships with **one planted example on disk**, in

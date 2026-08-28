@@ -183,6 +183,10 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'logout', summary: 'Remove a stored profile' },
   { name: 'cd', summary: 'Show or change the directory everything runs in', usage: '/cd [path] — bare /cd says where you are', local: true },
   { name: 'help', summary: 'Show this list', local: true },
+  // Listed even though it does nothing here, because the shell already answers
+  // it — "you are already in it" — and a command that is handled but invisible
+  // is one somebody types, gets a sensible reply from, and still cannot find.
+  { name: 'shell', summary: 'Start the interactive shell — you are already in it', local: true },
   { name: 'clear', summary: 'Clear the screen', local: true },
   { name: 'exit', summary: 'Leave the shell', local: true },
 ];
