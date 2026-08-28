@@ -519,9 +519,36 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         handingOver = true;
         instance.unmount();
 
-        // One tick for Ink to restore raw mode and detach its stdin listener
-        // before the child starts reading.
-        await new Promise((resolve) => setTimeout(resolve, 30));
+        // Wait for the unmount to actually finish, rather than guessing.
+        //
+        // This was `setTimeout(30)`, with a comment saying it was one tick for
+        // Ink to restore raw mode and detach its stdin listener. Ink's teardown
+        // is asynchronous and takes as long as it takes; on a loaded machine,
+        // or after a session with a few hundred lines of transcript, it takes
+        // longer than thirty milliseconds. The child then started while the
+        // parent still held stdin in raw mode with a listener attached, and the
+        // two competed for the same keystrokes — the parent winning some, and
+        // then pausing the stream underneath the child when its teardown
+        // finally ran. That is the whole `/watch`-after-`/triage` flake: the
+        // shell kept painting, because painting never depended on stdin, and
+        // never received another keystroke, not even end-of-input.
+        //
+        // `waitUntilExit()` resolves when Ink has finished. It is the signal the
+        // sleep was approximating.
+        try {
+          await instance.waitUntilExit();
+        } catch {
+          // An app that errored on the way out has still let go of stdin, which
+          // is the only thing being waited for here.
+        }
+
+        // And then let go of stdin explicitly. Ink restores raw mode on its own
+        // way out, but the stream is left flowing in the parent, and a flowing
+        // parent stream steals bytes from a child that inherited the same
+        // descriptor.
+        const wasRaw = Boolean(process.stdin.isTTY && process.stdin.isRaw);
+        if (process.stdin.isTTY) process.stdin.setRawMode(false);
+        process.stdin.pause();
 
         const code = await withAlternateScreenSuspended(async () => {
           process.stdout.write('\n');
@@ -542,6 +569,12 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           ...kept.lines,
           { id: Date.now(), text: `/${name} finished (exit ${code}) — back in the shell.`, kind: 'note' },
         ];
+
+        // Hand stdin back before mounting. Ink acquires raw mode itself when it
+        // mounts, but it does not resume a stream somebody else paused, and a
+        // paused stream is a shell that renders perfectly and answers nothing.
+        process.stdin.resume();
+        if (wasRaw && process.stdin.isTTY) process.stdin.setRawMode(true);
 
         handingOver = false;
         instance = render(<App />, { exitOnCtrlC: false });

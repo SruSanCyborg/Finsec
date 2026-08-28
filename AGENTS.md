@@ -245,16 +245,6 @@ duration):
 
 Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
 
-**Known defect, pre-existing and unfixed: the second handover in a session is
-flaky.** `/triage` hands over and comes back; a `/watch` after it sometimes
-never dispatches — the shell keeps painting but stops reading stdin, and ignores
-even EOF (a probe hung for four minutes and had to be killed). `pnpm shell:check`
-fails on it perhaps half the time. It reproduces at `e9af8f3`, before the rule
-work, so it is not a regression from it. Ruled out so far: transcript length
-(mounting with 2000 lines costs 8.5ms) and Ink reusing a torn-down instance (its
-"render() was called again" warning is never emitted). Do not rehearse `/triage`
-and `/watch` back to back until this is understood.
-
 **Full-screen commands hand over rather than refuse.** `/triage` and `/watch`
 draw their own UI, so the shell unmounts, gives them the real terminal, and
 takes it back with the transcript intact when they exit — the way `git` hands
@@ -262,6 +252,15 @@ over to `$EDITOR`. Not a split: splitting means a pty, a terminal emulator and a
 native dependency, which is a multiplexer built for two commands. While a child
 holds the terminal the shell stops treating Ctrl-C as its own, or the keystroke
 that quits the child would end the session.
+
+**The handover waits for the unmount instead of guessing at it.** Ink's teardown
+is asynchronous; a `setTimeout(30)` in its place meant the child sometimes
+started while the shell still held stdin in raw mode with a listener attached,
+and the two competed for the same keystrokes. That was the `/watch`-after-
+`/triage` flake: the shell kept painting, because painting never needed stdin,
+and never took another keystroke — not even end-of-input. It now awaits
+`waitUntilExit()`, releases stdin explicitly before the child and hands it back
+after. Eight isolated cycles and two full `shell:check` runs, all green.
 
 **Everything on the demo path is paced.** The work finishes in a tenth of a
 second and writes fifty lines; without pacing a terminal paints once and the

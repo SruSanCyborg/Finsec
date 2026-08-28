@@ -952,3 +952,42 @@ move — ₹89,30,000, score 60 — because the chaos repo's injection was alrea
 matched on shape and is matched still.
 
 ---
+## D-031 — The handover waits for the unmount instead of guessing at it
+
+`/triage` and `/watch` draw their own full-screen UI, so the shell unmounts,
+gives them the real terminal, and takes it back when they exit. The unmount was
+followed by `setTimeout(30)`, with a comment saying it was one tick for Ink to
+restore raw mode and detach its stdin listener.
+
+Ink's teardown is asynchronous and takes as long as it takes. On a loaded
+machine, or after a session with real scrollback behind it, thirty milliseconds
+is not enough — so the child started while the parent still held stdin in raw
+mode with a listener attached, both processes read the same descriptor, and when
+the parent's teardown finally ran it paused the stream underneath the running
+child.
+
+**Every symptom followed from that, including the ones that made it hard to
+find.** It was intermittent because it was a race against a fixed guess. The
+shell kept painting perfectly, because painting never depended on stdin — only
+reading did. It ignored end-of-input, because a paused stream never emits
+`end`. And it grew more likely in longer sessions, not because rendering a large
+transcript is slow (it is not: mounting with two thousand lines costs 8.5ms) but
+because more transcript means more teardown, which widens the window.
+
+Two hypotheses were measured and discarded before this one, and both are worth
+recording so nobody spends the afternoon on them again: transcript length is not
+the cost, and Ink is not handing back a torn-down renderer — its "render() was
+called again" warning appears in none of the failing transcripts.
+
+The fix is to stop guessing. `await instance.waitUntilExit()` is the signal the
+sleep was approximating, and it resolves exactly when Ink has let go. stdin is
+then released explicitly — raw mode off, stream paused — before the child
+spawns, and handed back after, because Ink acquires raw mode when it mounts but
+will not resume a stream somebody else paused.
+
+Measured rather than declared fixed: eight isolated `/triage` → `q` → `/watch`
+cycles, all eight green, against roughly half failing before. Then two complete
+`shell:check` runs, twenty-one assertions each, no failures and no command
+reporting an error. A flake needs a sample, not a green run.
+
+---
