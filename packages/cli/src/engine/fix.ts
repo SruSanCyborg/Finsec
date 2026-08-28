@@ -32,6 +32,21 @@ export interface LocalFixStage {
   real: boolean;
 }
 
+/**
+ * How much confidence a fix carries, in rustc's vocabulary.
+ *
+ * `enum Applicability { MachineApplicable, MaybeIncorrect, HasPlaceholders,
+ * Unspecified }` is the canonical model and `cargo clippy --fix` applies only
+ * the first — a discipline worth copying exactly, because the alternative is a
+ * single `confidence: 0.84` that means nothing to anyone and gates nothing.
+ *
+ * It is a property of the *match*, not of the template. `execute("… %s" % uid)`
+ * rewrites to bound parameters with the meaning intact, so it is machine
+ * applicable; the same template against `"… %s %s" % uid` is a guess about how
+ * many parameters were meant, and guessing is what `MaybeIncorrect` is for.
+ */
+export type Applicability = 'machine-applicable' | 'maybe-incorrect' | 'has-placeholders' | 'unspecified';
+
 export interface LocalFix {
   action: string;
   target?: string;
@@ -44,6 +59,19 @@ export interface LocalFix {
   escalate: boolean;
   stages: LocalFixStage[];
   confidence: number;
+  /** Whether this may be applied without being asked for. */
+  applicability: Applicability;
+  /**
+   * What changes about the running program, when something does.
+   *
+   * Separate from applicability on purpose, and reported rather than gated on.
+   * Moving a secret to `os.environ` is unambiguously what the author meant —
+   * machine applicable — *and* it makes the program need an environment
+   * variable that must now be set. Both facts are true, only one decides
+   * whether to apply automatically, and the other is what a person wants to
+   * know before pressing y.
+   */
+  behaviourNote?: string;
 }
 
 /** A single-line replacement produced by a template. */
@@ -57,6 +85,8 @@ interface Replacement {
   /** Inclusive 0-based line range to replace, when it is not the finding's line. */
   span?: [number, number];
   confidence: number;
+  applicability: Applicability;
+  behaviourNote?: string;
 }
 
 /** What the surrounding project already does, for templates that must match it. */
@@ -156,6 +186,8 @@ function buildReplacement(
         // the file without leaving the reader guessing what to set instead.
         sideEffects: [{ file: '.env.example', content: `${envName}=` }],
         confidence: 0.92,
+        applicability: 'machine-applicable',
+        behaviourNote: `the program will read ${envName} from the environment — set it before deploying`,
       };
     }
 
@@ -178,11 +210,25 @@ function buildReplacement(
         const bound = operand.trim().startsWith('(')
           ? operand.trim()
           : `(${operand.trim()},)`;
+
+        // Counted, not assumed. One placeholder and one operand is the same
+        // query with the value bound — the meaning is preserved exactly. Two
+        // placeholders and one operand is a guess about what the author meant
+        // to interpolate, and a guess is what `maybe-incorrect` is for.
+        const wanted = (body.match(/%s|%d|%\(/g) ?? []).length;
+        const supplied = bound.startsWith('(')
+          ? bound.slice(1, -1).split(',').filter((part) => part.trim().length > 0).length
+          : 1;
+
         return {
           line: 0,
           next: `${pad}${head}${quote}${body}${quote}, ${bound})${trail ?? ''}`,
           target: operand.trim().replace(/^\(|\)$/g, ''),
           confidence: 0.88,
+          applicability: wanted === supplied ? 'machine-applicable' : 'maybe-incorrect',
+          ...(wanted === supplied
+            ? {}
+            : { behaviourNote: `${wanted} placeholder(s) and ${supplied} value(s) — check the binding by hand` }),
         };
       }
 
@@ -196,6 +242,10 @@ function buildReplacement(
           next: `${pad}${head}${quote}${body.replace(/\{[^}]*\}/g, placeholder)}${quote}, (${operand.trim()},))${trail ?? ''}`,
           target: operand.trim(),
           confidence: 0.84,
+          // `.format()` accepts named and positional fields and reorders them;
+          // turning that into positional binds is a guess about intent.
+          applicability: 'maybe-incorrect',
+          behaviourNote: 'format fields become positional parameters — check the order',
         };
       }
 
@@ -215,6 +265,9 @@ function buildReplacement(
           next: `${pad}${head}${quote}${templated}${quote}, (${params.join(', ')},))${trail ?? ''}`,
           target: params[0],
           confidence: 0.81,
+          // Every field becomes one parameter, in the order it appeared: the
+          // count cannot disagree, because both sides come from the same list.
+          applicability: 'machine-applicable',
         };
       }
 
@@ -246,6 +299,12 @@ function buildReplacement(
         next: `${pad}${head}${wrapped.join(', ')})${trail ?? ''}`,
         target: (parts[1] ?? parts[0])?.trim(),
         confidence: 0.74,
+        // `redact()` is a helper this template assumes and does not create. The
+        // patched line parses and the rule stops matching, so the verifier
+        // passes it — and it would still raise a NameError at runtime in a
+        // project that has no such function.
+        applicability: 'maybe-incorrect',
+        behaviourNote: 'calls redact(), which this fix does not define — add it or point it at yours',
       };
     }
 
@@ -287,6 +346,11 @@ function buildReplacement(
         // Lower than the others: ordering among several decorators is a
         // judgement this template makes only one rule about.
         confidence: 0.62,
+        // It also changes who can reach the endpoint, which is the point and
+        // is also the sort of thing nobody should discover from a diff they
+        // did not ask to have applied.
+        applicability: 'maybe-incorrect',
+        behaviourNote: 'the endpoint now requires authentication — check the decorator order',
       };
     }
 
@@ -390,6 +454,14 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
       detail: verdict.detail,
       real: true,
     },
+    {
+      name: 'applicability',
+      detail:
+        replacement.applicability === 'machine-applicable'
+          ? 'machine-applicable — applied without asking'
+          : `${replacement.applicability} — needs --unsafe-fixes`,
+      real: true,
+    },
   ];
 
   return {
@@ -403,6 +475,8 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
     escalate: verdict.status !== 'pass',
     stages,
     confidence: replacement.confidence,
+    applicability: replacement.applicability,
+    ...(replacement.behaviourNote ? { behaviourNote: replacement.behaviourNote } : {}),
   };
 }
 
@@ -454,5 +528,16 @@ async function verify(input: {
     };
   }
 
-  return { status: 'pass', detail: `re-ran ${input.ruleId}` };
+  // The third condition the design report asks for, after "resolves it" and
+  // "reparses", is that the fix converges — ESLint caps its fixer loop at ten
+  // passes and treats exhaustion as a bug report about conflicting rules.
+  //
+  // Here it follows from the two checks above rather than needing a third.
+  // Fixes are selected by findings, and the rule that produced this finding no
+  // longer matches, so nothing would select this line a second time. Saying
+  // that is honest; running the template again is not the same test, and it
+  // was actively wrong — `add_auth_decorator` inserts a line, so re-running it
+  // against the same index reads the decorator it just wrote and reports a
+  // template that converges perfectly well as non-idempotent.
+  return { status: 'pass', detail: `re-ran ${input.ruleId}, no match — nothing would select it again` };
 }

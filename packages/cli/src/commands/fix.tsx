@@ -29,6 +29,8 @@ import type { FixSuggestion } from '../domain.js';
 interface FixFlags {
   all?: boolean;
   apply?: boolean;
+  /** Apply fixes that are not machine-applicable, rustc's term. */
+  unsafeFixes?: boolean;
   /**
    * Show the panel and the diff, then stop without prompting or writing.
    *
@@ -210,6 +212,22 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
             `decorator to apply. Adding authentication here is a design decision.`
           : `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).`;
       process.stderr.write(`${reason}\n`);
+      continue;
+    }
+
+    // rustc's discipline, which `cargo clippy --fix` follows exactly: only
+    // machine-applicable suggestions are applied without being asked for. The
+    // rest are shown in full and skipped, because a fix that "may be what the
+    // user intended" is a proposal, and applying a proposal unasked is how a
+    // tool loses the right to touch anybody's code.
+    const applicability = (suggestion as { applicability?: string }).applicability ?? 'unspecified';
+    if (applicability !== 'machine-applicable' && !flags.unsafeFixes && !flags.dryRun) {
+      const note = (suggestion as { behaviour_note?: string }).behaviour_note;
+      process.stderr.write(
+        `skipped ${finding.rule_id} at ${finding.file}:${finding.line} — ${applicability}.\n` +
+          (note ? `  ${note}\n` : '') +
+          `  See it with --dry-run, or apply it with --unsafe-fixes.\n`,
+      );
       continue;
     }
 
@@ -413,6 +431,8 @@ async function localSuggestion(
     // which is what happened while only the diff was replayed and the imports
     // the patch depends on were silently dropped.
     verified_source: built.patched,
+    applicability: built.applicability,
+    ...(built.behaviourNote ? { behaviour_note: built.behaviourNote } : {}),
     verified_from: readFileSync(filePath, 'utf8'),
   } as FixSuggestion & {
     stages: typeof built.stages;

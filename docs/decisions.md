@@ -1416,3 +1416,40 @@ Measured for regressions: chaos-repo 6 findings unchanged, and nothing new in
 this repository's own source.
 
 ---
+## D-043 — Which fixes may be applied without being asked
+
+Every fix carried a `confidence: 0.84` that gated nothing and meant nothing to
+anybody. The verifier decided whether a patch resolved the finding and parsed,
+and after that all four templates were equal — so moving a secret to
+`os.environ`, which is unambiguously what the author meant, and wrapping a log
+argument in `redact()`, which calls a helper this tool does not define and would
+raise a NameError in a project that has none, were applied by the same keystroke.
+
+rustc's `Applicability` is the canonical model and `cargo clippy --fix` applies
+only `MachineApplicable`. Copied exactly: `--apply` applies machine-applicable
+fixes and prints the rest with their reason, and `--unsafe-fixes` opts into
+`maybe-incorrect`.
+
+**Applicability belongs to the match, not the template.** `execute("… %s" % uid)`
+rewrites to bound parameters with the meaning intact — machine applicable. The
+same template against `"… %s … %s" % uid` is a guess about how many values were
+meant, and guessing is what `maybe-incorrect` is for. The placeholders are
+counted against the operands rather than the template being labelled once.
+
+**Consequence is a second axis, reported and not gated on.** Moving a secret to
+the environment is certain *and* makes the program need a variable that must now
+be set. Both are true; only the first decides whether to apply automatically,
+and the second is what somebody wants to know before pressing y. So a fix can
+carry `behaviourNote` — "the program will read STRIPE_KEY from the environment",
+"calls redact(), which this fix does not define" — without that note blocking it.
+
+**One thing I built and removed.** The report's third verifier condition is that
+a fix be idempotent, so the first attempt re-ran the template against its own
+output. That is not the test it looks like: `add_auth_decorator` inserts a line,
+so the second run read the decorator it had just written and failed a template
+that converges perfectly well. Convergence follows from the checks already
+there — fixes are selected by findings, and the rule no longer matches, so
+nothing would select the line again. The verifier says that instead of claiming
+a test it is not running.
+
+---

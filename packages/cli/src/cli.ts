@@ -75,6 +75,7 @@ export function buildProgram(): Command {
     .description('Apply a Cerebus fix suggestion')
     .argument('[finding]', 'finding id or rule id, e.g. SIR-SEC-001')
     .option('--all', 'walk every matching finding')
+    .option('--unsafe-fixes', 'also apply fixes that are not machine-applicable')
     .option('--apply', 'write without prompting (implies non-interactive)')
     .option('--dry-run', 'show the proposed fix and stop, writing nothing')
     .option('--target <dir>', 'the directory that was scanned, when it was not this one')
