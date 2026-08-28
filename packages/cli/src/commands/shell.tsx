@@ -100,11 +100,12 @@ function sessionContext(glyphs: Glyphs, globals: GlobalFlags): string {
       overrides: { apiUrl: globals.apiUrl, projectId: globals.project, profile: globals.profile },
     });
     // The directory comes first, because `/scan` takes no argument and scans
-    // here — "what am I even pointed at?" should never need asking.
-    const here = cwd.split('/').pop() || cwd;
+    // here — "what am I even pointed at?" should never need asking. It showed
+    // only the last segment, which answers that question badly: `ho/` could be
+    // any of a dozen directories, and somebody did have to ask.
     const project = findProjectRoot(cwd);
     return [
-      `scanning ${here}/`,
+      `scanning ${shortPath(cwd)}`,
       project ? `project ${project.dir.split('/').pop()}` : 'no sirius.yaml',
       config.projectId ? `api ${config.apiUrl.replace(/^https?:\/\//, '')}` : 'local engine',
     ].join(glyphs.separator);
@@ -322,7 +323,17 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           }
 
           if (parsed.name === 'cd') {
-            const to = parsed.args[0] ?? homedir();
+            // Bare `/cd` says where you are rather than moving you home. In a
+            // shell whose every command is relative to one directory, "which
+            // one?" is the more likely question, and a silent jump to home is a
+            // surprising answer to it.
+            if (!parsed.args[0]) {
+              append(`here: ${process.cwd()}`, 'note');
+              append('move with  /cd <path>  ·  /cd ~  goes home', 'note');
+              return;
+            }
+
+            const to = parsed.args[0] === '~' ? homedir() : parsed.args[0];
             try {
               process.chdir(to);
               append(`now scanning ${process.cwd()}`, 'note');
@@ -761,6 +772,28 @@ export function Prompt({ capabilities, glyphs, history, onSubmit }: PromptProps)
       ) : null}
     </Box>
   );
+}
+
+/**
+ * A path short enough for a status bar and specific enough to act on.
+ *
+ * Home becomes `~`, and anything still too long loses its middle rather than
+ * its end — the last segments are the ones that identify the directory, and
+ * truncating from the right throws away exactly the part being asked about.
+ */
+export function shortPath(path: string, max = 44): string {
+  const home = homedir();
+  const withTilde = path === home ? '~' : path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
+  if (withTilde.length <= max) return withTilde;
+
+  const segments = withTilde.split('/');
+  const tail: string[] = [];
+  for (let i = segments.length - 1; i >= 0; i -= 1) {
+    const candidate = [segments[i] as string, ...tail];
+    if (candidate.join('/').length + 2 > max) break;
+    tail.unshift(segments[i] as string);
+  }
+  return `…/${tail.join('/')}`;
 }
 
 /** Adds `--target` when the shell knows what was scanned and the caller did not say. */

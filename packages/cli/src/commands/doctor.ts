@@ -53,17 +53,34 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   const glyphs = glyphsFor(capabilities);
   const checks: Check[] = [];
 
-  // ---- config
+  // ---- where
 
   const project = findProjectRoot(cwd);
+
+  // First, because every other line is relative to it. A report that says "no
+  // sirius.yaml found" and "92 findings" without naming the directory it looked
+  // in is a report that cannot be acted on — and inside the shell, where the
+  // working directory is wherever the shell was started or last `/cd`'d to,
+  // that is a genuinely easy thing to lose track of.
+  checks.push({
+    status: 'ok',
+    label: 'working dir',
+    detail: cwd,
+    ...(project && project.dir !== cwd
+      ? { hint: `config and state come from the project root at ${project.dir}` }
+      : {}),
+  });
+
+  // ---- config
+
   checks.push(
     project
       ? { status: 'ok', label: 'project config', detail: project.file }
       : {
           status: 'warn',
           label: 'project config',
-          detail: 'no sirius.yaml found',
-          hint: 'Run `sirius init` to create one.',
+          detail: 'no sirius.yaml found here or above',
+          hint: `Run \`sirius init\` in ${cwd} to create one.`,
         },
   );
 
@@ -236,7 +253,8 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
 
   // ---- state
 
-  const cache = loadLastScan(project?.dir ?? cwd);
+  const cacheRoot = project?.dir ?? cwd;
+  const cache = loadLastScan(cacheRoot);
   if (cache) {
     const replayed = cache.source === 'replay';
     checks.push({
@@ -245,6 +263,9 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
       detail: replayed
         ? `replay, ${cache.findings.length} findings — fix and triage need a real scan`
         : `${cache.scan_id.slice(0, 14)} · ${cache.source ?? 'local'} · ${cache.findings.length} findings · ${cache.scanned_at}`,
+      // Which tree those findings are about. `fix` will edit files under it, so
+      // "92 findings" with no address is the one number here worth pinning down.
+      hint: `of ${cache.root}, read from ${cacheRoot}/.sirius/last-scan.json`,
     });
   }
 
@@ -258,11 +279,22 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
     fail: capabilities.unicode ? '✗' : 'FAIL',
   };
 
-  process.stdout.write('\n');
+  // Paced a check at a time when a human is watching.
+  //
+  // Twenty lines written in one tick scroll past the interactive shell's
+  // viewport before it repaints, and the line that goes first is the working
+  // directory — the one somebody running `/doctor` to ask "where is this even
+  // running?" most needs to see. Off for a pipe and for CI, where the exit code
+  // is the output and delay buys nothing.
+  const { writeLinesPaced } = await import('../engine/pace.js');
+  const perLine = process.stdout.isTTY || process.env.SIRIUS_STREAM_PLAIN === '1' ? 45 : 0;
+
+  const rendered: string[] = [''];
   for (const check of checks) {
-    process.stdout.write(`  ${mark[check.status]}  ${check.label.padEnd(width)}  ${check.detail}\n`);
-    if (check.hint) process.stdout.write(`     ${' '.repeat(width)}  ${check.hint}\n`);
+    rendered.push(`  ${mark[check.status]}  ${check.label.padEnd(width)}  ${check.detail}`);
+    if (check.hint) rendered.push(`     ${' '.repeat(width)}  ${check.hint}`);
   }
+  await writeLinesPaced(rendered, perLine);
 
   const failed = checks.filter((c) => c.status === 'fail').length;
   const warned = checks.filter((c) => c.status === 'warn').length;

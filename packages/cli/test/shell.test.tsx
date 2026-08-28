@@ -9,7 +9,9 @@ import React from 'react';
 import { render } from 'ink-testing-library';
 import { describe, expect, it, vi } from 'vitest';
 
-import { Prompt, tokenize } from '../src/commands/shell.js';
+import { homedir } from 'node:os';
+
+import { Prompt, shortPath, tokenize } from '../src/commands/shell.js';
 import { SHELL_COMMANDS, filterCommands } from '../src/ui/CommandPalette.js';
 import { detectCapabilities, glyphsFor } from '../src/ui/theme.js';
 
@@ -246,6 +248,44 @@ describe('the full-screen commands', () => {
     for (const command of SHELL_COMMANDS) {
       const text = `${command.summary} ${command.usage ?? ''}`.toLowerCase();
       expect(text, command.name).not.toMatch(/leave the shell and run|run it outside|start the shell with/);
+    }
+  });
+});
+
+/**
+ * "Where is it even running?"
+ *
+ * Asked out loud, after a `/doctor` that reported no sirius.yaml and 92
+ * findings without naming a single directory. Everything in this shell is
+ * relative to one, and the status bar showed only its last segment — `ho/`,
+ * which could be any of a dozen.
+ */
+describe('shortPath', () => {
+  const home = homedir();
+
+  it('writes home as a tilde', () => {
+    expect(shortPath(home)).toBe('~');
+    expect(shortPath(`${home}/personal/clifintech`)).toBe('~/personal/clifintech');
+  });
+
+  it('leaves a short absolute path alone', () => {
+    expect(shortPath('/tmp/batch')).toBe('/tmp/batch');
+  });
+
+  it('drops the middle, never the end', () => {
+    // The last segments are what identify a directory. Truncating from the
+    // right throws away exactly the part being asked about.
+    const long = '/private/var/folders/k6/kcn9kf8s6vnc5q3qrp9r6shr0000gp/T/tmp.abc/batch';
+    const short = shortPath(long);
+
+    expect(short.length).toBeLessThanOrEqual(44);
+    expect(short.startsWith('…/')).toBe(true);
+    expect(short.endsWith('/batch')).toBe(true);
+  });
+
+  it('never returns something longer than it was given', () => {
+    for (const path of ['/a', '/a/b/c', `${home}/x`, '/'.padEnd(200, 'x')]) {
+      expect(shortPath(path).length).toBeLessThanOrEqual(Math.max(path.length, 44));
     }
   });
 });
