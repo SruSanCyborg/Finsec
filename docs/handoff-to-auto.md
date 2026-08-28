@@ -8,7 +8,7 @@ Full rationale for each item is in [`decisions.md`](decisions.md).
 
 ---
 
-## 0. Read this first: two things changed under you
+## 1. Read this first: two things changed under you
 
 **The rule IDs were renamed.** `FIN-SEC-001` is now `SIR-SEC-001`. The project became `finsec-lint` → `sirius`, rule identifiers included. This is the item that costs real rework if it reaches you late, because you are building the YAML catalogue, the detection rules, and the Cerebus fix templates against IDs that appear 137 times in the PRD.
 
