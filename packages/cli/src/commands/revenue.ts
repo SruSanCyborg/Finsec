@@ -51,6 +51,8 @@ interface RevenueFlags {
   maxSteps?: number;
   output?: string;
   verify?: string;
+  /** `explain` takes the record id as its argument, so the batch moves to a flag. */
+  batch?: string;
 }
 
 interface GlobalFlags {
@@ -110,9 +112,11 @@ export async function runRevenue(
       return runRecovery(target, flags, globals);
     case 'audit':
       return auditTrail(target, flags);
+    case 'explain':
+      return explainRecord(target, flags, globals);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: gen, detect, eval, recover, audit.',
+        hint: 'Expected one of: gen, detect, eval, recover, explain, audit.',
       });
   }
 }
@@ -415,6 +419,106 @@ async function runRecovery(
 
   // The rules table quotes this run's limits, not the built-in ones.
   await writePaced(renderRecovery(result.outcome, rulesFor(limits), palette, trailPath).split('\n'), pace * 3);
+}
+
+// ---- explain ----------------------------------------------------------------
+
+/**
+ * `sirius revenue explain <record-id>` — the counterpart to explaining a rule.
+ *
+ * The model is a scorecard rather than something with better numbers precisely
+ * so this command can exist: every step from the base rate to the decision
+ * prints as a sentence somebody can disagree with. A model that cannot be
+ * argued with in a meeting does not get used in one.
+ *
+ * The record id comes first here, not the batch, because that is the order the
+ * question arrives in — somebody is looking at a line of output and asking why.
+ */
+async function explainRecord(
+  recordId: string | undefined,
+  flags: RevenueFlags,
+  globals: GlobalFlags,
+): Promise<void> {
+  if (!recordId) {
+    throw new CliError('Which record?', {
+      hint: 'e.g. sirius revenue explain inv_00059 — the ids are in `revenue detect` output',
+    });
+  }
+
+  const split = parseSplit(flags.split ?? 'all');
+  const { batch, model, assessments, context, capacity } = await scoreBatch(flags.batch, flags, split);
+
+  const record = batch.records.find((entry) => entry.id === recordId);
+  const assessment = assessments.find((entry) => entry.record_id === recordId);
+
+  if (!record) {
+    throw new CliError(`No record "${recordId}" in ${batch.dir}.`, {
+      hint: 'Ids look like pay_00123, chk_00045 or inv_00007.',
+    });
+  }
+  if (!assessment) {
+    throw new CliError(`${recordId} is in the batch but was not scored in this split.`, {
+      hint: 'Pass --split all to score every record.',
+    });
+  }
+
+  const { chooseAction, check, costsFrom, emptyState, limitsFrom, rulesFor } = await import(
+    '../revenue/policy.js'
+  );
+  const { interventionCost } = await import('../revenue/cost.js');
+  const { shareFor, shareKeyOf } = await import('../revenue/model.js');
+
+  const config = projectConfig();
+  const limits = limitsFrom(config.revenue);
+  const costs = costsFrom(config.revenue);
+  const at = batch.manifest.as_of ? new Date(batch.manifest.as_of) : new Date();
+
+  const action = chooseAction(record, context, 0);
+  const cost = interventionCost(action, costs);
+  const verdict = check(action, record, context, emptyState(), at, limits, cost);
+
+  // Only read when the batch has an answer key, and never before the score is
+  // computed. It is printed at the bottom, under its own heading, because it
+  // plays no part in anything above it.
+  const truth = hasTruth(batch.dir) ? loadTruth(batch.dir).get(recordId) : undefined;
+
+  const explanation = {
+    record,
+    assessment,
+    split,
+    baseRate: model.base_rate,
+    calibration: model.calibration,
+    share: shareFor(model, record),
+    shareKey: shareKeyOf(record),
+    cost_paise: cost,
+    action,
+    verdict: {
+      allowed: verdict.allowed,
+      ...(verdict.rule ? { rule: verdict.rule } : {}),
+      ...(verdict.detail ? { detail: verdict.detail } : {}),
+    },
+    capacity,
+    floor: model.threshold,
+    ...(truth ? { truth } : {}),
+  };
+
+  if (flags.json) {
+    process.stdout.write(
+      JSON.stringify({ schema: 'sirius.revenue.explain/v1', ...explanation, rules: rulesFor(limits) }, null, 2) +
+        '\n',
+    );
+    return;
+  }
+
+  const capabilities = detectCapabilities({ noColor: globals.color === false });
+  const palette = paletteFor({
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: capabilities.width,
+  });
+
+  const { renderExplanation } = await import('../render/revenue.js');
+  process.stdout.write(renderExplanation(explanation, palette));
 }
 
 // ---- audit ------------------------------------------------------------------

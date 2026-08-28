@@ -79,6 +79,43 @@ That column exists because the evaluation caught the agent itself retrying a
 `risk_block`. The issuer had already refused it, and **a low probability is not
 a prohibition**.
 
+### Asking why
+
+```
+sirius revenue explain pay_00051 --split test
+```
+
+```
+  pay_00051   ₹29,733   upi_collect network_timeout · attempt 2 · tatva
+
+  HOW THE SCORE WAS REACHED
+    start                 base rate 36.6% — how often acting pays off at all
+    failure                 +4.1  network_timeout ×1.33
+    rail                    +3.8  upi_collect ×1.30
+    attempts                +0.9  2 ×1.06
+    shrink                ×0.8556 — the model is overconfident and was told so on the training half
+    score                     51  the chance this comes back BECAUSE the agent acts
+
+  WHAT THAT IS WORTH
+    0.51 × ₹29,733 × 1 (recovery share for payment:network_timeout)
+      = ₹15,276 expected, against ₹3.00 to act
+
+  WHAT THE AGENT DOES
+    ◆ retry_now
+    ⏸ cooldown — 3.2h since the last attempt, 6h required
+        wait 6h before retrying — 30h when the account was empty
+        card-scheme retry guidance; a retry into the same empty account is a second decline
+```
+
+This is the reason the model is a scorecard rather than something with better
+numbers: every line is a sentence a payments lead can disagree with. A model
+that cannot be argued with in a meeting does not get used in one.
+
+On a batch with labels it also prints **what actually happens**, last and under
+its own heading — including the uncomfortable case where the model scored a
+record 88 and the answer key says it was never recoverable by anyone. It plays
+no part in the score, and the layout says so by position.
+
 ---
 
 ## 2. Recovery: bounded, escalating, and auditable

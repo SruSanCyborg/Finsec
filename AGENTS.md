@@ -126,10 +126,10 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `doctor` | Done — reports against the mode the scan will actually run in, self-tests both engines, and fails on a signing key that is not 0600 |
 | `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
 | `watch`, `explain` | Done |
-| **`revenue detect\|eval`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost |
+| **`revenue detect\|eval\|explain`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost, and a per-record evidence ladder |
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 504 passing |
+| Tests | 510 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no

@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COSTS } from '../src/revenue/cost.js';
 import { evaluate } from '../src/revenue/evaluate.js';
 import { analyzeBatch } from '../src/revenue/features.js';
-import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift } from '../src/revenue/model.js';
+import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift, shareFor } from '../src/revenue/model.js';
 import { Rng } from '../src/revenue/random.js';
 import { generateBatch, splitOf } from '../src/revenue/synth.js';
 
@@ -321,5 +321,65 @@ describe('the generator\'s own randomness', () => {
     // A uniform batch would make money-weighted and count-weighted metrics the
     // same number, and hide the distinction the report exists to draw.
     expect(top).toBeGreaterThan(median * 5);
+  });
+});
+
+/**
+ * Explaining one record.
+ *
+ * The model is a scorecard rather than something with better numbers precisely
+ * so this can exist: every step from the base rate to the decision has to print
+ * as a sentence somebody can disagree with. These tests check the chain is
+ * complete and that the answer key stays out of it.
+ */
+describe('the evidence behind one record', () => {
+  const generated = batch('explain-seed');
+  const model = fitModel(generated.records, generated.truth);
+  const context = analyzeBatch(generated.records);
+  const { assessments } = assessBatch(generated.records, model, { context });
+  const flagged = assessments.find((assessment) => assessment.flagged) as (typeof assessments)[number];
+
+  it('gives every scored record a reason for each feature that moved it', () => {
+    expect(flagged.evidence.length).toBeGreaterThan(3);
+    for (const item of flagged.evidence) {
+      expect(item.feature).toBeTruthy();
+      // `detail` carries the bucket and the likelihood ratio — "0-15 ×4.03" —
+      // which is the part somebody argues with.
+      expect(item.detail).toMatch(/×\d/);
+    }
+  });
+
+  it('orders the evidence by how much it actually moved the score', () => {
+    const points = flagged.evidence.map((item) => Math.abs(item.points));
+    expect([...points].sort((a, b) => b - a)).toEqual(points);
+  });
+
+  it('reconstructs the score from the base rate and the evidence', () => {
+    // The arithmetic the explanation prints has to be the arithmetic that ran.
+    // Ten points is a doubling of the odds, and the fitted shrink is applied
+    // last, so the chain has to close.
+    const prior = Math.log(model.base_rate / (1 - model.base_rate));
+    const contributions = flagged.evidence.reduce((sum, item) => sum + (item.points / 10) * Math.LN2, 0);
+    const logOdds = model.calibration.slope * (prior + contributions) + model.calibration.intercept;
+    const reconstructed = Math.round((1 / (1 + Math.exp(-logOdds))) * 100);
+
+    expect(Math.abs(reconstructed - flagged.score)).toBeLessThanOrEqual(1);
+  });
+
+  it('puts the hold first when there is one, so nothing below it is read as a score', () => {
+    const held = assessments.find((assessment) => isHeld(assessment));
+    expect(held?.evidence[0]?.feature).toBe('hold');
+    expect(held?.score).toBe(0);
+    expect(held?.expected_recovery_paise).toBe(0);
+  });
+
+  it('prices a record at probability times what is actually recoverable', () => {
+    const byId = new Map(generated.records.map((record) => [record.id, record]));
+    const record = byId.get(flagged.record_id) as (typeof generated.records)[number];
+    const share = shareFor(model, record);
+
+    const expected = Math.round((flagged.score / 100) * record.amount_paise * share);
+    // Rounding at a different point can move this by a rupee or two.
+    expect(Math.abs(expected - flagged.expected_recovery_paise)).toBeLessThan(record.amount_paise * 0.02);
   });
 });

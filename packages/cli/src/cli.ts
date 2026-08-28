@@ -177,8 +177,11 @@ export function buildProgram(): Command {
   program
     .command('revenue')
     .description('Detect, diagnose and recover revenue at risk in a batch of records')
-    .argument('[subcommand]', 'gen | detect | eval | recover | audit', 'detect')
-    .argument('[batch]', 'batch directory', 'batch')
+    .argument('[subcommand]', 'gen | detect | eval | recover | explain | audit', 'detect')
+    // No default: with one, `revenue explain` with no id reported `No record
+    // "batch"` instead of asking which record. Each subcommand supplies its own
+    // fallback, because they do not want the same one.
+    .argument('[target]', 'batch directory — or, for `explain`, a record id')
     .option('--seed <value>', 'seed for `gen` — the same seed is the same batch')
     .option('--payments <n>', 'payments to generate', (v) => Number.parseInt(v, 10))
     .option('--checkouts <n>', 'checkouts to generate', (v) => Number.parseInt(v, 10))
@@ -194,10 +197,11 @@ export function buildProgram(): Command {
     .option('--max-steps <n>', 'times one record may be worked', (v) => Number.parseInt(v, 10))
     .option('--output <file>', 'where to write the audit trail')
     .option('--verify <file>', 'check a signed audit trail instead of running')
+    .option('--batch <dir>', 'batch directory, when the argument is a record id')
     .option('--json', 'machine-readable output')
-    .action(async (subcommand: string, batch: string, options: Record<string, unknown>, command: Command) => {
+    .action(async (subcommand: string, target: string, options: Record<string, unknown>, command: Command) => {
       const { runRevenue } = await import('./commands/revenue.js');
-      await runRevenue(subcommand, batch, options, command.parent?.opts() ?? {});
+      await runRevenue(subcommand, target, options, command.parent?.opts() ?? {});
     });
 
   program

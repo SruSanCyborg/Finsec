@@ -19,7 +19,7 @@ import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
 import type { RecoveryOutcome } from '../revenue/recover.js';
-import type { Assessment, RiskRecord } from '../revenue/types.js';
+import type { Assessment, Intervention, RiskRecord } from '../revenue/types.js';
 
 const DIM = '\u001b[38;5;244m';
 const BOLD = '\u001b[1m';
@@ -92,7 +92,14 @@ export function paletteFor(options: RevenueRenderOptions = {}): Palette {
     violet: paint(VIOLET),
     rupee: (paise: number) => {
       const rupees = paise / 100;
-      const text = formatInr(Math.round(rupees));
+      // Rounded to the rupee, an SMS costs "₹0" — which reads as free, and free
+      // is the one thing an intervention is not. So a small amount that is not
+      // a whole number of rupees keeps its paise. Everything else is grouped and
+      // whole: nobody reading a lakh figure wants two decimals, and a ₹49
+      // record should not sprout them just because a ₹0.18 cost needs them.
+      const fractional = Math.abs(rupees % 1) > 1e-9;
+      const text =
+        fractional && Math.abs(rupees) < 100 ? `₹${rupees.toFixed(2)}` : formatInr(Math.round(rupees));
       return unicode ? text : text.replace('₹', 'Rs.');
     },
     hr: (unicode ? '─' : '-').repeat(width),
@@ -562,4 +569,170 @@ export function renderRecoveryLog(
   }
 
   return lines;
+}
+
+export interface RecordExplanation {
+  record: RiskRecord;
+  assessment: Assessment;
+  /** Which split it was scored in — the ranking differs between them. */
+  split: string;
+  /** Prior odds the scorecard started from, as a probability. */
+  baseRate: number;
+  /** Slope and intercept of the fitted shrink. */
+  calibration: { slope: number; intercept: number };
+  /** Share of the amount that comes back, for this record's bucket. */
+  share: number;
+  shareKey: string;
+  /** What acting would cost, and what the agent would do. */
+  cost_paise: number;
+  action: Intervention;
+  /** Why the action would or would not be permitted, right now. */
+  verdict: { allowed: boolean; rule?: { id: string; says: string; basis: string }; detail?: string };
+  capacity: { max_actions: number; rule: string };
+  floor: number;
+  /** Present only when the batch carries labels. Never used to score. */
+  truth?: { recoverable: boolean; self_heals: boolean; best_action: string; recoverable_paise: number };
+}
+
+/**
+ * One record, and every step between it and the agent's decision.
+ *
+ * The counterpart to `sirius explain SIR-SEC-001` on the code side, and the
+ * reason the model is a scorecard rather than something with better numbers:
+ * every line below is a sentence a payments lead can disagree with. A model
+ * that cannot be argued with in a meeting does not get used in one.
+ *
+ * The answer key is printed last, clearly separated, and only when the batch
+ * has one. It plays no part in the score — putting it at the bottom rather than
+ * beside the evidence is the layout saying so.
+ */
+export function renderExplanation(explanation: RecordExplanation, palette: Palette): string {
+  const { record, assessment, truth } = explanation;
+  const lines: string[] = [];
+  const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+
+  lines.push('');
+  lines.push(
+    `  ${palette.bold(record.id)}   ${palette.bold(palette.rupee(record.amount_paise))}   ` +
+      palette.dim(describe(record)),
+  );
+  lines.push(
+    `  ${palette.dim(
+      `scored against split=${explanation.split} — capacity and ranking are relative to the records it competed with`,
+    )}`,
+  );
+  lines.push('');
+
+  // ---- the scorecard, in the order it is computed
+  lines.push(`  ${palette.bold('HOW THE SCORE WAS REACHED')}`);
+  lines.push(
+    `    ${palette.dim('start'.padEnd(22))}${palette.dim(
+      `base rate ${pct(explanation.baseRate)} — how often acting pays off at all`,
+    )}`,
+  );
+
+  for (const item of assessment.evidence) {
+    if (item.feature === 'hold') continue;
+    const sign = item.points >= 0 ? '+' : '−';
+    const paint = item.points >= 0 ? palette.green : palette.amber;
+    lines.push(
+      `    ${item.feature.padEnd(22)}${paint(`${sign}${Math.abs(item.points).toFixed(1)}`.padStart(6))}  ` +
+        palette.dim(item.detail),
+    );
+  }
+
+  lines.push(
+    `    ${palette.dim('shrink'.padEnd(22))}${palette.dim(
+      `×${explanation.calibration.slope} — the model is overconfident and was told so on the training half`,
+    )}`,
+  );
+  lines.push(
+    `    ${palette.bold('score'.padEnd(22))}${palette.bold(String(assessment.score).padStart(6))}  ` +
+      palette.dim('the chance this comes back BECAUSE the agent acts'),
+  );
+  lines.push('');
+
+  // ---- the money
+  lines.push(`  ${palette.bold('WHAT THAT IS WORTH')}`);
+  lines.push(
+    `    ${(assessment.score / 100).toFixed(2)} × ${palette.rupee(record.amount_paise)} × ` +
+      `${explanation.share} ${palette.dim(`(recovery share for ${explanation.shareKey})`)}`,
+  );
+  lines.push(
+    `      = ${palette.bold(palette.rupee(assessment.expected_recovery_paise))} ${palette.dim(
+      `expected, against ${palette.rupee(explanation.cost_paise)} to act`,
+    )}`,
+  );
+  lines.push('');
+
+  // ---- the decision
+  const held = assessment.evidence[0]?.feature === 'hold';
+  lines.push(`  ${palette.bold('WHAT THE AGENT DOES')}`);
+
+  if (held) {
+    lines.push(
+      `    ${palette.amber(palette.glyph('hold'))} ${palette.amber('held')} — ${palette.dim(
+        assessment.evidence[0]?.detail ?? '',
+      )}`,
+    );
+    lines.push(`    ${palette.dim('no score, no ranking, no action. This one is for a human.')}`);
+  } else if (assessment.flagged) {
+    lines.push(`    ${palette.violet(palette.glyph('flag'))} ${palette.bold(explanation.action)}`);
+    lines.push(
+      `    ${palette.dim(
+        `inside this run's capacity of ${explanation.capacity.max_actions} (${explanation.capacity.rule})`,
+      )}`,
+    );
+  } else if (assessment.score < explanation.floor) {
+    lines.push(
+      `    ${palette.dim(palette.glyph('skip'))} left alone — ${palette.dim(
+        `score ${assessment.score} is below the floor of ${explanation.floor}`,
+      )}`,
+    );
+  } else {
+    lines.push(
+      `    ${palette.dim(palette.glyph('skip'))} left alone — ${palette.dim(
+        `above the floor, but ${explanation.capacity.max_actions} records were worth more this run`,
+      )}`,
+    );
+  }
+
+  if (!held) {
+    const { verdict } = explanation;
+    lines.push(
+      verdict.allowed
+        ? `    ${palette.green(palette.glyph('check'))} ${palette.dim(
+            `${explanation.action} is permitted right now`,
+          )}`
+        : `    ${palette.amber(palette.glyph('hold'))} ${palette.amber(verdict.rule?.id ?? 'refused')} ` +
+            palette.dim(`— ${verdict.detail ?? ''}`),
+    );
+    if (!verdict.allowed && verdict.rule) {
+      lines.push(`        ${palette.dim(verdict.rule.says)}`);
+      lines.push(`        ${palette.dim(verdict.rule.basis)}`);
+    }
+  }
+
+  lines.push('');
+
+  // ---- the answer key, if this batch has one
+  if (truth) {
+    lines.push(`  ${palette.bold('WHAT ACTUALLY HAPPENS')}   ${palette.dim('from the labels — not used to score')}`);
+    const verdictLine = !truth.recoverable
+      ? palette.red('not recoverable by anyone')
+      : truth.self_heals
+        ? palette.amber('recoverable, but it comes back on its own — acting buys nothing')
+        : palette.green('recoverable, and only if somebody acts');
+    lines.push(`    ${verdictLine}`);
+    if (truth.recoverable) {
+      lines.push(
+        `    ${palette.dim(
+          `${palette.rupee(truth.recoverable_paise)} of it, and the action that works is ${truth.best_action}`,
+        )}`,
+      );
+    }
+    lines.push('');
+  }
+
+  return lines.join('\n');
 }
