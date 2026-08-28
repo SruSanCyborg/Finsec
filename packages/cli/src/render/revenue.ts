@@ -352,14 +352,27 @@ export function renderEvaluation(evaluation: Evaluation, model: Model, palette: 
   );
   for (const bin of evaluation.calibration) {
     const gap = bin.actual - bin.predicted;
-    const arrow = Math.abs(gap) < 0.05 ? palette.green(palette.glyph('check')) : palette.amber(palette.glyph('warn'));
-    lines.push(
+    // A thin bin gets no verdict at all. The top of a scorecard is always
+    // sparse, and one record that happened to come back reads as "said 88%, was
+    // 100%" — which this used to flag exactly like a real miss on a hundred.
+    const change = `${gap >= 0 ? '+' : ''}${(gap * 100).toFixed(1)}pp`;
+    const verdict = !bin.enough
+      ? palette.dim(`${palette.glyph('skip')} too few to say`)
+      : Math.abs(gap) < 0.05
+        ? `${palette.green(palette.glyph('check'))} ${palette.dim(change)}`
+        : `${palette.amber(palette.glyph('warn'))} ${palette.dim(change)}`;
+
+    const row =
       `    ${String(bin.from).padStart(3)}–${String(bin.to).padEnd(3)} ${palette.dim(
         `n=${String(bin.count).padEnd(4)}`,
-      )} said ${pct(bin.predicted).padStart(6)}  was ${pct(bin.actual).padStart(6)}  ${arrow} ${palette.dim(
-        `${gap >= 0 ? '+' : ''}${(gap * 100).toFixed(1)}pp`,
-      )}`,
-    );
+      )} said ${pct(bin.predicted).padStart(6)}  was ${pct(bin.actual).padStart(6)}  `;
+
+    lines.push((bin.enough ? row : palette.dim(row)) + verdict);
+  }
+
+  if (evaluation.calibration_warning) {
+    lines.push('');
+    lines.push(`    ${palette.amber(palette.glyph('warn'))} ${palette.amber(evaluation.calibration_warning)}`);
   }
   lines.push('');
 
@@ -581,6 +594,8 @@ export interface RecordExplanation {
   baseRate: number;
   /** Slope and intercept of the fitted shrink. */
   calibration: { slope: number; intercept: number };
+  /** Records the shrink was fitted on — the reader's cue for how far to trust it. */
+  trainedOn: number;
   /** Share of the amount that comes back, for this record's bucket. */
   share: number;
   shareKey: string;
@@ -642,11 +657,24 @@ export function renderExplanation(explanation: RecordExplanation, palette: Palet
     );
   }
 
+  // How far to trust the number below is part of the number. A shrink fitted on
+  // a couple of hundred records produces a score that ranks well and means
+  // little as a probability, and the reader of a single record has no other way
+  // to know that.
+  const thin = explanation.trainedOn < 250;
   lines.push(
     `    ${palette.dim('shrink'.padEnd(22))}${palette.dim(
-      `×${explanation.calibration.slope} — the model is overconfident and was told so on the training half`,
+      `×${explanation.calibration.slope} — fitted on ${explanation.trainedOn} training records` +
+        (thin ? '' : ', because the model is overconfident'),
     )}`,
   );
+  if (thin) {
+    lines.push(
+      `    ${palette.amber(''.padEnd(22))}${palette.amber(
+        'thin — read the score as a ranking, not a probability',
+      )}`,
+    );
+  }
   lines.push(
     `    ${palette.bold('score'.padEnd(22))}${palette.bold(String(assessment.score).padStart(6))}  ` +
       palette.dim('the chance this comes back BECAUSE the agent acts'),

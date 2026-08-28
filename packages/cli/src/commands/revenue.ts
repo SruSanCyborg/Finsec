@@ -558,6 +558,7 @@ async function explainRecord(
     split,
     baseRate: model.base_rate,
     calibration: model.calibration,
+    trainedOn: model.trained_on,
     share: shareFor(model, record),
     shareKey: shareKeyOf(record),
     cost_paise: cost,

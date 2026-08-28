@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_COSTS } from '../src/revenue/cost.js';
-import { evaluate } from '../src/revenue/evaluate.js';
+import { evaluate, CALIBRATION_MIN_BIN } from '../src/revenue/evaluate.js';
 import { analyzeBatch } from '../src/revenue/features.js';
 import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift, shareFor } from '../src/revenue/model.js';
 import { Rng } from '../src/revenue/random.js';
@@ -381,5 +381,70 @@ describe('the evidence behind one record', () => {
     const expected = Math.round((flagged.score / 100) * record.amount_paise * share);
     // Rounding at a different point can move this by a rupee or two.
     expect(Math.abs(expected - flagged.expected_recovery_paise)).toBeLessThan(record.amount_paise * 0.02);
+  });
+});
+
+/**
+ * Knowing how far to trust the confidence.
+ *
+ * The mean gap between a score and reality runs about 15% on a 185-record
+ * batch and about 5% on a 2,150-record one — measured, not guessed. A model
+ * that is unreliable about its own confidence and does not say so is exactly
+ * what this surface promised not to ship.
+ */
+describe('calibration reporting', () => {
+  const evaluateSized = (payments: number, checkouts: number, invoices: number) => {
+    const generated = generateBatch({ seed: 'calibration-seed', payments, checkouts, invoices });
+    const model = fitModel(generated.records, generated.truth);
+    const context = analyzeBatch(generated.records);
+    const heldOut = generated.records.filter((record) => splitOf(record.id) === 'test');
+    const { assessments } = assessBatch(heldOut, model, { context, capacity: defaultCapacity(heldOut.length) });
+    return evaluate({
+      records: generated.records,
+      assessments,
+      truth: generated.truth,
+      threshold: model.threshold,
+    });
+  };
+
+  it('marks a bin with too few records as saying nothing', () => {
+    // The top of a scorecard is always sparse. One record that came back reads
+    // as "said 88%, was 100%", which is noise wearing a finding's clothes.
+    const evaluation = evaluateSized(700, 200, 120);
+    for (const bin of evaluation.calibration) {
+      expect(bin.enough).toBe(bin.count >= CALIBRATION_MIN_BIN);
+    }
+    expect(evaluation.calibration.some((bin) => !bin.enough)).toBe(true);
+  });
+
+  it('still trusts the bins that do have support', () => {
+    const evaluation = evaluateSized(700, 200, 120);
+    const fat = evaluation.calibration.filter((bin) => bin.enough);
+    expect(fat.length).toBeGreaterThan(1);
+    for (const bin of fat) expect(bin.count).toBeGreaterThanOrEqual(CALIBRATION_MIN_BIN);
+  });
+
+  it('warns when the whole batch is too thin to calibrate on', () => {
+    const evaluation = evaluateSized(120, 40, 25);
+    expect(evaluation.calibration_warning).toContain('ranking');
+  });
+
+  it('says nothing when the batch is big enough and the gap is small', () => {
+    const evaluation = evaluateSized(1500, 400, 250);
+    expect(evaluation.calibration_error).toBeLessThan(0.08);
+    expect(evaluation.calibration_warning).toBeUndefined();
+  });
+
+  it('weights the error by how many records each bin holds', () => {
+    // A one-record bin cannot move the headline. If it could, the number would
+    // swing on noise and nobody could act on it.
+    const evaluation = evaluateSized(700, 200, 120);
+    const thin = evaluation.calibration.filter((bin) => !bin.enough);
+    const total = evaluation.calibration.reduce((sum, bin) => sum + bin.count, 0);
+    const contribution = thin.reduce(
+      (sum, bin) => sum + (bin.count / total) * Math.abs(bin.predicted - bin.actual),
+      0,
+    );
+    expect(contribution).toBeLessThan(0.02);
   });
 });

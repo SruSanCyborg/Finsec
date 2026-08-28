@@ -40,6 +40,15 @@ structurally impossible rather than a matter of discipline.
 **The split is a hash of the id**, not a random draw and not a time cut: the
 same on every machine, and the injected incidents land on both sides.
 
+**How far to trust a score is part of the score.** The mean gap between
+confidence and outcome runs about **15% on a 185-record batch and about 5% at
+ten times that** — measured across seeds, not guessed. Below 250 held-out
+records the evaluation says so and tells you to read the scores as a ranking
+rather than as probabilities, and `explain` repeats it beside the shrink. A bin
+with fewer than 20 records gets no verdict at all: the top of a scorecard is
+always sparse, and one record that happened to come back reads as "said 88%, was
+100%", which is noise wearing a finding's clothes.
+
 **The model is naive Bayes on odds** — a prior and one likelihood ratio per
 feature — because every step prints as a sentence somebody can disagree with:
 `failure=psp_degraded ×4.2`. It is overconfident, as naive Bayes is, so a

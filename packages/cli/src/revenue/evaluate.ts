@@ -51,7 +51,19 @@ export interface CalibrationBin {
   count: number;
   predicted: number;
   actual: number;
+  /**
+   * Whether this bin holds enough records to mean anything.
+   *
+   * The top bin is almost always thin — a scorecard puts few records above 80 —
+   * and a single record that came back turns into "said 88%, was 100%", which
+   * the report was flagging with the same warning as a real twelve-point miss
+   * on a hundred records. A rate computed on one observation is not a finding.
+   */
+  enough: boolean;
 }
+
+/** Below this, a bin is reported but not read as evidence of anything. */
+export const CALIBRATION_MIN_BIN = 20;
 
 export interface Evaluation {
   split: Split | 'all';
@@ -70,6 +82,15 @@ export interface Evaluation {
   calibration: CalibrationBin[];
   /** Expected calibration error: mean gap between confidence and reality. */
   calibration_error: number;
+  /**
+   * Set when the confidence is not worth much, with the reason.
+   *
+   * Measured rather than guessed: the mean gap runs about 15% on a 185-record
+   * batch and about 5% on a 2,150-record one. A model that is unreliable about
+   * its own confidence and does not say so is the thing this surface promised
+   * not to ship.
+   */
+  calibration_warning?: string;
   /** The capacity the comparisons are made at, and where it came from. */
   capacity: { max_actions: number; rule: string };
   /** Records in this split that no policy may act on, and how many were. */
@@ -173,6 +194,7 @@ export function evaluate(input: EvaluateInput): Evaluation {
     cost: costOf(scored, (row) => row.assessment.flagged, costs),
     calibration: calibrationOf(scored),
     calibration_error: calibrationError(calibrationOf(scored)),
+    ...warningFor(scored.length, calibrationError(calibrationOf(scored))),
     capacity,
     forbidden: {
       in_population: scored.filter((row) => forbidden(row)).length,
@@ -331,9 +353,34 @@ function calibrationOf(rows: readonly Row[]): CalibrationBin[] {
       count: inBin.length,
       predicted: round(inBin.reduce((sum, row) => sum + row.assessment.score / 100, 0) / inBin.length),
       actual: round(inBin.filter((row) => row.positive).length / inBin.length),
+      enough: inBin.length >= CALIBRATION_MIN_BIN,
     });
   }
   return bins;
+}
+
+/**
+ * Whether to distrust the confidence, in the words the report prints.
+ *
+ * Two separate reasons, worth telling apart: too few records to fit a shrink
+ * on, and a gap wide enough to matter however it was fitted.
+ */
+function warningFor(records: number, error: number): { calibration_warning?: string } {
+  if (records < 250) {
+    return {
+      calibration_warning:
+        `${records} held-out records is thin for a calibration — the mean gap runs about 15% at this ` +
+        `size and about 5% at ten times it. Read the scores as a ranking, not as probabilities.`,
+    };
+  }
+  if (error > 0.08) {
+    return {
+      calibration_warning: `the mean gap between confidence and outcome is ${(error * 100).toFixed(
+        1,
+      )}% — wider than a score should imply.`,
+    };
+  }
+  return {};
 }
 
 function calibrationError(bins: readonly CalibrationBin[]): number {
