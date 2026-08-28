@@ -37,6 +37,13 @@ export interface FullScreenShellProps {
   /** True while a command is running; the input is disabled and a spinner shows. */
   busy: boolean;
   busyLabel?: string | undefined;
+  /**
+   * A question the shell is asking, shown in place of the usual prompt arrow.
+   *
+   * The shell has to ask some things itself: it spawns children with stdin
+   * ignored, so a prompt inside one can never be answered.
+   */
+  prompt?: string | undefined;
   history: string[];
   onSubmit: (line: string) => void;
   onCancel: () => void;
@@ -65,6 +72,7 @@ export function FullScreenShell({
   lines,
   busy,
   busyLabel,
+  prompt,
   history,
   onSubmit,
   onCancel,
@@ -439,7 +447,11 @@ export function FullScreenShell({
           </>
         ) : (
           <>
-            <Text color={accent}>{`${glyphs.arrow} `}</Text>
+            {prompt ? (
+              <Text color={accent} bold>{`${prompt} `}</Text>
+            ) : (
+              <Text color={accent}>{`${glyphs.arrow} `}</Text>
+            )}
             <Text>{value}</Text>
             <Text color={muted}>▌</Text>
           </>

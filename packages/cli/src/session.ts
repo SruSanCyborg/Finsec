@@ -11,9 +11,10 @@
  * very secrets we just found.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
+import { findProjectRoot } from './config/load.js';
 import type { Finding, Severity } from './domain.js';
 
 const DIR = '.sirius';
@@ -34,6 +35,12 @@ export interface LastScan {
   project_id: string | null;
   scanned_at: string;
   root: string;
+  /**
+   * How the findings were produced. `fix` needs this: a local-engine scan has
+   * no server-side scan id but can still be fixed from the source on disk,
+   * while a replayed fixture cannot be fixed at all.
+   */
+  source?: 'api' | 'local' | 'replay';
   findings: CachedFinding[];
 }
 
@@ -91,4 +98,83 @@ export function resolveFindings(cache: LastScan, identifier: string): CachedFind
   if (byRule.length > 0) return byRule;
 
   return cache.findings.filter((f) => `${f.file}:${f.line}` === needle);
+}
+
+/**
+ * Finds the most recent scan cache, searching the way a user expects.
+ *
+ * `sirius scan contract/fixtures/chaos-repo` writes its cache *inside the
+ * target*, but `sirius fix SIR-SEC-001` is then run from wherever the user
+ * happens to be — usually the repo root. Looking only in the working directory
+ * meant the documented two-command sequence failed with "no recent scan".
+ *
+ * Order: an explicit path, then the working directory and its project root,
+ * then the most recently written cache beneath the working directory.
+ */
+export function locateLastScan(
+  cwd: string,
+  explicit?: string,
+): { root: string; cache: LastScan; how: 'explicit' | 'here' | 'project' | 'search' } | undefined {
+  const candidates: Array<[string, 'explicit' | 'here' | 'project']> = [];
+  if (explicit) candidates.push([resolve(cwd, explicit), 'explicit']);
+  candidates.push([cwd, 'here']);
+
+  const projectRoot = findProjectRoot(cwd)?.dir;
+  if (projectRoot) candidates.push([projectRoot, 'project']);
+
+  for (const [root, how] of candidates) {
+    const cache = loadLastScan(root);
+    if (cache) return { root, cache, how };
+  }
+
+  // Nothing nearby: fall back to the newest cache under the working directory,
+  // which is what makes `scan <subdir>` then `fix` from the root work.
+  //
+  // Reported as a search, and the caller says so out loud, because this is a
+  // guess and `fix` writes to source files. Silently picking a scan the user
+  // never mentioned and editing those files is not a recoverable mistake.
+  const found = newestCacheUnder(cwd);
+  if (found) {
+    const cache = loadLastScan(found);
+    if (cache) return { root: found, cache, how: 'search' };
+  }
+
+  return undefined;
+}
+
+/** The directory of the most recently written `.sirius/last-scan.json` below `from`. */
+function newestCacheUnder(from: string, depth = 4): string | undefined {
+  let best: { dir: string; at: number } | undefined;
+
+  const visit = (dir: string, remaining: number) => {
+    if (remaining < 0) return;
+
+    let entries;
+    try {
+      entries = readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      // Skipping these is what keeps the walk cheap enough to be worth doing.
+      if (entry.name === 'node_modules' || entry.name === '.git') continue;
+
+      const child = join(dir, entry.name);
+      if (entry.name === DIR) {
+        try {
+          const at = statSync(join(child, FILE)).mtimeMs;
+          if (!best || at > best.at) best = { dir, at };
+        } catch {
+          // No cache file in this .sirius directory.
+        }
+        continue;
+      }
+      visit(child, remaining - 1);
+    }
+  };
+
+  visit(from, depth);
+  return best?.dir;
 }

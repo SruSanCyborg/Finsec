@@ -76,6 +76,8 @@ export function buildProgram(): Command {
     .argument('[finding]', 'finding id or rule id, e.g. SIR-SEC-001')
     .option('--all', 'walk every matching finding')
     .option('--apply', 'write without prompting (implies non-interactive)')
+    .option('--dry-run', 'show the proposed fix and stop, writing nothing')
+    .option('--target <dir>', 'the directory that was scanned, when it was not this one')
     .action(async (finding: string | undefined, options: Record<string, unknown>, command: Command) => {
       const { runFix } = await import('./commands/fix.js');
       await runFix(finding, options, command.parent?.opts() ?? {});

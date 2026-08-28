@@ -24,6 +24,13 @@ import type { FixSuggestion } from '../domain.js';
 
 const INNER_WIDTH = 62;
 
+/** A provenance stage reported by the local fix engine. */
+interface LocalStage {
+  name: string;
+  detail: string;
+  real: boolean;
+}
+
 export interface CerebusPanelProps {
   ruleId: string;
   suggestion: FixSuggestion;
@@ -41,12 +48,36 @@ export function CerebusPanel({ ruleId, suggestion, glyphs, capabilities }: Cereb
       ? `${glyphs.warning} ESCALATED`
       : `${glyphs.cross} FAIL`;
 
-  const rows: Array<[string, string]> = [
-    ['quarantined model', `{ action: ${suggestion.action}, target: ${suggestion.target ?? '—'} }`],
-    ['diff builder', `template: ${suggestion.action}`],
-    ['verifier', `re-ran ${ruleId} ${glyphs.rightArrow} ${verdict}`],
-  ];
+  // The local engine supplies its own stage list, because its first stage is a
+  // template selector and not a model. Printing "quarantined model" there would
+  // claim an LLM ran when none did — in a panel whose entire purpose is to show
+  // the provenance of a change to someone's money-handling code.
+  const stages = (suggestion as FixSuggestion & { stages?: LocalStage[] }).stages;
+  const detail = (suggestion as FixSuggestion & { verifier_detail?: string }).verifier_detail;
+
+  const rows: Array<[string, string]> = stages
+    ? stages.map((stage) =>
+        stage.name === 'verifier'
+          ? ([stage.name, `${stage.detail} ${glyphs.rightArrow} ${verdict}`] as [string, string])
+          : ([stage.name, stage.detail] as [string, string]),
+      )
+    : [
+        ['quarantined model', `{ action: ${suggestion.action}, target: ${suggestion.target ?? '—'} }`],
+        ['diff builder', `template: ${suggestion.action}`],
+        [
+          'verifier',
+          `re-ran ${ruleId}${detail ? '' : ''} ${glyphs.rightArrow} ${verdict}`,
+        ],
+      ];
   const labelWidth = Math.max(...rows.map(([label]) => label.length));
+
+  // A long target — `card.get("number")` — used to push the row past the right
+  // border and break the box. Elided from the end, since the head of an
+  // expression identifies it and the tail is the part that repeats.
+  const valueRoom = INNER_WIDTH - labelWidth - 5;
+  for (const row of rows) {
+    if (row[1].length > valueRoom) row[1] = `${row[1].slice(0, Math.max(4, valueRoom - 1))}…`;
+  }
 
   const title = ` Cerebus fix ${glyphs.separator.trim()} ${ruleId} `;
   const topRule = glyphs.horizontal.repeat(Math.max(0, INNER_WIDTH - title.length - 1));

@@ -18,8 +18,8 @@ import React, { useEffect, useState } from 'react';
 
 import { ApiClient } from '../api/client.js';
 import { CliError } from '../api/errors.js';
-import { loadConfig, findProjectRoot } from '../config/load.js';
-import { loadLastScan, resolveFindings } from '../session.js';
+import { loadConfig } from '../config/load.js';
+import { locateLastScan, resolveFindings } from '../session.js';
 import { ApplyPrompt, CerebusPanel, DiffView } from '../ui/FixView.js';
 import { COLOR, detectCapabilities, glyphsFor } from '../ui/theme.js';
 import type { ApplyChoice } from '../ui/FixView.js';
@@ -29,6 +29,17 @@ import type { FixSuggestion } from '../domain.js';
 interface FixFlags {
   all?: boolean;
   apply?: boolean;
+  /**
+   * Show the panel and the diff, then stop without prompting or writing.
+   *
+   * The full-screen shell runs its children with stdin ignored, so an
+   * interactive prompt inside one can never receive a keystroke — it simply
+   * hung. The shell therefore asks for confirmation itself and re-runs with
+   * `--apply`, and this is the half that renders the proposal.
+   */
+  dryRun?: boolean;
+  /** Where the scan was run, when it was not the working directory. */
+  target?: string;
 }
 
 interface GlobalFlags {
@@ -100,20 +111,35 @@ export function applyDiffToFile(filePath: string, expectedLine: number, diff: st
 
 export async function runFix(identifier: string | undefined, flags: FixFlags, globals: GlobalFlags): Promise<void> {
   const cwd = process.cwd();
-  const root = findProjectRoot(cwd)?.dir ?? cwd;
-
-  const cache = loadLastScan(root);
-  if (!cache) {
+  const found = locateLastScan(cwd, flags.target);
+  if (!found) {
     throw new CliError('No recent scan to fix from.', {
       hint: 'Run `sirius scan .` first — fix resolves rule ids against the last scan.',
     });
   }
+  const { root, cache, how } = found;
 
-  // A replayed scan has no server-side scan to ask Cerebus about. Say so
-  // plainly rather than letting the API reject a synthetic id.
-  if (cache.scan_id === 'replay') {
-    throw new CliError('The last scan was a replay, so there is nothing on the server to fix.', {
-      hint: 'Run `sirius scan .` against a real API first.',
+  // Always say which scan is being fixed, and make a guess unmistakable. `fix`
+  // rewrites source files; picking the wrong scan and editing a directory the
+  // user never named is not something they can undo by re-running.
+  const when = cache.scanned_at ? ` · ${cache.scanned_at.slice(0, 19).replace('T', ' ')}` : '';
+  if (how === 'search') {
+    process.stderr.write(
+      `note: no scan here, so using the most recent one found below ${cwd}:\n` +
+        `      ${root}${when}\n` +
+        `      Pass --target <dir> to choose a different one.\n`,
+    );
+  } else {
+    process.stderr.write(`fixing from the scan of ${root}${when}\n`);
+  }
+
+  // `replay` marks a scan with no server-side counterpart: a recorded fixture,
+  // or the local engine. The local engine can still produce a fix — it has the
+  // rules and the source — so only a replayed fixture is genuinely unfixable.
+  const local = cache.scan_id === 'replay';
+  if (local && cache.source === 'replay') {
+    throw new CliError('The last scan was a replay of a recorded fixture, so there is nothing to fix.', {
+      hint: 'Run `sirius scan .` to analyse real files.',
     });
   }
 
@@ -157,8 +183,35 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
   let acceptAll = Boolean(flags.apply);
 
   for (const finding of queue) {
-    const suggestion = await client.requestFix(cache.scan_id, finding.id);
     const filePath = resolve(root, finding.file);
+
+    // The local engine has no scan on any server, but it has the rules and the
+    // file, which is everything a fix needs. Without this branch `sirius fix`
+    // was unreachable in the default configuration — the Response stage existed
+    // only against a backend nobody has running.
+    const suggestion = local
+      ? await localSuggestion(finding, filePath)
+      : await client.requestFix(cache.scan_id, finding.id);
+
+    if (!suggestion) {
+      process.stderr.write(
+        `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).\n`,
+      );
+      continue;
+    }
+
+    if (flags.dryRun) {
+      await presentFix({
+        finding,
+        suggestion,
+        filePath,
+        glyphs,
+        capabilities,
+        autoAccept: true,
+        render: 'proposal-only',
+      });
+      continue;
+    }
 
     const decision = await presentFix({
       finding,
@@ -194,6 +247,7 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
     }
   }
 
+  if (flags.dryRun) return;
   if (applied === 0) process.stdout.write('no changes written\n');
 }
 
@@ -212,8 +266,10 @@ function presentFix(args: {
   glyphs: ReturnType<typeof glyphsFor>;
   capabilities: ReturnType<typeof detectCapabilities>;
   autoAccept: boolean;
+  render?: 'proposal-only';
 }): Promise<ApplyChoice> {
   const { finding, suggestion, glyphs, capabilities, autoAccept } = args;
+  const proposalOnly = args.render === 'proposal-only';
 
   return new Promise<ApplyChoice>((resolvePromise) => {
     const interactive = capabilities.tty && !autoAccept;
@@ -253,7 +309,13 @@ function presentFix(args: {
             />
           ) : (
             <Text color={capabilities.color ? COLOR.muted : undefined}>
-              {suggestion.verifier_status === 'pass' ? '   applying…' : '   verifier did not pass; not applying'}
+              {proposalOnly
+                ? suggestion.verifier_status === 'pass'
+                  ? '   nothing written yet.'
+                  : '   verifier did not pass; this fix will not be offered.'
+                : suggestion.verifier_status === 'pass'
+                  ? '   applying…'
+                  : '   verifier did not pass; not applying'}
             </Text>
           )}
         </Box>
@@ -270,4 +332,44 @@ function presentFix(args: {
       originalResolve(value);
     }) as typeof resolvePromise;
   });
+}
+
+/**
+ * A fix built from the local engine, shaped like the API's response.
+ *
+ * Keeping the shape identical means the panel, the diff view, the apply prompt,
+ * and the verifier gate below are all one code path — the local and hosted
+ * routes cannot drift into showing the user different things.
+ */
+async function localSuggestion(
+  finding: CachedFinding,
+  filePath: string,
+): Promise<FixSuggestion | undefined> {
+  if (!finding.fix_action || !existsSync(filePath)) return undefined;
+
+  const { buildLocalFix } = await import('../engine/fix.js');
+  const built = await buildLocalFix({
+    filePath,
+    source: readFileSync(filePath, 'utf8'),
+    line: finding.line,
+    ruleId: finding.rule_id,
+    action: finding.fix_action,
+  });
+  if (!built) return undefined;
+
+  return {
+    finding_id: finding.id,
+    action: built.action as FixSuggestion['action'],
+    ...(built.target ? { target: built.target } : {}),
+    confidence: built.confidence,
+    diff: built.diff,
+    side_effects: built.sideEffects,
+    verifier_status: built.verifierStatus,
+    escalate: built.escalate,
+    generated_at: new Date().toISOString(),
+    // Carried through for the provenance panel, which must not imply a model
+    // ran when none did.
+    stages: built.stages,
+    verifier_detail: built.verifierDetail,
+  } as FixSuggestion & { stages: typeof built.stages; verifier_detail: string };
 }

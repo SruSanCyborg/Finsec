@@ -47,6 +47,8 @@ export interface SyntaxNode {
   namedChild(index: number): SyntaxNode | null;
   childForFieldName(field: string): SyntaxNode | null;
   parent: SyntaxNode | null;
+  /** True anywhere under this node tree-sitter could not parse. */
+  hasError?: boolean;
 }
 
 interface ParserLike {
@@ -110,6 +112,24 @@ export async function parseFile(path: string): Promise<ParsedFile | undefined> {
   } catch {
     return undefined;
   }
+
+  return parseSource(path, source);
+}
+
+/**
+ * Parses source held in memory rather than read from disk.
+ *
+ * This is what makes the fix verifier real: a proposed patch is applied to a
+ * copy of the source and re-parsed, and the rule is re-run against the result.
+ * Without it a verifier could only claim the fix worked; with it, the claim is
+ * checked before anything is written to the user's file.
+ */
+export async function parseSource(
+  path: string,
+  source: string,
+): Promise<ParsedFile | undefined> {
+  const language = languageOf(path);
+  if (!language) return undefined;
 
   // Load the grammar first. `ParserCtor` does not exist until initialisation
   // has run, and constructing before awaiting is an ordering bug that presents

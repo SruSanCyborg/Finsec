@@ -19,6 +19,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { resolve as resolvePath } from 'node:path';
 import { homedir } from 'node:os';
 import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
@@ -212,6 +213,15 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         const [busy, setBusy] = useState(false);
         const [busyLabel, setBusyLabel] = useState<string | undefined>(undefined);
         const [child, setChild] = useState<ReturnType<typeof spawn> | null>(null);
+        // What the next line of input answers, if anything. Held in a ref so the
+        // submit handler reads the current value rather than one captured at
+        // render time.
+        const pendingRef = useRef<{ name: string; args: string[] } | null>(null);
+        const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+        // What `/scan` last targeted. `/fix` runs as a child whose cwd is the
+        // shell's, not the scan's, so without this it would fall back to
+        // searching for a scan cache — and then write to whatever it found.
+        const lastTargetRef = useRef<string | null>(null);
 
         // Output arrives a line at a time and a scan emits dozens in a second.
         // Committing React state per line re-reconciles the whole transcript
@@ -258,6 +268,23 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         };
 
         const submit = (line: string) => {
+          // A pending confirmation swallows the line: the shell is asking, not
+          // the prompt. `/fix` needs this because the child it spawns has its
+          // stdin ignored and can never read a keystroke of its own.
+          const awaiting = pendingRef.current;
+          if (awaiting) {
+            append(line, 'input');
+            pendingRef.current = null;
+            setPendingLabel(null);
+
+            if (/^(y|yes)$/i.test(line.trim())) {
+              runCommand(awaiting.name, awaiting.args);
+            } else {
+              append('nothing written.', 'note');
+            }
+            return;
+          }
+
           append(line, 'input');
           setHistory((h) => [...h, line]);
 
@@ -296,12 +323,36 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
             return;
           }
 
+          // `fix` prompts for confirmation, which a child with no stdin cannot
+          // do. Show the proposal, then let the shell do the asking.
+          if (parsed.name === 'fix' && !parsed.args.includes('--apply')) {
+            const scoped = withScanTarget(parsed.args, lastTargetRef.current);
+            runCommand(parsed.name, [...scoped, '--dry-run'], {
+              confirm: { name: parsed.name, args: [...scoped, '--apply'] },
+            });
+            return;
+          }
+
+          if (parsed.name === 'scan') {
+            // The first non-flag argument is the path; no argument means here.
+            const path = parsed.args.find((a) => !a.startsWith('-'));
+            lastTargetRef.current = path ? resolvePath(process.cwd(), path) : process.cwd();
+          }
+
+          runCommand(parsed.name, parsed.args);
+        };
+
+        const runCommand = (
+          name: string,
+          args: string[],
+          options: { confirm?: { name: string; args: string[] } } = {},
+        ) => {
           setBusy(true);
-          setBusyLabel(`running /${parsed.name}`);
+          setBusyLabel(`running /${name}`);
 
           const proc = spawn(
             process.execPath,
-            [CLI_ENTRY, ...inheritedFlags(globals), parsed.name, ...parsed.args],
+            [CLI_ENTRY, ...inheritedFlags(globals), name, ...args],
             {
               stdio: ['ignore', 'pipe', 'pipe'],
               env: {
@@ -333,10 +384,18 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
             setChild(null);
           });
 
-          proc.on('close', () => {
+          proc.on('close', (code) => {
             setBusy(false);
             setBusyLabel(undefined);
             setChild(null);
+
+            // Arm the confirmation only if the proposal actually rendered. A
+            // command that failed has nothing to apply, and asking anyway would
+            // invite the user to say yes to nothing.
+            if (options.confirm && code === 0) {
+              pendingRef.current = options.confirm;
+              setPendingLabel('apply this fix? [y/N]');
+            }
           });
         };
 
@@ -348,6 +407,7 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
             lines={lines}
             busy={busy}
             busyLabel={busyLabel}
+            prompt={pendingLabel ?? undefined}
             history={history}
             onSubmit={submit}
             onCancel={() => {
@@ -601,4 +661,10 @@ export function Prompt({ capabilities, glyphs, history, onSubmit }: PromptProps)
       ) : null}
     </Box>
   );
+}
+
+/** Adds `--target` when the shell knows what was scanned and the caller did not say. */
+function withScanTarget(args: string[], target: string | null): string[] {
+  if (!target || args.includes('--target')) return args;
+  return [...args, '--target', target];
 }

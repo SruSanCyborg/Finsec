@@ -305,6 +305,57 @@ and prints the transcript, so "run it and look at it" is one command.
 
 ---
 
+## D-018 — Response runs locally, and the panel does not claim a model ran
+
+**`sirius fix` did not work.** Not "worked against a backend nobody has" —
+did not work at all. The local engine saves its scan with the id `replay`, and
+`fix` rejected `replay` outright, so the default configuration could never reach
+the Response stage. The demo's second beat, and the *Response* leg the track
+requires, existed only on paper.
+
+**A local fix builder** (`engine/fix.ts`) now produces the same `FixSuggestion`
+shape the API returns, so the panel, diff view, apply prompt and verifier gate
+are one code path and cannot drift. Four templates: `env_lookup`,
+`parameterize_query` (percent, `.format`, and f-strings), `redact_pii_log`,
+`add_auth_decorator`. Every template rewrites exactly one line and returns
+nothing when it does not recognise what it was handed — a wrong patch to
+money-handling code is worse than no patch.
+
+**What is real and what is not, stated in the panel.** The PRD's Cerebus is a
+dual-LLM design. No LLM runs here, so the first stage is labelled `template
+selector`, not `quarantined model`. Printing a model name that never ran, in a
+panel whose entire purpose is showing the provenance of an edit to someone's
+payment code, would be the one lie this product cannot afford.
+
+**The verifier, however, is entirely real, and it earns its keep.** The patch is
+applied in memory, the file re-parsed (`parseSource`), and the *same rule*
+re-run. `✓ PASS` means the rule no longer fires. It immediately caught a bad
+template: `redact_pii_log` wrapped the format string rather than the data —
+`log.info(redact("card %s", card.get("number")))` — which reads as a fix and
+redacts nothing. It also exposed a **rule** bug: SIR-SEC-030 had no exemption
+for redaction, so it could never be satisfied by its own remediation. SIR-SEC-031
+already had the equivalent check; 030 now does too.
+
+**Two bugs in how `fix` finds its scan.**
+
+1. `scan <path>` writes the cache *inside the target*; `fix` looked only in the
+   working directory. The documented two-command sequence failed outright.
+2. Fixing that naively made it worse. Searching for the newest cache below the
+   cwd found a scan in a directory nobody had named — and `fix` **rewrote the
+   source files there**. A rehearsal caught it modifying the committed fixtures.
+   The guard is not a better search: an explicit `--target` wins, the shell
+   passes the path it actually scanned, and a search is announced as a search
+   before anything is written.
+
+**Interactive children cannot prompt.** The full-screen shell spawns commands
+with `stdio: ['ignore', …]`, so the apply prompt inside `/fix` could never
+receive a keystroke — it hung, and the `y` went into the shell's own input box.
+`fix --dry-run` renders the proposal and stops; the shell asks
+`apply this fix? [y/N]` itself and re-runs with `--apply`. Deterministic
+templates mean the second run rebuilds the identical patch.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.

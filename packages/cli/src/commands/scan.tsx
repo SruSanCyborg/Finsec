@@ -347,6 +347,9 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     try {
       saveLastScan(root, {
         scan_id: scanId ?? 'replay',
+        // So `fix` can tell a local-engine scan (fixable from source on disk)
+        // from a replayed fixture (nothing real to fix).
+        source: flags.replay ? 'replay' : useLocalEngine ? 'local' : 'api',
         project_id: config.projectId ?? null,
         root,
         findings: outcome.findings.map(toCached),

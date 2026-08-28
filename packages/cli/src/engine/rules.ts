@@ -361,6 +361,13 @@ const PII_FIELD = /(\bpan\b|aadhaar|\bcvv\b|\bcvc\b|\bssn\b|passport|card[_.]?(n
  */
 const PII_ACCESS = /\bcard\b[^)]{0,24}?['"]?(number|no|cvv|cvc)['"]?/i;
 
+/**
+ * Calls that render a value safe to log. Kept broad on purpose: the cost of
+ * missing one is a false positive on code that is already doing the right
+ * thing, which is the failure mode that gets a linter switched off.
+ */
+const REDACTED = /^\s*(redact|mask|tokeni[sz]e|hash|anonymi[sz]e|scrub|saniti[sz]e|last4|truncate)\s*\(/i;
+
 const LOG_CALL = /(^|\.)(log|logger|logging|console)\.(debug|info|warn|warning|error|log)$/;
 
 const piiInLogs: Rule = {
@@ -376,8 +383,16 @@ const piiInLogs: Rule = {
       if (node.type !== 'call') continue;
       if (!LOG_CALL.test(calleeName(node))) continue;
 
+      // An argument already passed through a redaction helper is not a leak.
+      // Without this the rule can never be satisfied by its own remediation:
+      // the fix verifier applied `redact(...)`, re-ran the rule, and correctly
+      // reported that nothing had changed. SIR-SEC-031 has always had the
+      // equivalent check; this one did not.
       const args = argumentsOf(node);
-      if (!args.some((arg) => PII_FIELD.test(arg.text) || PII_ACCESS.test(arg.text))) continue;
+      const leaking = args.some(
+        (arg) => (PII_FIELD.test(arg.text) || PII_ACCESS.test(arg.text)) && !REDACTED.test(arg.text),
+      );
+      if (!leaking) continue;
 
       findings.push(base(this, file, node, { tags: ['pii', 'exposure'] }));
     }
