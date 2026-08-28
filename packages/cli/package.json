@@ -1,0 +1,46 @@
+{
+  "name": "finsec",
+  "version": "0.4.0",
+  "description": "A security & compliance linter for money-handling code",
+  "type": "module",
+  "bin": {
+    "finsec": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/cli.ts",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "cli-highlight": "^2.1.11",
+    "commander": "^15.0.0",
+    "diff": "^9.0.0",
+    "figures": "^6.1.0",
+    "ink": "^7.1.1",
+    "picomatch": "^4.0.5",
+    "react": "^19.2.8",
+    "smol-toml": "^1.8.0",
+    "tar": "^7.5.1",
+    "ws": "^8.21.3",
+    "yaml": "^2.9.0",
+    "yoctocolors": "^2.2.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "@types/picomatch": "^4.0.2",
+    "@types/react": "^19.2.18",
+    "@types/ws": "^8.18.1",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.23.12",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.10"
+  }
+}
