@@ -13,6 +13,7 @@
  * quietly not count it.
  */
 
+import { complianceScore } from './scanner.js';
 import { classify, findSuppression, loadBaseline, loadSuppressions } from './store.js';
 import type { Suppression } from './store.js';
 import type { WsFrame } from '../domain.js';
@@ -49,7 +50,28 @@ export async function* applyPolicy(
     (entry) => entry.expires_at && Date.parse(entry.expires_at) <= now.getTime(),
   );
 
+  // The completed frame carries counts, money and the score, all computed by
+  // the engine before this transformer withheld anything. Left alone, a
+  // suppressed critical stays in the headline: still counted, still adding its
+  // rupees, still dragging the score down — withheld from the list and nowhere
+  // else. Track enough to correct it as it goes past.
+  const withheldCounts: Record<string, number> = {};
+  let withheldMoney = 0;
+  let filesSeen = 0;
+
   for await (const frame of frames) {
+    if (frame.type === 'file.scanning') {
+      filesSeen += 1;
+      yield frame;
+      continue;
+    }
+
+    if (frame.type === 'scan.completed') {
+      const anythingWithheld = Object.keys(withheldCounts).length > 0;
+      yield anythingWithheld ? corrected(frame, withheldCounts, withheldMoney, filesSeen) : frame;
+      continue;
+    }
+
     if (frame.type !== 'finding' || !frame.finding) {
       yield frame;
       continue;
@@ -69,6 +91,8 @@ export async function* applyPolicy(
         file: finding.file,
         reason: silencer.reason,
       });
+      withheldCounts[finding.severity] = (withheldCounts[finding.severity] ?? 0) + 1;
+      withheldMoney += finding.money_at_risk_inr ?? 0;
       continue;
     }
 
@@ -78,6 +102,38 @@ export async function* applyPolicy(
 
     yield frame;
   }
+}
+
+/**
+ * The completion frame with the withheld findings taken back out of it.
+ *
+ * The score is recomputed rather than adjusted: it is not linear in the counts,
+ * so subtracting a penalty would not give the number a fresh scan of the same
+ * tree produces. Same function, same inputs, same answer.
+ */
+function corrected(
+  frame: WsFrame & { type: 'scan.completed' },
+  withheld: Record<string, number>,
+  withheldMoney: number,
+  fileCount: number,
+): WsFrame {
+  const counts: Record<string, number> = { ...(frame.counts ?? {}) };
+  for (const [severity, n] of Object.entries(withheld)) {
+    counts[severity] = Math.max(0, (counts[severity] ?? 0) - n);
+    if (counts[severity] === 0) delete counts[severity];
+  }
+
+  const remaining = Object.values(counts).reduce((sum, n) => sum + n, 0);
+
+  return {
+    ...frame,
+    counts,
+    money_at_risk_inr: Math.max(0, (frame.money_at_risk_inr ?? 0) - withheldMoney),
+    compliance_score: complianceScore(counts, fileCount),
+    // Advisory — the gate is computed client-side — but a completed frame that
+    // says "1" with nothing left to report would be a lie either way.
+    exit_code: remaining > 0 ? (frame.exit_code ?? 1) : 0,
+  } as WsFrame;
 }
 
 /** An empty outcome, for callers to hand in and read back. */

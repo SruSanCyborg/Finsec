@@ -107,9 +107,16 @@ export function TriageView({ findings: initial, glyphs, capabilities, onDecide, 
   );
 
   useInput((input, key) => {
+    // A paste arrives as one chunk, so the newline that ends it is inside
+    // `input` rather than a `return` key of its own. Split it out, or the
+    // reason field silently eats the submission and every keystroke after it.
+    const [typed = '', ...rest] = input.split(/\r\n|\r|\n/);
+    const submitted = key.return || rest.length > 0;
+
     if (mode === 'filter') {
-      if (key.return || key.escape) {
+      if (submitted || key.escape) {
         if (key.escape) setFilter('');
+        else if (typed) setFilter((f) => f + typed);
         setMode('list');
         setCursor(0);
       } else if (key.backspace || key.delete) {
@@ -125,14 +132,17 @@ export function TriageView({ findings: initial, glyphs, capabilities, onDecide, 
         setMode('list');
         setPendingState(null);
         setDraft('');
-      } else if (key.return) {
+      } else if (submitted) {
         // Dismissing or suppressing without a reason is how an audit trail
         // becomes worthless, so an empty reason simply does not submit.
-        if (draft.trim() && current && pendingState) {
-          decide(current, pendingState, draft.trim());
+        const reason = `${draft}${typed}`.trim();
+        if (reason && current && pendingState) {
+          decide(current, pendingState, reason);
           setMode('list');
           setPendingState(null);
           setDraft('');
+        } else {
+          setDraft(`${draft}${typed}`);
         }
       } else if (key.backspace || key.delete) {
         setDraft((d) => d.slice(0, -1));

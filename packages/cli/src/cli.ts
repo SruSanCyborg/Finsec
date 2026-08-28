@@ -204,7 +204,8 @@ export function buildProgram(): Command {
     .description('Review findings interactively (j/k move, a/d/s decide, / filter)')
     .option('--scan <id>', 'scan to review (defaults to the last one)')
     .option('--severity <level>', 'only review findings at this severity')
-    .option('--all', 'include findings already suppressed')
+    .option('--all', 'include findings already decided')
+    .option('--target <dir>', 'the directory that was scanned, when it was not this one')
     .action(async (options: Record<string, unknown>, command: Command) => {
       const { runTriage } = await import('./commands/triage.js');
       await runTriage(options, command.parent?.opts() ?? {});

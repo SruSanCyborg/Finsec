@@ -46,7 +46,7 @@ Added by [`decisions.md`](decisions.md): global `--api-url`, `--project`, and `s
 | `init` | `GET/POST /projects`, `GET/PUT /projects/{id}/policy` | Writes `sirius.yaml` + `.siriuslintrc`; no template content specified in the PRD |
 | `scan` | `POST /scans` → `WS /scans/{id}/stream` → `GET /scans/{id}/results`; `GET /scans/{id}` for polling fallback; `POST …/validate-secret` when `--validate-secrets` | §2 below |
 | `fix` | `POST /scans/{id}/findings/{fid}/fix` | Rule-id resolution via `.sirius/last-scan.json` |
-| `triage` | `GET /scans/{id}/results`, `PATCH /scans/{id}/findings/{fid}` | **S-auth only** — see the K/S contradiction |
+| `triage` | `GET /scans/{id}/results`, `PATCH /scans/{id}/findings/{fid}` | **S-auth only** — see the K/S contradiction. With no project it reads the local scan cache and writes decisions to `.sirius/triage.json` (D-021) |
 | `watch` | repeated `POST /scans` + WS; `DELETE /scans/{id}` to cancel superseded scans | debounce unspecified |
 | `rules` | `GET /rules`, `GET /rules/{id}`, `POST /rules/validate`, `POST /rules` | `test` has **no endpoint** |
 | `suppress` | `GET/POST /suppressions` | **S-auth only** |
@@ -54,7 +54,7 @@ Added by [`decisions.md`](decisions.md): global `--api-url`, `--project`, and `s
 | `report` | `GET /scans/{id}/report` | Tree says `--format pdf`, API says `pdf\|json\|sarif` |
 | `badge` | `GET /projects/{id}/badge.svg` | Public, no auth |
 
-**The K/S auth contradiction.** `scan`, `fix`, `report`, and secret validation accept **K** (Bearer API key). But `triage`, `suppress`, `baseline`, and most of `rules` hit endpoints marked **S** (session/JWT only). As specified those four commands cannot work in CI with an API key. Logged as blocked on `auto`.
+**The K/S auth contradiction.** `scan`, `fix`, `report`, and secret validation accept **K** (Bearer API key). But `triage`, `suppress`, `baseline`, and most of `rules` hit endpoints marked **S** (session/JWT only). As specified those four commands cannot work in CI with an API key. Logged as blocked on `auto`. It bites less than it did: all four now have a local path that needs no auth at all, so the contradiction only blocks teams that want the hosted history.
 
 ---
 

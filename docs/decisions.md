@@ -464,6 +464,52 @@ resolve a rule id, so a report built from it was silently stripped of messages,
 clause references and figures. `schema_version` went to 2 so a stale cache is
 rejected rather than producing an empty compliance document.
 
+## D-021 — `triage` runs on a local scan, and `doctor` stops crying wolf
+
+Two commands were still written for the pure-client era, and running them with
+no API showed it.
+
+**`triage` refused to open.** With no project configured it found the local
+scan, saw `scan_id: "replay"`, and said "the last scan was a replay, so there is
+nothing on the server to triage". It was not a replay — local scans were simply
+*filed* under that sentinel. They now get a real id, `local-<12 hex>`, prefixed
+so anything printing it (a report filename, `doctor`, a support paste) says at a
+glance that no server issued it. Every check that keyed off the sentinel now
+reads `source` instead. That included `fix`, whose `const local = cache.scan_id
+=== 'replay'` sent it to the API the moment the id changed — caught by the pty
+rehearsal, not by the suite.
+
+**Triage now has two backends and one screen.** Hosted: PATCH per decision, as
+before. Local: decisions go to `.sirius/triage.json`, and `dismissed` and
+`suppressed` *also* write a suppression, scoped to the fingerprint when there is
+one and otherwise to that file — never the rule across the repo. `accepted` is
+recorded and silences nothing, because an acknowledged risk is still a risk and
+must keep failing the gate. Without that second write the screen would record a
+judgement nothing ever reads, which is the same fault in a new place.
+
+**The completion frame was still counting what the policy withheld.**
+Suppressing a critical removed it from the list and left it in every total: the
+headline counts, the money figure, and the compliance score — the one number a
+pipeline might gate on. `applyPolicy` now corrects the frame as it passes,
+recomputing the score through the same function the engine uses rather than
+subtracting a penalty, since it is not linear in the counts.
+
+**`.sirius/` carries two kinds of thing**, so a `.gitignore` is written into it
+on first use: the baseline, suppressions and triage decisions are arguments a
+team makes about its own risk and belong in review; `last-scan.json` is a
+per-machine cache and does not.
+
+**`doctor` ended "4 problems would stop a scan"** on a machine that scans
+perfectly well — missing credentials, no project id, an unreachable API and a
+dead WebSocket, none of which a local scan touches. Those are now stated as
+facts, not failures, and only checked as failures when a project is configured.
+It probes the local engine instead: parse a known-bad snippet, run the rules,
+assert one fires. That path is WASM loaded at runtime, so a bad install fails at
+the first parse — previously mid-demo. Skipping the two network probes when
+nothing is configured also took the command from 13s to 0.08s.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch

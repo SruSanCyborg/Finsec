@@ -133,11 +133,12 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
     process.stderr.write(`fixing from the scan of ${root}${when}\n`);
   }
 
-  // `replay` marks a scan with no server-side counterpart: a recorded fixture,
-  // or the local engine. The local engine can still produce a fix — it has the
-  // rules and the source — so only a replayed fixture is genuinely unfixable.
-  const local = cache.scan_id === 'replay';
-  if (local && cache.source === 'replay') {
+  // Where the findings came from decides where the fix comes from. Read from
+  // `source` and not from the id: local scans used to be filed under the id
+  // `replay`, and anything still keying off that sentinel starts asking a
+  // server about a scan it never ran.
+  const local = cache.source !== 'api';
+  if (cache.source === 'replay') {
     throw new CliError('The last scan was a replay of a recorded fixture, so there is nothing to fix.', {
       hint: 'Run `sirius scan .` to analyse real files.',
     });

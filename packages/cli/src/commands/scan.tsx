@@ -11,6 +11,7 @@
 /** Pause between blocks of the threat report, so each one is readable as it lands. */
 const TAIL_PACE_MS = 420;
 
+import { randomUUID } from 'node:crypto';
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { render } from 'ink';
@@ -393,7 +394,10 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     const root = findProjectRoot(target)?.dir ?? target;
     try {
       saveLastScan(root, {
-        scan_id: scanId ?? 'replay',
+        // A local scan is a real scan and gets a real id. It used to be filed
+        // as `replay`, which read as "recorded, nothing here is live" — so
+        // `triage` refused to open it and `doctor` reported it as a rehearsal.
+        scan_id: scanId ?? (flags.replay ? 'replay' : localScanId()),
         // So `fix` can tell a local-engine scan (fixable from source on disk)
         // from a replayed fixture (nothing real to fix).
         source: flags.replay ? 'replay' : useLocalEngine ? 'local' : 'api',
@@ -407,6 +411,17 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   }
 
   process.exitCode = gate.exitCode;
+}
+
+/**
+ * An id for a scan that no server issued.
+ *
+ * Prefixed rather than a bare UUID so that anything printing it — a report
+ * filename, `doctor`, a support paste — says at a glance that this scan was run
+ * here and has no server-side record to look up.
+ */
+function localScanId(): string {
+  return `local-${randomUUID().replace(/-/g, '').slice(0, 12)}`;
 }
 
 /** Renders the live Ink view and resolves once the stream is finished. */

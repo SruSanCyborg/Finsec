@@ -161,3 +161,50 @@ describe('TriageView', () => {
     expect(lastFrame()).toContain('VERIFIED LIVE');
   });
 });
+
+/**
+ * Found by driving the real screen in a pty rather than by the suite: a reason
+ * typed and submitted in one write — which is what a paste is — arrived as a
+ * single chunk with the newline inside it, so `key.return` was never set. The
+ * newline was appended to the reason as a control character, and every
+ * keystroke after it went into the field too.
+ */
+describe('TriageView with pasted input', () => {
+  it('submits a reason whose newline arrives in the same chunk', async () => {
+    const { stdin, onDecide } = setup([finding()]);
+    stdin.write('d');
+    await settle();
+    stdin.write('test fixture, not a live key\r');
+    await settle();
+
+    expect(onDecide).toHaveBeenCalledTimes(1);
+    expect(onDecide.mock.calls[0]?.[2]).toBe('test fixture, not a live key');
+  });
+
+  it('does not leave the newline in the recorded reason', async () => {
+    const { stdin, onDecide } = setup([finding()]);
+    stdin.write('s');
+    await settle();
+    stdin.write('rotating on Friday\n');
+    await settle();
+
+    expect(onDecide.mock.calls[0]?.[2]).toBe('rotating on Friday');
+  });
+
+  it('closes the filter on a pasted newline instead of searching for one', async () => {
+    const { stdin, lastFrame } = setup([
+      finding({ id: 'a', rule_id: 'SIR-SEC-001', file: 'src/config.py' }),
+      finding({ id: 'b', rule_id: 'SIR-SEC-030', file: 'src/webhooks.py' }),
+    ]);
+
+    stdin.write('/');
+    await settle();
+    stdin.write('webhooks\r');
+    await settle();
+
+    expect(lastFrame()).toContain('SIR-SEC-030');
+    expect(lastFrame()).not.toContain('SIR-SEC-001');
+    // Back in the list, so the next keystroke moves rather than types.
+    expect(lastFrame()).toContain('a accept');
+  });
+});

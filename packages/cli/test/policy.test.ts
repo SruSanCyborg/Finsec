@@ -234,3 +234,109 @@ describe('applying policy to a stream', () => {
     expect(frames.map((f) => f.type)).toEqual(['scan.started', 'scan.completed']);
   });
 });
+
+/**
+ * The half of suppression nobody had bridged either: a withheld finding was
+ * gone from the list and still present in every total. Suppressing a critical
+ * left "2 critical" in the headline, its rupees in the money figure, and its
+ * penalty in the compliance score — the one number a pipeline might gate on.
+ */
+describe('the completion frame after suppression', () => {
+  const completed = () =>
+    ({
+      type: 'scan.completed',
+      counts: { critical: 2, high: 1 },
+      money_at_risk_inr: 8_930_000,
+      compliance_score: 60,
+      exit_code: 1,
+    }) as unknown as WsFrame;
+
+  const critical = (fingerprint: string, money: number) =>
+    ({
+      type: 'finding',
+      finding: {
+        id: fingerprint,
+        rule_id: 'SIR-SEC-001',
+        file: 'a.py',
+        line: 1,
+        severity: 'critical',
+        fingerprint,
+        money_at_risk_inr: money,
+      },
+    }) as unknown as WsFrame;
+
+  const suppressEverythingFor = (rule: string) =>
+    addSuppression(dir, {
+      rule_id: rule,
+      reason: 'test fixture',
+      expires_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+    });
+
+  it('takes the withheld finding out of the counts and the money', async () => {
+    suppressEverythingFor('SIR-SEC-001');
+    const outcome = emptyPolicyOutcome();
+
+    const frames = await drain(
+      applyPolicy(
+        stream({ type: 'file.scanning' } as WsFrame, critical('f1', 4_200_000), completed()),
+        dir,
+        outcome,
+      ),
+    );
+
+    const end = frames.at(-1) as { counts: Record<string, number>; money_at_risk_inr: number };
+    expect(end.counts).toEqual({ critical: 1, high: 1 });
+    expect(end.money_at_risk_inr).toBe(4_730_000);
+  });
+
+  it('recomputes the compliance score rather than leaving the old one', async () => {
+    suppressEverythingFor('SIR-SEC-001');
+    const outcome = emptyPolicyOutcome();
+
+    const frames = await drain(
+      applyPolicy(stream({ type: 'file.scanning' } as WsFrame, critical('f1', 0), completed()), dir, outcome),
+    );
+
+    const end = frames.at(-1) as { compliance_score: number };
+    // Whatever the number is, it must not still be the one computed with the
+    // suppressed finding included.
+    expect(end.compliance_score).toBeGreaterThan(60);
+  });
+
+  it('leaves the frame alone when nothing was suppressed', async () => {
+    const outcome = emptyPolicyOutcome();
+    const frames = await drain(applyPolicy(stream(critical('f1', 4_200_000), completed()), dir, outcome));
+
+    expect(frames.at(-1)).toMatchObject({
+      counts: { critical: 2, high: 1 },
+      money_at_risk_inr: 8_930_000,
+      compliance_score: 60,
+    });
+  });
+
+  it('drops the advisory exit code to 0 once everything is suppressed', async () => {
+    suppressEverythingFor('SIR-SEC-001');
+    const outcome = emptyPolicyOutcome();
+
+    const frames = await drain(
+      applyPolicy(
+        stream(
+          { type: 'file.scanning' } as WsFrame,
+          critical('f1', 0),
+          ({
+            type: 'scan.completed',
+            counts: { critical: 1 },
+            money_at_risk_inr: 0,
+            compliance_score: 88,
+            exit_code: 1,
+          }) as unknown as WsFrame,
+        ),
+        dir,
+        outcome,
+      ),
+    );
+
+    expect(frames.at(-1)).toMatchObject({ counts: {}, exit_code: 0 });
+  });
+});

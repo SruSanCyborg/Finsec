@@ -58,10 +58,15 @@ function resolveScanId(explicit: string | undefined): string {
       hint: 'Run `sirius scan .` first, or pass a scan id.',
     });
   }
-  if (cache.scan_id === 'replay') {
-    throw new CliError('The last scan was a replay, so there is no server-side scan.', {
-      hint: 'Run `sirius scan .` against a real API first.',
-    });
+  // `source`, not the id: a local scan has a real id of its own, and only a
+  // replayed fixture and a hosted scan can be told apart by where they came from.
+  if (cache.source !== 'api') {
+    throw new CliError(
+      cache.source === 'replay'
+        ? 'The last scan was a replay, so there is no server-side scan.'
+        : 'The last scan ran locally, so there is no server-side scan to ask about.',
+      { hint: 'Run `sirius scan .` against a real API first.' },
+    );
   }
   return cache.scan_id;
 }

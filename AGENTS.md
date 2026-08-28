@@ -117,24 +117,27 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
 | `rules list\|show` | Done, from the compiled catalogue. `validate`/`test` still need the API |
-| `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` |
+| `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
 | `report` | Done — ed25519-signed JSON, `--verify` gates on 0/1/2 |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
-| `triage` | Done against the API; **unverified without one** |
-| `watch`, `doctor`, `badge`, `explain` | Done |
-| Tests | 345 passing |
+| `triage` | Done both ways — decisions to `.sirius/`, or PATCHed to the API. Driven in a pty |
+| `doctor` | Done — reports against the mode the scan will actually run in, and self-tests the engine |
+| `watch`, `badge`, `explain` | Done |
+| Tests | 363 passing |
 
-**Where the API is still required:** `triage`, `rules validate`, `rules test`,
-`badge`, PDF reports. Everything on the demo path runs with no backend at all.
+**Where the API is still required:** `rules validate`, `rules test`, `badge`,
+PDF reports. Everything on the demo path runs with no backend at all.
 
-**"Implemented" is not "works".** Five features were listed Done here while
+**"Implemented" is not "works".** Seven features were listed Done here while
 being unreachable in the configuration everything defaults to — `fix` rejected
 its own local scans, `--validate-secrets` probed a redacted string, `rules`
-asked a server for rules compiled into the binary, and `baseline`/`suppress`
-wrote to an API that is not running. Each was found by *running* it, never by
-the suite. Two habits follow: `pnpm rehearse` drives the real shell in a real
-pty before believing any of this, and a row here says what was verified, not
-what was written.
+asked a server for rules compiled into the binary, `baseline`/`suppress` wrote
+to an API that is not running, `triage` called a local scan a replay and refused
+to open it, and `doctor` ended "4 problems would stop a scan" on a machine that
+scans fine. Each was found by *running* it, never by the suite — and the pty
+rehearsal caught a regression the 363 green tests did not. Two habits follow:
+`pnpm rehearse` drives the real shell in a real pty before believing any of
+this, and a row here says what was verified, not what was written.
 
 A first run on a real repo looks like:
 

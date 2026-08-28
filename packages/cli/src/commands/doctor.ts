@@ -2,10 +2,18 @@
  * `sirius doctor` — preflight.
  *
  * Written for the five minutes before a live demo, when the questions are
- * "is the backend up", "which key am I actually using", and "will this
- * terminal draw ₹ and box characters". Every check answers one of those and
- * says where the answer came from, because a config value from the wrong layer
- * is the failure mode that wastes the most time.
+ * "will a scan run", "which key am I actually using", and "will this terminal
+ * draw ₹ and box characters". Every check answers one of those and says where
+ * the answer came from, because a config value from the wrong layer is the
+ * failure mode that wastes the most time.
+ *
+ * What counts as a problem depends on where the scan will run. With no project
+ * configured the scan uses the local engine and needs no backend at all — so
+ * doctor used to end "4 problems would stop a scan" on a machine that scans
+ * perfectly well. A preflight that cries wolf gets skipped, which is worse than
+ * not having one. Missing credentials are now reported for what they are, and
+ * the checks that matter locally — the engine loading, and its rules firing —
+ * are checked instead.
  */
 
 import { WebSocket } from 'ws';
@@ -26,7 +34,8 @@ interface GlobalFlags {
   color?: boolean;
 }
 
-type Status = 'ok' | 'warn' | 'fail';
+/** `info` states a fact that is not a problem: it never gates the summary. */
+type Status = 'ok' | 'info' | 'warn' | 'fail';
 
 interface Check {
   status: Status;
@@ -74,28 +83,41 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
 
   const from = (key: string) => (config.sources[key] ? ` (from ${config.sources[key]})` : ' (default)');
 
-  checks.push({ status: 'ok', label: 'api url', detail: `${config.apiUrl}${from('apiUrl')}` });
+  // The same test `scan` makes: with no project id there is no hosted anything,
+  // and the local engine runs. Everything below reads off this.
+  const hosted = Boolean(config.projectId);
 
-  checks.push(
-    config.apiKey
-      ? { status: 'ok', label: 'credentials', detail: `${maskKey(config.apiKey)}${from('apiKey')}` }
-      : {
-          status: 'fail',
-          label: 'credentials',
-          detail: 'no API key',
-          hint: `Run \`sirius login\`, set SIRIUS_API_KEY, or add one to ${configTomlPath()}.`,
-        },
-  );
+  checks.push({
+    status: 'ok',
+    label: 'scan mode',
+    detail: hosted
+      ? `hosted · ${config.apiUrl}${from('apiUrl')}`
+      : 'local engine · tree-sitter AST analysis, no backend needed',
+    ...(hosted ? {} : { hint: 'Add a project id to scan against the API instead.' }),
+  });
 
   checks.push(
     config.projectId
       ? { status: 'ok', label: 'project id', detail: `${config.projectId}${from('projectId')}` }
-      : {
-          status: 'fail',
-          label: 'project id',
-          detail: 'not set',
-          hint: 'Run `sirius init --project <id>`, or set SIRIUS_PROJECT_ID.',
-        },
+      : { status: 'info', label: 'project id', detail: 'not set — scanning locally' },
+  );
+
+  checks.push(
+    config.apiKey
+      ? { status: 'ok', label: 'credentials', detail: `${maskKey(config.apiKey)}${from('apiKey')}` }
+      : hosted
+        ? {
+            status: 'fail',
+            label: 'credentials',
+            detail: 'no API key, but a project is configured',
+            hint: `Run \`sirius login\`, set SIRIUS_API_KEY, or add one to ${configTomlPath()}.`,
+          }
+        : {
+            status: 'info',
+            label: 'credentials',
+            detail: 'no API key — not needed for a local scan',
+            hint: `\`sirius login\` stores one at ${configTomlPath()} when you want hosted scans.`,
+          },
   );
 
   checks.push({
@@ -109,29 +131,45 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
     checks.push({ status: 'ok', label: 'ignore rules', detail: `${ignores.length} pattern(s) in .siriusignore` });
   }
 
+  // ---- the engine, which is what a local scan actually depends on
+
+  checks.push(await probeEngine(glyphs.check));
+
   // ---- connectivity
 
-  const client = new ApiClient({ baseUrl: config.apiUrl, apiKey: config.apiKey, timeoutMs: 8000 });
-  try {
-    const health = await client.health();
+  // Only when a scan would use it. Probing an API nobody configured costs
+  // thirteen seconds of timeouts before a demo and reports a failure that is
+  // not one.
+  if (hosted) {
+    const client = new ApiClient({ baseUrl: config.apiUrl, apiKey: config.apiKey, timeoutMs: 8000 });
+    try {
+      const health = await client.health();
+      checks.push({
+        status: 'ok',
+        label: 'api reachable',
+        detail: `${health.status ?? 'ok'}${health.version ? ` · v${health.version}` : ''}`,
+      });
+    } catch (error) {
+      checks.push({
+        status: 'fail',
+        label: 'api reachable',
+        detail: error instanceof Error ? error.message : String(error),
+        hint: 'Start the backend, or run `pnpm mock` for the local one.',
+      });
+    }
+
+    // The WebSocket is the demo's most fragile dependency, so probe it directly
+    // rather than discovering it is down mid-scan.
+    const wsOrigin = deriveWsUrl(config.apiUrl, config.wsUrl);
+    checks.push(await probeWebSocket(wsOrigin, config.apiKey));
+  } else {
     checks.push({
-      status: 'ok',
-      label: 'api reachable',
-      detail: `${health.status ?? 'ok'}${health.version ? ` · v${health.version}` : ''}`,
-    });
-  } catch (error) {
-    checks.push({
-      status: 'fail',
-      label: 'api reachable',
-      detail: error instanceof Error ? error.message : String(error),
-      hint: 'Start the backend, or run `pnpm mock` for the local one.',
+      status: 'info',
+      label: 'api',
+      detail: 'not contacted — nothing here needs it',
+      hint: `\`rules validate\`, \`rules test\`, \`badge\` and PDF reports still do. ${config.apiUrl} is where they would go.`,
     });
   }
-
-  // The WebSocket is the demo's most fragile dependency, so probe it directly
-  // rather than discovering it is down mid-scan.
-  const wsOrigin = deriveWsUrl(config.apiUrl, config.wsUrl);
-  checks.push(await probeWebSocket(wsOrigin, config.apiKey));
 
   // ---- terminal
 
@@ -195,13 +233,13 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
 
   const cache = loadLastScan(project?.dir ?? cwd);
   if (cache) {
+    const replayed = cache.source === 'replay';
     checks.push({
-      status: cache.scan_id === 'replay' ? 'warn' : 'ok',
+      status: replayed ? 'warn' : 'ok',
       label: 'last scan',
-      detail:
-        cache.scan_id === 'replay'
-          ? `replay, ${cache.findings.length} findings — fix and triage need a real scan`
-          : `${cache.scan_id.slice(0, 8)} · ${cache.findings.length} findings · ${cache.scanned_at}`,
+      detail: replayed
+        ? `replay, ${cache.findings.length} findings — fix and triage need a real scan`
+        : `${cache.scan_id.slice(0, 14)} · ${cache.source ?? 'local'} · ${cache.findings.length} findings · ${cache.scanned_at}`,
     });
   }
 
@@ -210,6 +248,7 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   const width = Math.max(...checks.map((c) => c.label.length));
   const mark: Record<Status, string> = {
     ok: capabilities.unicode ? '✓' : 'ok  ',
+    info: capabilities.unicode ? '·' : 'note',
     warn: capabilities.unicode ? '!' : 'warn',
     fail: capabilities.unicode ? '✗' : 'FAIL',
   };
@@ -224,16 +263,67 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   const warned = checks.filter((c) => c.status === 'warn').length;
 
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const ready = hosted ? 'Ready to scan against the API.' : 'Ready to scan locally.';
 
   process.stdout.write(
     failed > 0
       ? `\n  ${plural(failed, 'problem', 'problems')} would stop a scan.\n\n`
       : warned > 0
-        ? `\n  Ready, with ${plural(warned, 'thing', 'things')} worth knowing.\n\n`
-        : '\n  Ready.\n\n',
+        ? `\n  ${ready} ${plural(warned, 'thing', 'things')} worth knowing.\n\n`
+        : `\n  ${ready}\n\n`,
   );
 
   if (failed > 0) process.exitCode = 2;
+}
+
+/**
+ * Runs the local engine end to end on a snippet with a known finding.
+ *
+ * Cheap and worth doing: the grammars are WASM loaded at runtime, so a bad
+ * install fails at the first parse rather than at build time — which, before
+ * this check, meant discovering it mid-demo. Asserting a rule actually fires
+ * proves the whole path, not just that the module imported.
+ */
+async function probeEngine(check: string): Promise<Check> {
+  const SAMPLE = 'STRIPE_KEY = "sk_live_51H8xR2eZvKYlo2Ctest"\n';
+
+  try {
+    const { parseSource } = await import('../engine/parse.js');
+    const { RULES, runRules } = await import('../engine/rules.js');
+
+    const parsed = await parseSource('doctor-probe.py', SAMPLE);
+    if (!parsed) {
+      return {
+        status: 'fail',
+        label: 'engine',
+        detail: 'the python grammar did not load',
+        hint: 'Reinstall dependencies — the tree-sitter WASM grammars are missing.',
+      };
+    }
+
+    const found = runRules(parsed);
+    if (found.length === 0) {
+      return {
+        status: 'fail',
+        label: 'engine',
+        detail: `${RULES.length} rules loaded, none fired on a known-bad sample`,
+        hint: 'The engine parses but does not match. This build is not fit to scan with.',
+      };
+    }
+
+    return {
+      status: 'ok',
+      label: 'engine',
+      detail: `${RULES.length} rules · python, javascript, typescript, go · self-test ${found[0]?.rule_id} ${check}`,
+    };
+  } catch (error) {
+    return {
+      status: 'fail',
+      label: 'engine',
+      detail: error instanceof Error ? error.message : String(error),
+      hint: 'The local engine could not start, so no scan can run. Reinstall dependencies.',
+    };
+  }
 }
 
 /** Opens the scan stream endpoint just far enough to learn whether it answers. */
