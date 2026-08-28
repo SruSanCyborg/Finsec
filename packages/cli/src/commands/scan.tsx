@@ -198,7 +198,9 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     // never shown and then silently uncounted.
     const { applyPolicy, emptyPolicyOutcome } = await import('../engine/policy.js');
     policy = emptyPolicyOutcome();
-    source = applyPolicy(source, findProjectRoot(target)?.dir ?? target, policy);
+    source = applyPolicy(source, findProjectRoot(target)?.dir ?? target, policy, {
+      diffOnly: config.diffAware,
+    });
 
     frames = pace(source, resolvePace(interactivePacing));
     scanSource = 'local engine · tree-sitter AST analysis';

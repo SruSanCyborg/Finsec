@@ -1186,3 +1186,30 @@ touch. A line that already fits is now returned untouched — a wrapper should l
 text out, not edit it.
 
 ---
+## D-036 — `--diff` was accepted, stored, echoed, and wired to nothing
+
+Documented as "only report findings absent from the baseline". It was parsed
+into the config and reported back in the JSON envelope as `diff_aware`, and no
+code anywhere acted on it — so a scan of an unchanged tree against its own
+baseline reported all twenty findings it had already accepted and exited 1,
+which is the exact opposite of the flag's promise.
+
+Same shape as `--ruleset`, which was also scaffolded, documented and wired to
+nothing (D-022). Both err toward *more* output, and a flag that errs toward more
+output is never caught by a missing result — nobody files a bug because a
+scanner showed them something.
+
+It was almost invisible from the outside, too. `baseline_state` was being
+computed correctly and `--fail-on new` was gating on it correctly, so the
+machinery around the flag all worked. Only the flag itself did nothing, which is
+why "baseline is applied by scan" read as true in the status table.
+
+**Withheld, not filtered afterwards**, through the same path suppression uses —
+because a finding removed from the list while left in the totals is a bug this
+surface has already shipped once. `--diff` on an unchanged tree now reports no
+findings, ₹0, score 100 and exit 0; after one new medium finding it reports that
+finding, its money, and exit 0 at the default `high` threshold — the gate is
+about severity and the flag is about novelty, and they compose rather than
+override each other.
+
+---

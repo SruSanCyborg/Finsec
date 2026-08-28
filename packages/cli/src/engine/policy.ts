@@ -11,6 +11,13 @@
  * a suppressed finding must never be *printed* — findings are rendered as they
  * arrive, and filtering afterwards would show the user something and then
  * quietly not count it.
+ *
+ * `--diff` withholds findings the same way. It was parsed, stored in the config,
+ * echoed into the JSON envelope as `diff_aware`, and acted on by nothing: a scan
+ * of an unchanged tree against its own baseline reported every finding and
+ * exited 1, which is the opposite of what the flag promises. Same shape as
+ * `--ruleset`, which was also wired to nothing — a flag that errs toward more
+ * output is never caught by a missing result.
  */
 
 import { complianceScore } from './scanner.js';
@@ -25,6 +32,13 @@ export interface PolicyOutcome {
   expired: Suppression[];
   baselineCommit: string | null | undefined;
   unchanged: number;
+  /** Findings held back by `--diff` because the baseline already had them. */
+  withheldAsUnchanged: number;
+}
+
+export interface PolicyOptions {
+  /** `--diff`: report only what the baseline does not already contain. */
+  diffOnly?: boolean;
 }
 
 /**
@@ -37,6 +51,7 @@ export async function* applyPolicy(
   frames: AsyncIterable<WsFrame>,
   root: string,
   outcome: PolicyOutcome,
+  options: PolicyOptions = {},
 ): AsyncGenerator<WsFrame> {
   const baseline = loadBaseline(root);
   const suppressions = loadSuppressions(root);
@@ -100,6 +115,16 @@ export async function* applyPolicy(
     finding.baseline_state = state;
     if (state === 'unchanged') outcome.unchanged += 1;
 
+    // Withheld, not filtered afterwards — and counted out of the totals by the
+    // same path suppression uses. Dropping a finding from the list while
+    // leaving it in the count is a bug this surface has already shipped once.
+    if (options.diffOnly && state === 'unchanged') {
+      outcome.withheldAsUnchanged += 1;
+      withheldCounts[finding.severity] = (withheldCounts[finding.severity] ?? 0) + 1;
+      withheldMoney += finding.money_at_risk_inr ?? 0;
+      continue;
+    }
+
     yield frame;
   }
 }
@@ -138,5 +163,5 @@ function corrected(
 
 /** An empty outcome, for callers to hand in and read back. */
 export function emptyPolicyOutcome(): PolicyOutcome {
-  return { suppressed: [], expired: [], baselineCommit: undefined, unchanged: 0 };
+  return { suppressed: [], expired: [], baselineCommit: undefined, unchanged: 0, withheldAsUnchanged: 0 };
 }
