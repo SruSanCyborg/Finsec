@@ -239,6 +239,8 @@ export interface PlainReportInput {
   options?: RenderOptions;
   /** Where the findings came from. Ambiguity here is how a mock passes for a scan. */
   source?: string;
+  /** What was scanned, so "what did it even look at?" has an answer on screen. */
+  target?: string;
 }
 
 export function renderPlainReport({
@@ -248,6 +250,7 @@ export function renderPlainReport({
   findingsAlreadyPrinted = false,
   options = {},
   source,
+  target,
 }: PlainReportInput): string {
   const color = options.color ?? false;
   const unicode = options.unicode ?? true;
@@ -300,9 +303,14 @@ export function renderPlainReport({
     lines.push(` ${paint('Skipped'.padEnd(11), DIM, color)}${paint(`${outcome.errors.length} file(s) unparsed`, DIM, color)}`);
   }
 
-  // Say plainly where these findings came from. Without it a replayed fixture
-  // and a real analysis look identical, which is exactly how a mock gets
-  // mistaken for a scan.
+  // Say plainly what was examined and where the findings came from. Without
+  // either, a replayed fixture and a real analysis look identical — which is
+  // exactly how a mock gets mistaken for a scan.
+  if (target) {
+    const files = outcome.filesScanned;
+    const count = typeof files === 'number' && files > 0 ? `${files} file${files === 1 ? '' : 's'} in ` : '';
+    lines.push(` ${paint('Scanned'.padEnd(11), DIM, color)}${paint(`${count}${target}`, DIM, color)}`);
+  }
   if (source) {
     lines.push(` ${paint('Source'.padEnd(11), DIM, color)}${paint(source, DIM, color)}`);
   }

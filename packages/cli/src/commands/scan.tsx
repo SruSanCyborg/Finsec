@@ -221,6 +221,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1',
         options: lineRenderOptions(capabilities),
         source: scanSource,
+        target,
       }),
     );
   }
@@ -366,6 +367,9 @@ async function collect(
 
   for await (const frame of frames) {
     switch (frame.type) {
+      case 'scan.started':
+        outcome.filesScanned = frame.total_files ?? 0;
+        break;
       case 'finding':
         outcome.findings.push(frame.finding);
         // The full-screen shell captures this pipe and renders each line into

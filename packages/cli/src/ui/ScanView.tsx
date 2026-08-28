@@ -30,6 +30,8 @@ export interface ScanOutcome {
   /** The server's own verdict, kept for the cross-check in decisions.md D-002. */
   serverExitCode: number | null;
   errors: Array<{ code: string; path?: string; detail?: string }>;
+  /** How many files were examined — the answer to "what did it actually look at?". */
+  filesScanned?: number;
 }
 
 export interface ScanViewProps {
