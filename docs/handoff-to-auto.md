@@ -90,6 +90,15 @@ These are in `contract/openapi.yaml` today. If you implement something different
 
 **`Finding` gains `col`** — 1-indexed column of the offending token. The PRD has it in the DDL but omits it from the WebSocket frame. The CLI needs it to align the `╰──` underline. Degrades gracefully when null.
 
+**`Finding` gains `taint`** — nullable string, the path by which untrusted input
+reaches the line: source first, then each assignment it passed through, in
+order. The local engine fills it from an intra-procedural dataflow pass and the
+CLI renders the hops under the code frame. **Its absence is not a claim of
+safety** and the schema says so — a null means "no path proven", which for an
+analysis that cannot cross a function boundary is a limit rather than a
+verdict. If your worker does inter-procedural analysis, this field is where to
+put the better answer.
+
 **`Finding` gains `triage_state`** — `open | accepted | dismissed | suppressed`. The PRD describes accept/dismiss/suppress but the DDL has one `suppressed` boolean: one value for three verbs. Keep `suppressed` derived from `triage_state == "suppressed"`. `accepted` ("real, will fix") and `dismissed` ("false positive") are opposite judgements, and flattening them destroys the audit trail.
 
 **`PATCH /scans/{id}/findings/{fid}`** takes `{ triage_state, reason?, expires_at? }`. `reason` is required for `dismissed` and `suppressed`.

@@ -849,6 +849,16 @@ components:
           description: Derived from `triage_state == "suppressed"`. Never gates.
         triage_state: { $ref: '#/components/schemas/TriageState' }
         fix_action: { $ref: '#/components/schemas/FixAction' }
+        taint:
+          type: [string, 'null']
+          description: >
+            How untrusted input reaches this line, when a dataflow pass could prove it —
+            source, then each assignment it passed through, in order. Absent when the
+            finding was matched on shape alone. Its absence is never a claim of safety:
+            the local engine's analysis is intra-procedural, so a value that arrives
+            through another function is real taint it simply could not follow.
+          examples:
+            ['HTTP request: account = request.args["account"] (line 9)  →  q = "SELECT … %s" % account (line 10)']
 
     FindingPage:
       type: object

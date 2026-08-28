@@ -503,6 +503,11 @@ export interface components {
             suppressed: boolean;
             triage_state?: components["schemas"]["TriageState"];
             fix_action?: components["schemas"]["FixAction"];
+            /**
+             * @description How untrusted input reaches this line, when a dataflow pass could prove it — source, then each assignment it passed through, in order. Absent when the finding was matched on shape alone. Its absence is never a claim of safety: the local engine's analysis is intra-procedural, so a value that arrives through another function is real taint it simply could not follow.
+             * @example HTTP request: account = request.args["account"] (line 9)  →  q = "SELECT … %s" % account (line 10)
+             */
+            taint?: string | null;
         };
         FindingPage: {
             items: components["schemas"]["Finding"][];

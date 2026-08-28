@@ -130,6 +130,7 @@ function toFinding(raw: RawFinding, shown: string): Finding {
     ...(raw.validity ? { validity: raw.validity } : {}),
     ...(raw.money_at_risk_inr ? { money_at_risk_inr: raw.money_at_risk_inr } : {}),
     ...(raw.fix_action ? { fix_action: raw.fix_action } : {}),
+    ...(raw.taint ? { taint: raw.taint } : {}),
   } as Finding;
 }
 

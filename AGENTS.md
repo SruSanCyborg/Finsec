@@ -128,7 +128,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Area | State |
 |---|---|
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
-| Local engine | Real. tree-sitter AST, 13 rules, fingerprints, money model. `rule-gallery` fires every one |
+| Local engine | Real. tree-sitter AST, 13 rules, intra-procedural taint tracking, fingerprints, money model. `rule-gallery` fires every one |
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
@@ -145,7 +145,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 594 passing |
+| Tests | 614 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no

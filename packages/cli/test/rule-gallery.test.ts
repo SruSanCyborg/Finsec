@@ -56,20 +56,63 @@ describe('the rule gallery', () => {
     expect(silent).toEqual([]);
   });
 
-  it('plants exactly one example of each', () => {
+  it('plants the examples it says it plants, and no others', () => {
     const counts = new Map<string, number>();
     for (const finding of gallery.findings) {
       counts.set(finding.rule_id, (counts.get(finding.rule_id) ?? 0) + 1);
     }
 
-    // SIR-SEC-060 is the exception and says so: the manifests carry an install
-    // hook, two non-registry dependencies and a floating pin, which are four
-    // different supply-chain facts under one rule id.
+    // Counted explicitly rather than "one each", because three rules honestly
+    // have more than one example and a blanket rule would hide which.
+    const expected: Record<string, number> = {
+      'SIR-SEC-001': 1,
+      'SIR-SEC-002': 1,
+      // The shape case in injection.py, plus two in taint.py: one traced from
+      // the request across three statements, and one coerced by `int()` that is
+      // still reported because no proven path is not a proof of safety.
+      'SIR-SEC-010': 3,
+      // The shape case, and the same flaw traced to `request.form`.
+      'SIR-SEC-011': 2,
+      'SIR-SEC-020': 1,
+      'SIR-SEC-021': 1,
+      'SIR-SEC-030': 1,
+      'SIR-SEC-031': 1,
+      'SIR-SEC-040': 1,
+      'SIR-SEC-041': 1,
+      'SIR-SEC-050': 1,
+      'SIR-SEC-051': 1,
+      // An install hook, two non-registry dependencies and a floating pin:
+      // four different supply-chain facts under one rule id.
+      'SIR-SEC-060': 4,
+    };
+
     for (const [id, n] of counts) {
-      if (id === 'SIR-SEC-060') continue;
-      expect(n, `${id} fired ${n} times; the gallery plants one`).toBe(1);
+      expect(n, `${id} fired ${n} times`).toBe(expected[id]);
     }
-    expect(counts.get('SIR-SEC-060')).toBe(4);
+  });
+
+  it('proves the path when it can, and says nothing when it cannot', () => {
+    // The whole difference between "there is an interpolation on this line" and
+    // "an attacker controls this string". A finding that claims a trace must
+    // carry one, and one that has no trace must not imply safety.
+    const traced = gallery.findings.filter((f) => (f as { taint?: string }).taint);
+    expect(traced.length).toBe(2);
+
+    for (const finding of traced) {
+      expect(finding.message).toContain('attacker-controlled');
+      const path = (finding as { taint?: string }).taint as string;
+      // Source, then every assignment it passed through, in order.
+      expect(path).toMatch(/^HTTP request: /);
+      expect(path.split('\u2192').length).toBeGreaterThan(1);
+      expect(path).toMatch(/line \d+/);
+    }
+  });
+
+  it('does not flag a query built from a module constant', () => {
+    // `f"SELECT count(*) FROM {LEDGER_TABLE}"` was reported as attacker-
+    // controlled SQL on a line where nothing an attacker touches appears.
+    const sql = at('taint.py').filter((f) => f.rule_id === 'SIR-SEC-010');
+    expect(sql.map((f) => f.line)).not.toContain(27);
   });
 
   it('leaves the correct counterpart in each file alone', () => {

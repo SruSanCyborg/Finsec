@@ -73,6 +73,11 @@ export function FindingCard({ finding, glyphs, capabilities, showRunHint = false
   const validity = validityLabel(finding.validity);
   const money = formatInr(finding.money_at_risk_inr);
 
+  // `HTTP request: a = request.args[…] (line 9)  →  q = "…" % a (line 10)`
+  const taint = (finding as { taint?: string | null }).taint ?? '';
+  const [taintSource, ...taintRest] = taint ? taint.split(': ') : [];
+  const taintHops = taintRest.length > 0 ? taintRest.join(': ').split('  \u2192  ') : [];
+
   const annotationParts = [
     finding.category === 'secrets' ? 'secret' : undefined,
     validity ? (finding.validity === 'verified_live' ? `${glyphs.warning} ${validity}` : validity) : undefined,
@@ -110,6 +115,25 @@ export function FindingCard({ finding, glyphs, capabilities, showRunHint = false
           <Text color={finding.validity === 'verified_live' ? color : muted}>
             {annotationParts.join(glyphs.separator)}
           </Text>
+        </Box>
+      ) : null}
+
+      {/* The trace, when the dataflow pass could prove one. This is the whole
+          difference between "there is an interpolation here" and "an attacker
+          controls this string", and it is worth the two lines it costs. */}
+      {taintHops.length > 0 ? (
+        <Box flexDirection="column">
+          <Box>
+            <Text color={muted}>{`     ${' '.repeat(gutter.length)} ${glyphs.vertical}  `}</Text>
+            <Text color={capabilities.color ? COLOR.accent : undefined}>{`from ${taintSource}:`}</Text>
+          </Box>
+          {taintHops.map((hop, index) => (
+            <Box key={hop}>
+              <Text color={muted}>{`     ${' '.repeat(gutter.length)} ${glyphs.vertical}  `}</Text>
+              <Text color={muted}>{`${index === 0 ? '  ' : '  '}${glyphs.elbow} `}</Text>
+              <Text>{hop}</Text>
+            </Box>
+          ))}
         </Box>
       ) : null}
 

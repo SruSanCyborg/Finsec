@@ -13,6 +13,8 @@
 
 import { enclosing, walk } from './parse.js';
 import type { ManifestFile } from './manifests.js';
+import { analyzeTaint, describePath } from './taint.js';
+import type { TaintTable } from './taint.js';
 import { estimateExposure } from './exposure-model.js';
 import type { Reachability } from './exposure-model.js';
 import type { ParsedFile, SyntaxNode } from './parse.js';
@@ -34,6 +36,8 @@ export interface RawFinding {
   money_at_risk_inr?: number;
   /** Evidence the attack-path builder chains on. */
   tags?: string[];
+  /** How untrusted input reaches this line, when the dataflow pass could prove it. */
+  taint?: string;
 }
 
 export interface Rule {
@@ -45,7 +49,7 @@ export interface Rule {
   fix_action?: string;
   languages?: string[];
   /** Rules that read source. Absent on a manifest-only rule. */
-  run?(file: ParsedFile): RawFinding[];
+  run?(file: ParsedFile, taint?: TaintTable): RawFinding[];
   /** Rules that read dependency manifests. Absent on every source rule. */
   runManifest?(file: ManifestFile): RawFinding[];
 }
@@ -254,7 +258,7 @@ const sqlInjection: Rule = {
   message: 'SQL built with string formatting',
   compliance_ref: ['PCI-DSS:6.2.4', 'RBI-DPSC', 'CWE:89'],
   fix_action: 'parameterize_query',
-  run(file) {
+  run(file, taint) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
       if (node.type !== 'call') continue;
@@ -276,13 +280,59 @@ const sqlInjection: Rule = {
         hasInterpolation(first) ||
         (first.type === 'call' && /\.format$/.test(calleeName(first)));
 
-      if (!interpolated) continue;
+      // Traced, where the trace is possible.
+      //
+      // Two things this changes. A query built one statement above the call was
+      // invisible to the shape test — `q = "…" % account; cur.execute(q)` is
+      // the ordinary spelling and there is nothing to match at the sink. And
+      // interpolating a module constant is not an injection: `f"SELECT count(*)
+      // FROM {TABLE}"` was reported as attacker-controlled SQL on a line where
+      // nothing an attacker touches appears.
+      const proven = taint?.reaching(first);
 
-      findings.push(base(this, file, node, { tags: ['injection', 'database'] }));
+      if (!interpolated) {
+        // No interpolation here, but the value arrived tainted from elsewhere.
+        // This is the case the rule missed entirely.
+        if (!proven) continue;
+        findings.push(
+          base(this, file, node, {
+            message: 'SQL built from attacker-controlled input',
+            snippet: snippetFor(file, node),
+            tags: ['injection', 'database', 'tainted'],
+            taint: describePath(proven),
+          }),
+        );
+        continue;
+      }
+
+      // Interpolated, and every name in it is a module-level literal. Nothing
+      // an attacker controls can reach this string.
+      const names = interpolatedNames(first);
+      if (!proven && names.length > 0 && taint?.active && names.every((name) => taint.isConstant(name))) {
+        continue;
+      }
+
+      findings.push(
+        base(this, file, node, {
+          tags: ['injection', 'database', ...(proven ? ['tainted'] : [])],
+          ...(proven
+            ? { message: 'SQL built from attacker-controlled input', taint: describePath(proven) }
+            : {}),
+        }),
+      );
     }
     return findings;
   },
 };
+
+/** Identifier names spliced into a string, ignoring the literal parts. */
+function interpolatedNames(node: SyntaxNode): string[] {
+  const names: string[] = [];
+  for (const child of walk(node)) {
+    if (child.type === 'identifier') names.push(child.text);
+  }
+  return names;
+}
 
 const commandInjection: Rule = {
   id: 'SIR-SEC-011',
@@ -291,7 +341,7 @@ const commandInjection: Rule = {
   message: 'OS command built from user input',
   compliance_ref: ['PCI-DSS:6.2.4', 'CWE:78'],
   fix_action: 'sanitize_input',
-  run(file) {
+  run(file, taint) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
       if (node.type !== 'call') continue;
@@ -299,14 +349,24 @@ const commandInjection: Rule = {
       const isSubprocess = /subprocess\.(run|call|Popen|check_output)$/.test(callee);
       const isOsSystem = /^os\.system$/.test(callee) || /child_process\.exec$/.test(callee);
 
+      const args = argumentsOf(node);
+      const proven = args.map((arg) => taint?.reaching(arg)).find(Boolean);
+      const traced = proven
+        ? { message: 'OS command built from attacker-controlled input', taint: describePath(proven) }
+        : {};
+
       if (isOsSystem) {
-        findings.push(base(this, file, node, { tags: ['injection', 'shell'] }));
+        findings.push(
+          base(this, file, node, { tags: ['injection', 'shell', ...(proven ? ['tainted'] : [])], ...traced }),
+        );
         continue;
       }
       if (!isSubprocess) continue;
       if (!/shell\s*=\s*True/.test(node.text)) continue;
 
-      findings.push(base(this, file, node, { tags: ['injection', 'shell'] }));
+      findings.push(
+        base(this, file, node, { tags: ['injection', 'shell', ...(proven ? ['tainted'] : [])], ...traced }),
+      );
     }
     return findings;
   },
@@ -768,9 +828,19 @@ export const RULES: Rule[] = [
 /** Runs every applicable rule over one parsed file, or just the ones given. */
 export function runRules(file: ParsedFile, rules: readonly Rule[] = RULES): RawFinding[] {
   const findings: RawFinding[] = [];
+  // Once per file, not once per rule: the injection rules both want it and
+  // walking the tree twice to build the same table is waste.
+  let taint: TaintTable | undefined;
+  try {
+    taint = analyzeTaint(file);
+  } catch {
+    // A file the dataflow pass cannot read is still a file the pattern rules
+    // can. Losing the proof must not lose the finding.
+  }
+
   for (const rule of rules) {
     try {
-      if (rule.run) findings.push(...rule.run(file));
+      if (rule.run) findings.push(...rule.run(file, taint));
     } catch {
       // One malformed rule must not abandon the scan of a whole file; the other
       // rules still have something useful to say about it.

@@ -900,3 +900,55 @@ hyperparameter by its score on the held-out metric, which is the thing this
 whole surface exists to not do.
 
 ---
+## D-030 — Injection is a dataflow question, not a shape
+
+The injection rules matched a shape: an interpolation inside the argument of an
+`execute` call. That shape is neither necessary nor sufficient, and both halves
+were demonstrable in four lines of ordinary Flask.
+
+**It missed the ordinary spelling.** Real injection is written across
+statements, and there is nothing to match at the sink:
+
+```python
+account = request.args["account"]
+q = "SELECT … WHERE account = '%s'" % account
+cur.execute(q)                                  # ← no interpolation here
+```
+
+**And it fired where nothing untrusted could reach.**
+`cur.execute(f"SELECT count(*) FROM {TABLE}")` was reported as attacker-
+controlled SQL on a line where the only name is a module constant.
+
+`engine/taint.ts` answers the actual question — does a value the attacker
+controls reach this call — with the smallest analysis that can: intra-
+procedural, flow-ordered, over assignments within a file. Sources are
+request-shaped (`request.args`, `req.body`, `sys.argv`, stdin). `os.environ` is
+deliberately not a source: an environment variable is operator input, and
+treating deployment configuration as hostile flags every correct application.
+
+**The direction of caution is the design.** The analysis *adds* proof where it
+can and never withdraws a finding for lack of it. It cannot follow a value into
+another function, through a container, or across a file, so "no path found" is a
+limit of the pass and not a certificate. A finding with a proven path is
+upgraded — message, `tainted` tag, and the hops rendered under the code frame —
+and a finding without one stands exactly as it did. An injection scanner that
+goes quiet when it cannot prove harm is worse than one that never looked.
+
+The single exception is narrow and stated: a name bound **once, at module level,
+to a literal** is a constant, and interpolating it is not a finding. Bound twice,
+it is a variable again and the finding returns.
+
+**`Finding` gains `taint`**, a nullable string: the source, then each assignment
+the value passed through, in order. Same treatment as `col` and `triage_state`
+(§3 of the handoff) — added to `contract/openapi.yaml` first, so the field the
+CLI renders is a field the Core API can populate. Its absence is documented in
+the schema as *not* a claim of safety, because a consumer reading a null there
+would otherwise be entitled to assume one.
+
+What it buys, on the gallery fixture: the three-statement injection that was
+previously invisible is caught and traced, and the module-constant query that
+was previously a critical finding is gone. The demo fixture's totals do not
+move — ₹89,30,000, score 60 — because the chaos repo's injection was already
+matched on shape and is matched still.
+
+---
