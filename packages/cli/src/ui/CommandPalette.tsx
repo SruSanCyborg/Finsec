@@ -10,6 +10,7 @@
 import { Box, Text } from 'ink';
 import React from 'react';
 
+import { truncate } from './kit.js';
 import { COLOR } from './theme.js';
 import type { Capabilities } from './theme.js';
 
@@ -247,6 +248,19 @@ export interface CommandPaletteProps {
 
 export function CommandPalette({ commands, selected, capabilities, max = 8 }: CommandPaletteProps) {
   const muted = capabilities.color ? COLOR.muted : undefined;
+  // Cut to length here rather than leaving it to Ink.
+  //
+  // `/triage` and `/watch` have summaries longer than a narrow terminal, and a
+  // wrapped row makes the list taller than the number of entries in it. Letting
+  // Ink handle it with `wrap="truncate-end"` was worse: the row becomes a flex
+  // container, Ink shrinks *every* child to fit, and the indent and the name
+  // column collapse — `   /triage  ` beside `    /fix        `. Same lesson as
+  // the summary footer (D-047): decide the width, then hand Ink strings that
+  // already fit.
+  //
+  // 4 for the indent, 12 for the padded command name, 1 so the last column
+  // never touches the right edge.
+  const summaryRoom = Math.max(12, capabilities.width - 17);
 
   if (commands.length === 0) {
     return <Text color={muted}>{'  no matching command'}</Text>;
@@ -262,12 +276,24 @@ export function CommandPalette({ commands, selected, capabilities, max = 8 }: Co
         const index = Math.max(0, start) + i;
         const isSelected = index === selected;
         return (
+          // One row, one line — always.
+          //
+          // `/triage` and `/watch` have summaries longer than a narrow
+          // terminal, and a wrapped row made the list taller than the number of
+          // entries in it. The height budget then clipped the column, and
+          // `… N more` was painted over the *start* of the last row, leaving
+          // its description stranded beside the count: `… 17 more   Check
+          // config, connectivity, and terminal`, which reads as gibberish and
+          // silently hides a command.
+          //
+          // Truncating here rather than shortening the summaries: they are
+          // read in `/help` too, where there is room for the whole sentence.
           <Box key={command.name}>
             <Text color={capabilities.color ? COLOR.accent : undefined}>{isSelected ? '  > ' : '    '}</Text>
             <Text bold={isSelected} color={isSelected ? undefined : muted}>
               {`/${command.name}`.padEnd(12)}
             </Text>
-            <Text color={muted}>{command.summary}</Text>
+            <Text color={muted}>{truncate(command.summary, summaryRoom)}</Text>
           </Box>
         );
       })}

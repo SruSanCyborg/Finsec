@@ -30,6 +30,36 @@ function failOnArg(value: string): string {
   return value;
 }
 
+/**
+ * A count, refused rather than silently coerced.
+ *
+ * `Number.parseInt('abc', 10)` is `NaN`, and every comparison against `NaN` is
+ * false — so `--limit abc` printed an empty list with no error and exit 0, and
+ * `--capacity -5` printed `room for -5` and carried on. Both look like the tool
+ * answering the question rather than failing to understand it, which is the
+ * worst of the three possible outcomes.
+ *
+ * Zero is allowed: `--capacity 0` and `--budget 0` are meaningful questions —
+ * *what would this run do with nothing to spend?* — and the answer is a run
+ * that refuses everything, which is exactly what the audit trail should show.
+ */
+function countArg(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || !Number.isInteger(parsed) || parsed < 0) {
+    throw new InvalidArgumentError(`expected a whole number of 0 or more, got "${value}"`);
+  }
+  return parsed;
+}
+
+/** A fraction in [0,1], for the share-style options. */
+function fractionArg(value: string): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1) {
+    throw new InvalidArgumentError(`expected a fraction between 0 and 1, got "${value}"`);
+  }
+  return parsed;
+}
+
 function collect(value: string, previous: string[] = []): string[] {
   return [...previous, value];
 }
@@ -64,7 +94,7 @@ export function buildProgram(): Command {
     .option('--report <format>', 'download a signed report: pdf | json')
     .option('--replay <fixture>', 'replay a recorded frame timeline instead of calling the API')
     .option('--local', 'force the built-in engine even when a project is configured')
-    .option('--max-findings <n>', 'stop rendering cards after n findings', (v) => Number.parseInt(v, 10))
+    .option('--max-findings <n>', 'stop rendering cards after n findings', countArg)
     .action(async (path: string, options: Record<string, unknown>, command: Command) => {
       const { runScan } = await import('./commands/scan.js');
       await runScan(path, options, command.parent?.opts() ?? {});
@@ -197,27 +227,27 @@ export function buildProgram(): Command {
     .argument('[target]', 'batch directory — or, for `explain`, a record id')
     .option('--seed <value>', 'seed for `gen` — the same seed is the same batch')
     .option('--force', 'replace an existing batch that was generated differently')
-    .option('--payments <n>', 'payments to generate', (v) => Number.parseInt(v, 10))
-    .option('--checkouts <n>', 'checkouts to generate', (v) => Number.parseInt(v, 10))
-    .option('--invoices <n>', 'invoices to generate', (v) => Number.parseInt(v, 10))
+    .option('--payments <n>', 'payments to generate', countArg)
+    .option('--checkouts <n>', 'checkouts to generate', countArg)
+    .option('--invoices <n>', 'invoices to generate', countArg)
     .option('--split <name>', 'test | train | all (default: test — the held-out half)')
-    .option('--threshold <n>', 'override the score floor', (v) => Number.parseInt(v, 10))
-    .option('--capacity <n>', 'interventions available this run', (v) => Number.parseInt(v, 10))
-    .option('--limit <n>', 'rows to print', (v) => Number.parseInt(v, 10))
+    .option('--threshold <n>', 'override the score floor', countArg)
+    .option('--capacity <n>', 'interventions available this run', countArg)
+    .option('--limit <n>', 'rows to print', countArg)
     .option('--all', 'include records the agent would leave alone')
     .option('--kind <name>', 'show only payments, checkouts or invoices')
     .option('--model <file>', 'score with a model fitted elsewhere')
-    .option('--budget <rupees>', 'cap what the run may spend', (v) => Number.parseInt(v, 10))
-    .option('--max-steps <n>', 'times one record may be worked', (v) => Number.parseInt(v, 10))
+    .option('--budget <rupees>', 'cap what the run may spend', countArg)
+    .option('--max-steps <n>', 'times one record may be worked', countArg)
     .option('--output <file>', 'where to write the audit trail')
     .option('--verify <file>', 'check a signed audit trail instead of running')
     .option('--key <fingerprint>', 'require this signer — without it, a pass does not say who signed')
     .option('--batch <dir>', 'batch directory, when the argument is a record id')
-    .option('--seeds <n>', 'batches to sweep over (default 8)', (v) => Number.parseInt(v, 10))
-    .option('--capacity-share <fraction>', 'act on this share of each split, e.g. 0.05', Number.parseFloat)
+    .option('--seeds <n>', 'batches to sweep over (default 8)', countArg)
+    .option('--capacity-share <fraction>', 'act on this share of each split, e.g. 0.05', fractionArg)
     .option('--save <file>', 'write the sweep, to compare a later run against')
     .option('--against <file>', 'compare this sweep with a saved one')
-    .option('--debounce <ms>', 'quiet period for `watch`', (v) => Number.parseInt(v, 10))
+    .option('--debounce <ms>', 'quiet period for `watch`', countArg)
     .option('--json', 'machine-readable output')
     .action(async (subcommand: string, target: string, options: Record<string, unknown>, command: Command) => {
       const { runRevenue } = await import('./commands/revenue.js');
@@ -231,8 +261,8 @@ export function buildProgram(): Command {
     .option('--gen', 'generate a set of books to reconcile')
     .option('--force', 'replace books that were generated differently')
     .option('--seed <value>', 'seed for --gen')
-    .option('--orders <n>', 'captures to generate', (v) => Number.parseInt(v, 10))
-    .option('--limit <n>', 'exception lines to print per kind', (v) => Number.parseInt(v, 10))
+    .option('--orders <n>', 'captures to generate', countArg)
+    .option('--limit <n>', 'exception lines to print per kind', countArg)
     .option('--exceptions', 'print every exception, not a sample')
     .option('--json', 'machine-readable output')
     .action(async (books: string, options: Record<string, unknown>, command: Command) => {
@@ -283,7 +313,7 @@ export function buildProgram(): Command {
     .command('watch')
     .description('Re-scan on file change')
     .argument('[path]', 'path to watch', '.')
-    .option('--debounce <ms>', 'quiet period after a change', (v) => Number.parseInt(v, 10))
+    .option('--debounce <ms>', 'quiet period after a change', countArg)
     .option('--severity-threshold <level>', 'minimum severity that counts', severityArg)
     .option('--fail-on <predicate>', 'which findings block: all | new | verified-secrets', failOnArg)
     .option('--ruleset <name>', 'ruleset to run (repeatable)', collect)
@@ -391,7 +421,16 @@ export async function main(argv: string[] = process.argv): Promise<void> {
     if (code === 'commander.helpDisplayed' || code === 'commander.help' || code === 'commander.version') {
       return;
     }
-    if (code === 'commander.unknownCommand' || code === 'commander.unknownOption' || code === 'commander.missingArgument') {
+    // Every commander failure, not a list of three.
+    //
+    // Commander has already written the message itself, so re-reporting it
+    // produced `error: error: option '--limit <n>' argument 'abc' is invalid`.
+    // The list named `unknownCommand`, `unknownOption` and `missingArgument`
+    // and missed `invalidArgument`, which is what an option's own parser
+    // throws — so the codes added here for validating numbers arrived
+    // double-printed. Matching the prefix means the next one commander adds is
+    // handled before anyone sees it twice.
+    if (typeof code === 'string' && code.startsWith('commander.')) {
       process.exitCode = ExitCode.CLI_ERROR;
       return;
     }

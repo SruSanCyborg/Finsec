@@ -26,6 +26,7 @@ import { render } from 'ink';
 import React from 'react';
 import { describe, expect, it } from 'vitest';
 
+import { CommandPalette, SHELL_COMMANDS } from '../src/ui/CommandPalette.js';
 import { CerebusPanel } from '../src/ui/FixView.js';
 import { Summary } from '../src/ui/Summary.js';
 import { glyphsFor } from '../src/ui/theme.js';
@@ -182,5 +183,55 @@ describe('the Cerebus panel keeps the clause that makes its argument', () => {
         expect(line.length, `"${line}" at ${width} columns`).toBeLessThanOrEqual(width);
       }
     }
+  });
+});
+
+describe('the slash palette is one line per command', () => {
+  it.each(WIDTHS)('keeps every row on its own line at %i columns', (width) => {
+    const output = draw(
+      <CommandPalette
+        commands={SHELL_COMMANDS}
+        selected={0}
+        capabilities={capabilitiesAt(width)}
+        max={5}
+      />,
+      width,
+    );
+
+    const rows = output.split('\n').filter((line) => line.trim().length > 0);
+    // Five commands and the overflow count. A summary long enough to wrap used
+    // to make the list taller than the number of entries in it, and the
+    // overflow line was then painted over the row above.
+    expect(rows, `rows at ${width}`).toHaveLength(6);
+    expect(rows.at(-1)).toMatch(/… \d+ more$/);
+  });
+
+  it('keeps the columns aligned when a summary has to be cut', () => {
+    // Letting Ink truncate made the row a flex container, and Ink shrinks every
+    // child to fit — so the indent and the name column collapsed on exactly the
+    // rows that were cut: `   /triage  ` beside `    /fix        `.
+    const output = draw(
+      <CommandPalette commands={SHELL_COMMANDS} selected={0} capabilities={capabilitiesAt(60)} max={5} />,
+      60,
+    );
+
+    for (const row of output.split('\n').filter((line) => line.includes('/'))) {
+      expect(row.slice(0, 4), row).toMatch(/^(  > |    )$/);
+      // The summary always starts in the same column, cut or not.
+      expect(row.indexOf(' ', 4), row).toBeGreaterThan(4);
+    }
+  });
+
+  it('never cuts a summary that fits', () => {
+    const output = draw(
+      <CommandPalette commands={SHELL_COMMANDS} selected={0} capabilities={capabilitiesAt(120)} max={5} />,
+      120,
+    );
+
+    // The overflow line carries an ellipsis of its own — `… 17 more` — so it is
+    // the rows that are checked, not the whole frame.
+    const rows = output.split('\n').filter((line) => line.includes('/') && !line.includes('more'));
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) expect(row, row).not.toContain('…');
   });
 });

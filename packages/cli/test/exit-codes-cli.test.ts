@@ -45,6 +45,21 @@ function run(args: string[]): number {
   }
 }
 
+/** Like `run`, but keeps what was printed — some assertions are about the text. */
+function runWithOutput(args: string[]): { code: number; output: string } {
+  try {
+    const output = execFileSync(process.execPath, [cli, ...args], {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, SIRIUS_SCAN_PACE: '0' },
+    });
+    return { code: 0, output };
+  } catch (error) {
+    const failure = error as { status?: number; stdout?: string; stderr?: string };
+    return { code: failure.status ?? -1, output: `${failure.stdout ?? ''}${failure.stderr ?? ''}` };
+  }
+}
+
 let dir: string;
 beforeEach(() => {
   dir = mkdtempSync(join(tmpdir(), 'sirius-exit-'));
@@ -71,6 +86,32 @@ describe('a malformed invocation is a CLI error, not a finding', () => {
   ])('%s still exits 0', (_name, args) => {
     // The override catches these too; they are successful exits, not failures.
     expect(run(args)).toBe(0);
+  });
+});
+
+describe('a command that needs a terminal says so instead of hanging', () => {
+  it('refuses `fix` with no terminal, rather than waiting for a keypress', () => {
+    // It used to print `applying…`, wait forever for an answer that could never
+    // arrive, and end on a Node warning about an unsettled top-level await
+    // naming a path inside dist/. In a pipeline it hung; from a script it read
+    // as a crash in the tool rather than a missing flag.
+    writeFileSync(join(dir, 'pay.py'), 'STRIPE_KEY = "sk_live_51H8xQ2eZvKYlo2Cabcd"\n', 'utf8');
+    expect(run(['scan', dir])).toBe(1);
+
+    const result = runWithOutput(['fix', 'SIR-SEC-001', '--target', dir]);
+    expect(result.code).toBe(ExitCode.CLI_ERROR);
+    // And it names the way out. `fix` has two non-interactive modes, so a flat
+    // "not a terminal" would be turning somebody away from a door that is open.
+    expect(result.output).toMatch(/--dry-run/);
+    expect(result.output).toMatch(/--apply/);
+    // The Node internal warning must not be what the user sees.
+    expect(result.output).not.toMatch(/unsettled top-level await/);
+  });
+
+  it('lets --dry-run through without a terminal', () => {
+    writeFileSync(join(dir, 'pay.py'), 'STRIPE_KEY = "sk_live_51H8xQ2eZvKYlo2Cabcd"\n', 'utf8');
+    run(['scan', dir]);
+    expect(runWithOutput(['fix', 'SIR-SEC-001', '--target', dir, '--dry-run']).code).toBe(0);
   });
 });
 
@@ -104,5 +145,42 @@ describe('nothing to scan is not a pass', () => {
     writeFileSync(join(dir, 'vendor', 'app.py'), 'x = 1\n', 'utf8');
     writeFileSync(join(dir, '.siriusignore'), 'vendor/\n', 'utf8');
     expect(run(['scan', dir])).toBe(ExitCode.NO_TARGET);
+  });
+});
+
+describe('a number that is not a number is refused, not coerced', () => {
+  // `Number.parseInt('abc', 10)` is NaN, and every comparison against NaN is
+  // false — so `--limit abc` printed an empty list with no error and exit 0,
+  // and `--capacity -5` printed `room for -5` and carried on. Both read as the
+  // tool answering the question rather than failing to understand it.
+  it.each([
+    ['a word where a count belongs', ['revenue', 'detect', 'batch', '--limit', 'abc']],
+    ['a negative capacity', ['revenue', 'detect', 'batch', '--capacity', '-5']],
+    ['a fractional count', ['revenue', 'detect', 'batch', '--budget', '1.5']],
+    ['a share above one', ['revenue', 'sweep', 'batch', '--capacity-share', '4']],
+  ])('%s exits 2', (_name, args) => {
+    expect(run(args)).toBe(ExitCode.CLI_ERROR);
+  });
+
+  it('reports the bad value once, not twice', () => {
+    // Commander writes the message itself, and the catch block re-reported it:
+    // `error: error: option '--limit <n>' argument 'abc' is invalid`. The code
+    // list named three commander failures and missed `invalidArgument`, which
+    // is exactly what an option's own parser throws.
+    const { output } = runWithOutput(['revenue', 'detect', 'batch', '--limit', 'abc']);
+    expect(output.match(/is invalid/g) ?? []).toHaveLength(1);
+    expect(output).not.toContain('error: error:');
+  });
+
+  it('accepts zero, which is a real question', () => {
+    // `--capacity 0` asks what the run does with nothing to spend, and the
+    // answer — a run that refuses everything — is what the audit trail is for.
+    //
+    // There is no batch in this directory, so the run fails for that reason and
+    // the assertion is about *which* complaint comes back: the value must not
+    // be the thing rejected.
+    const { output } = runWithOutput(['revenue', 'detect', 'batch', '--capacity', '0']);
+    expect(output).not.toContain('--capacity');
+    expect(output).toMatch(/No batch/);
   });
 });

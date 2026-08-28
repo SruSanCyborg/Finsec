@@ -1694,3 +1694,56 @@ The test asserts both directions. Under the flag, no non-ASCII byte survives a
 scan or a `doctor` run; without it, `₹` is still there. Asserting only the first
 would be passed by a fallback that applied always, quietly costing the Indian
 grouping the figures exist to demonstrate.
+
+## D-050 — Refusing beats coercing, and a message is printed once
+
+Three things a cold review found by running the binary, all of the same shape:
+the tool appeared to answer the question rather than failing to understand it.
+
+**A number that is not a number.** `Number.parseInt('abc', 10)` is `NaN`, and
+every comparison against `NaN` is false — so `--limit abc` printed an empty list
+with no error and exit 0, and `--capacity -5` printed `room for -5` and carried
+on. `countArg` refuses both. Zero is allowed: `--capacity 0` and `--budget 0`
+are real questions — *what does this run do with nothing to spend?* — and the
+answer, a run that refuses everything, is exactly what the audit trail exists to
+show.
+
+**A usage error exiting 1.** `exitOverride()` was applied to the root command
+after `buildProgram()` had constructed the subcommands, so they kept commander's
+`process.exit(1)` — the code this CLI documents as *findings at or above
+threshold*. A pipeline could not tell a blocked gate from a typo, and the
+README's own escape hatch, `sirius scan … || true`, swallowed a mistyped flag
+and went green having scanned nothing. Applied recursively now, with
+`showHelpAfterError` instead of commander's full help body: twenty-five lines of
+options after an error scrolls the error itself off a short terminal.
+
+**And then printed twice.** The catch block listed `unknownCommand`,
+`unknownOption` and `missingArgument`, and missed `invalidArgument` — which is
+precisely what an option's own parser throws, so the validation above arrived as
+`error: error: option '--limit <n>' argument 'abc' is invalid`. Matching the
+`commander.` prefix handles the next one commander adds before anyone sees it
+twice.
+
+**`fix` had no terminal and waited anyway.** With stdin not a TTY the screen
+that asks for the diff resolves nothing, so `fix` printed `applying…`, waited
+forever, and ended on a Node warning about an unsettled top-level await naming a
+path inside `dist/`. In a pipeline it hung; from a script it read as a crash in
+the tool rather than a missing flag. `triage` already refuses this way, but it
+can only refuse — there is no non-interactive triage. `fix` has two, so the hint
+names them rather than turning somebody away from a door that is open.
+
+### The palette row, and a finding that was not one
+
+The review reported `… 17 more` carrying `/doctor`'s description. It reproduces
+in a captured pty transcript and it is not what a user sees: Ink repaints in
+place, and stripping the escape codes from a transcript concatenates a shorter
+line with the tail of the frame beneath it. Rendering the component directly at
+a fixed width shows `/doctor` on its own row and `… 17 more` on its own. Worth
+recording because the reproduction looked conclusive and was not — a transcript
+with its cursor movements removed is not a screenshot.
+
+Chasing it did find a real bug. Long summaries wrapped, so five entries occupied
+six lines. The first fix — `wrap="truncate-end"` with a width on the row — was
+worse: the row becomes a flex container, Ink shrinks *every* child, and the
+indent and name column collapsed on exactly the rows that were cut. Same lesson
+as D-047: decide the width, then hand Ink strings that already fit.

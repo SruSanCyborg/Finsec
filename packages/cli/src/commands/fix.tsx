@@ -112,6 +112,21 @@ export function applyDiffToFile(filePath: string, expectedLine: number, diff: st
 }
 
 export async function runFix(identifier: string | undefined, flags: FixFlags, globals: GlobalFlags): Promise<void> {
+  // Without a terminal there is nobody to accept the diff, and the screen that
+  // asks resolves nothing — so `fix` printed `applying…`, waited forever, and
+  // ended on a Node warning about an unsettled top-level await naming a path
+  // inside dist/. In a pipeline it hung; from a script it looked like a crash
+  // in the tool rather than a missing flag.
+  //
+  // `triage` already refuses this way, but it can only refuse: there is no
+  // non-interactive triage. `fix` has two, so the hint names them instead of
+  // telling somebody their pipeline is the wrong place to be.
+  if (!flags.apply && !flags.dryRun && !process.stdin.isTTY) {
+    throw new CliError('`sirius fix` needs a terminal to accept the diff.', {
+      hint: 'Pass --dry-run to see the change, or --apply to take it without being asked.',
+    });
+  }
+
   const cwd = process.cwd();
   const found = locateLastScan(cwd, flags.target);
   if (!found) {
