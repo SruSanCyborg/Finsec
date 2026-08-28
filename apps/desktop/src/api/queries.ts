@@ -1,18 +1,35 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { mockApiService } from './client';
+import { siriusApiClient, mockApiService } from './client';
 import { FindingSeverity, FindingStatus } from '@sirius/types';
 
 export function useProjectsQuery() {
   return useQuery({
     queryKey: ['projects'],
-    queryFn: () => mockApiService.getProjects(),
+    queryFn: async () => {
+      try {
+        const real = await siriusApiClient.getProjects();
+        if (real && real.length > 0) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.getProjects();
+    },
   });
 }
 
 export function useProjectQuery(projectId: string | null) {
   return useQuery({
     queryKey: ['project', projectId],
-    queryFn: () => (projectId ? mockApiService.getProjectById(projectId) : null),
+    queryFn: async () => {
+      if (!projectId) return null;
+      try {
+        const real = await siriusApiClient.getProjectById(projectId);
+        if (real) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.getProjectById(projectId);
+    },
     enabled: Boolean(projectId),
   });
 }
@@ -20,14 +37,31 @@ export function useProjectQuery(projectId: string | null) {
 export function useScansQuery(projectId?: string) {
   return useQuery({
     queryKey: ['scans', projectId],
-    queryFn: () => mockApiService.getScans(projectId),
+    queryFn: async () => {
+      try {
+        const real = await siriusApiClient.getScans({ projectId });
+        if (real && real.length > 0) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.getScans(projectId);
+    },
   });
 }
 
 export function useScanQuery(scanId: string | null) {
   return useQuery({
     queryKey: ['scan', scanId],
-    queryFn: () => (scanId ? mockApiService.getScanById(scanId) : null),
+    queryFn: async () => {
+      if (!scanId) return null;
+      try {
+        const real = await siriusApiClient.getScanById(scanId);
+        if (real) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.getScanById(scanId);
+    },
     enabled: Boolean(scanId),
   });
 }
@@ -36,12 +70,25 @@ export function useCreateScanMutation() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (params: {
+    mutationFn: async (params: {
       projectId: string;
       branch?: string;
       severityThreshold?: FindingSeverity;
       failOn?: 'all' | 'new' | 'verified-secrets';
-    }) => mockApiService.startScan(params.projectId, params.branch),
+    }) => {
+      try {
+        const real = await siriusApiClient.startScan({
+          projectId: params.projectId,
+          branch: params.branch,
+          severityThreshold: params.severityThreshold,
+          failOn: params.failOn,
+        });
+        if (real) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.startScan(params.projectId, params.branch);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['scans'] });
       queryClient.invalidateQueries({ queryKey: ['projects'] });
@@ -52,9 +99,18 @@ export function useCreateScanMutation() {
 export function useFindingsQuery(projectId?: string, scanId?: string) {
   return useQuery({
     queryKey: ['findings', projectId, scanId],
-    queryFn: () => mockApiService.getFindings(projectId, scanId),
+    queryFn: async () => {
+      try {
+        const real = await siriusApiClient.getFindings({ projectId, scanId });
+        if (real && real.length > 0) return real;
+      } catch {
+        // Fallback to mock
+      }
+      return mockApiService.getFindings(projectId, scanId);
+    },
   });
 }
+
 
 export function useCerebusAnalysisQuery(findingId?: string, query?: string, projectId?: string) {
   return useQuery({

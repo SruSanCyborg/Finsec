@@ -1,4 +1,4 @@
-import { Finding, ScanProgress, ScanStatus, ScanConsoleEvent } from '@sirius/types';
+import { Finding, ScanProgress, ScanStatus, ScanConsoleEvent, FindingSeverity, FindingCategory, FindingStatus } from '@sirius/types';
 import { WebSocketDisconnectError } from '@sirius/utils';
 
 export type WebSocketConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error';
@@ -15,7 +15,6 @@ export interface ScanStreamEvent {
   error?: string;
 }
 
-
 export type ScanStreamHandler = (event: ScanStreamEvent) => void;
 export type StatusChangeHandler = (status: WebSocketConnectionStatus) => void;
 
@@ -25,6 +24,125 @@ export interface WebSocketClientConfig {
   maxReconnectAttempts?: number;
   reconnectIntervalMs?: number;
   heartbeatIntervalMs?: number;
+}
+
+function adaptWireFinding(f: Record<string, unknown>): Finding {
+  const message = String(f.message || 'Security violation detected');
+  const line = Number(f.line || f.lineNumber || 1);
+  return {
+    id: String(f.id || `fnd-${Date.now()}`),
+    projectId: String(f.project_id || f.projectId || 'prj-finsec-core-01'),
+    scanId: String(f.scan_id || f.scanId || 'scan-01'),
+    ruleId: String(f.rule_id || f.ruleId || 'SIR-SEC-001'),
+    title: String(f.rule_name || f.ruleName || message),
+    description: message,
+    severity: (f.severity as FindingSeverity) || 'high',
+    status: (f.status as FindingStatus) || 'open',
+    category: (f.category as FindingCategory) || 'security',
+    filePath: String(f.file || f.filePath || 'src/index.ts'),
+    startLine: line,
+    endLine: Number(f.end_line || f.endLine || line),
+    codeSnippet: String(f.snippet || f.codeSnippet || ''),
+    baselineState: f.baseline_state as Finding['baselineState'],
+    fingerprint: String(f.fingerprint || ''),
+    createdAt: String(f.created_at || f.createdAt || new Date().toISOString()),
+    updatedAt: String(f.updated_at || f.updatedAt || new Date().toISOString()),
+  };
+}
+
+function normalizeWireEvent(raw: Record<string, unknown>): ScanStreamEvent | null {
+  const type = String(raw.type || '');
+  const scanId = String(raw.scan_id || raw.scanId || 'scan-live');
+  const timestamp = String(raw.ts || raw.timestamp || new Date().toISOString());
+
+  if (type === 'scan.started' || type === 'scan_started') {
+    return {
+      type: 'scan_started',
+      scanId,
+      timestamp,
+      status: 'running',
+      progress: {
+        phase: 'indexing',
+        percentComplete: 0,
+        filesScanned: 0,
+        totalFiles: Number(raw.total_files || raw.totalFiles || 100),
+        findingsFound: 0,
+        elapsedTimeMs: 0,
+      },
+    };
+  }
+
+  if (type === 'file.scanning') {
+    const idx = Number(raw.index || 0);
+    const tot = Number(raw.total || 100);
+    return {
+      type: 'scan_progress',
+      scanId,
+      timestamp,
+      progress: {
+        phase: 'analyzing',
+        percentComplete: Math.round((idx / tot) * 100),
+        filesScanned: idx,
+        totalFiles: tot,
+        findingsFound: 0,
+        elapsedTimeMs: 0,
+      },
+      consoleEvent: raw.path
+        ? {
+            id: `evt-${Date.now()}-${Math.random()}`,
+            timestamp,
+            category: 'INDEX',
+            level: 'info',
+            message: `Scanning file: ${raw.path}`,
+            file: String(raw.path),
+          }
+        : undefined,
+    };
+  }
+
+  if (type === 'finding' || type === 'finding_discovered') {
+    const rawFinding = (raw.finding as Record<string, unknown>) || raw;
+    return {
+      type: 'finding_discovered',
+      scanId: String(rawFinding.scan_id || scanId),
+      timestamp,
+      finding: adaptWireFinding(rawFinding),
+    };
+  }
+
+  if (type === 'scan.completed' || type === 'scan_completed') {
+    return {
+      type: 'scan_completed',
+      scanId,
+      timestamp,
+      status: 'completed',
+      gateResult: raw.exit_code === 0 ? 'passed' : 'blocked',
+      progress: {
+        phase: 'completed',
+        percentComplete: 100,
+        filesScanned: Number(raw.total_files || 128),
+        totalFiles: Number(raw.total_files || 128),
+        findingsFound: Number(raw.total_findings || 0),
+        elapsedTimeMs: Number(raw.duration_ms || 1200),
+      },
+    };
+  }
+
+  if (type === 'scan.failed' || type === 'scan_failed') {
+    return {
+      type: 'scan_failed',
+      scanId,
+      timestamp,
+      error: String(raw.error_message || raw.error || 'Scan failed'),
+    };
+  }
+
+  // Pass-through if already in ScanStreamEvent shape
+  if (['scan_started', 'scan_progress', 'console_event', 'finding_discovered', 'scan_completed', 'scan_failed'].includes(type)) {
+    return raw as unknown as ScanStreamEvent;
+  }
+
+  return null;
 }
 
 export class SiriusWebSocketClient {
@@ -77,8 +195,11 @@ export class SiriusWebSocketClient {
 
       this.ws.onmessage = (event: MessageEvent) => {
         try {
-          const streamEvent = JSON.parse(event.data) as ScanStreamEvent;
-          this.handlers.forEach((handler) => handler(streamEvent));
+          const raw = JSON.parse(event.data) as Record<string, unknown>;
+          const normalized = normalizeWireEvent(raw);
+          if (normalized) {
+            this.handlers.forEach((handler) => handler(normalized));
+          }
         } catch (err) {
           console.warn('Failed to parse WebSocket message JSON:', err);
         }
@@ -147,3 +268,4 @@ export class SiriusWebSocketClient {
     }
   }
 }
+

@@ -30,7 +30,7 @@ export interface Project {
 export type ScanStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
 export interface ScanProgress {
-  phase: 'initialization' | 'ast_parsing' | 'rule_evaluation' | 'cerebus_check' | 'compliance_calculation' | 'reporting' | 'completed';
+  phase: 'initialization' | 'ast_parsing' | 'rule_evaluation' | 'cerebus_check' | 'compliance_calculation' | 'reporting' | 'completed' | 'indexing' | 'analyzing';
   percentComplete: number;
   filesScanned: number;
   totalFiles: number;
@@ -44,6 +44,8 @@ export interface ScanConsoleEvent {
   timestamp: string;
   category: 'SYSTEM' | 'INDEX' | 'RULE' | 'FINDING' | 'COMPLIANCE' | 'RISK';
   message: string;
+  level?: string;
+  file?: string;
 }
 
 export interface Scan {
@@ -77,7 +79,8 @@ export interface Scan {
 // --- Finding & Categories ---
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low' | 'info';
 export type FindingStatus = 'open' | 'triaged' | 'fixed' | 'false_positive' | 'ignored';
-export type FindingCategory = 'secret_leak' | 'crypto_flaw' | 'auth_bypass' | 'access_control' | 'injection' | 'data_exposure' | 'compliance_violation';
+export type FindingCategory = 'secret_leak' | 'crypto_flaw' | 'auth_bypass' | 'access_control' | 'injection' | 'data_exposure' | 'compliance_violation' | 'secrets' | 'auth' | 'pii' | 'crypto' | 'logging' | 'ratelimit' | 'supplychain' | 'security';
+
 
 export interface SecretValidity {
   status: 'valid' | 'revoked' | 'unknown' | 'expired';
@@ -121,6 +124,7 @@ export interface Finding {
   remediationGuidance?: string;
   createdAt: string;
   updatedAt: string;
+  fingerprint?: string;
   /* PROVISIONAL */
   cveId?: string;
   cweId?: string;
