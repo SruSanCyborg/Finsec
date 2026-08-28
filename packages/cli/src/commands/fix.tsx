@@ -221,11 +221,22 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
       // Say *why* nothing was offered. "No template" and "this project has no
       // authentication decorator to copy" are different problems, and only one
       // of them is something the user can act on.
+      // Three different problems, and saying the wrong one sends somebody
+      // looking in the wrong place. `no local fix template for SIR-SEC-001
+      // (env_lookup)` was printed when a template for `env_lookup` plainly
+      // exists — the real cause was that two lines had been inserted above the
+      // finding since the scan, so the template was reading the wrong line.
+      const { FIX_TEMPLATES } = await import('../engine/fix.js');
+      const hasTemplate = finding.fix_action ? FIX_TEMPLATES.includes(finding.fix_action) : false;
+
       const reason =
         finding.fix_action === 'add_auth_decorator' && !fixContext.auth
           ? `${finding.file} has no authenticated route to copy, so there is no ` +
             `decorator to apply. Adding authentication here is a design decision.`
-          : `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).`;
+          : hasTemplate
+            ? `${finding.file}:${finding.line} no longer looks like what the scan found there.\n` +
+              `  The file has probably changed since. Re-run \`sirius scan\` and try again.`
+            : `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).`;
       process.stderr.write(`${reason}\n`);
       continue;
     }

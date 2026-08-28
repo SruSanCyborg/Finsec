@@ -1802,3 +1802,17 @@ became `score floor`/`capacity`, which is what they mean.
 The header is built from the same widths as the row, in the same order, rather
 than being spaced by eye. A header that is close but not aligned is worse than
 none: it makes a reader distrust the columns that are right.
+
+## D-053 — `fix` names the problem it actually has
+
+Inserting two lines above a finding and running `fix SIR-SEC-001 --apply`
+printed `no local fix template for SIR-SEC-001 (env_lookup)`. There is plainly a
+template for `env_lookup`; the real cause was that the finding's line number now
+pointed somewhere else, so the template was reading the wrong line and declining.
+
+It refused safely, which is the important part — it did not rewrite a line it
+had not matched. But it sent the reader looking for a missing feature instead of
+re-running the scan. Three outcomes now say three different things: no template
+for this action, a template that no longer matches the line (with the fix — run
+`sirius scan` again), and the existing case where the project has no
+authenticated route to copy.

@@ -154,6 +154,20 @@ function splitArgs(text: string): string[] {
  * undefined rather than guessing, because a wrong patch to money-handling code
  * is worse than no patch.
  */
+/**
+ * The fix actions there is a template for.
+ *
+ * Exported so a caller can tell "nothing here can be fixed automatically" from
+ * "the template exists and this line no longer matches it", which are different
+ * problems with different answers and used to produce the same sentence.
+ */
+export const FIX_TEMPLATES: readonly string[] = [
+  'env_lookup',
+  'parameterize_query',
+  'redact_pii_log',
+  'add_auth_decorator',
+];
+
 function buildReplacement(
   action: string,
   line: string,
