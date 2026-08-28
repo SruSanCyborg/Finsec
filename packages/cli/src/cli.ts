@@ -255,6 +255,27 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('guard')
+    .description('Govern an autonomous agent that can move money: authorise, judge, and record every action')
+    .argument('[subcommand]', 'gen | eval | explain | agents | score | trail', 'eval')
+    .argument('[target]', 'feed directory — or, for `explain`, an action id')
+    .option('--seed <value>', 'seed for `gen` — the same seed is the same feed')
+    .option('--actions <n>', 'ordinary actions to generate', countArg)
+    .option('--limit <n>', 'rows to print', countArg)
+    .option('--all', 'include the routine actions that proceeded untouched')
+    .option('--tier <name>', 'show only allow | verify | constrain | block')
+    .option('--agent <dir>', 'feed directory, when the argument is an action id')
+    .option('--fresh', 'ignore stored baselines and judge as though every agent were new')
+    .option('--output <file>', 'where to write the decision trail')
+    .option('--verify <file>', 'check a signed decision trail instead of running')
+    .option('--key <fingerprint>', 'require this signer — without it, a pass does not say who signed')
+    .option('--json', 'machine-readable output')
+    .action(async (subcommand: string, target: string, options: Record<string, unknown>, command: Command) => {
+      const { runGuard } = await import('./commands/guard.js');
+      await runGuard(subcommand, target, options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('reconcile')
     .description('Match the ledger against gateway settlements and the bank statement')
     .argument('[books]', 'directory holding the three sets of books', 'books')

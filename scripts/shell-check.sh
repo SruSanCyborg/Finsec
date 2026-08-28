@@ -29,6 +29,7 @@ git -C "$STAGE" -c user.email=demo@example.com -c user.name=demo commit -qm seed
 
 node "$CLI" revenue gen "$STAGE/batch" --seed check --payments 220 --checkouts 60 --invoices 40 >/dev/null 2>&1
 node "$CLI" reconcile "$STAGE/books" --gen --seed check --orders 90 >/dev/null 2>&1
+node "$CLI" guard gen "$STAGE/guardfeed" --seed check --actions 120 >/dev/null 2>&1
 
 # A record id and a trail to point the explain/audit checks at.
 RECORD=$(cd "$STAGE" && node "$CLI" revenue detect batch --limit 1 2>/dev/null | grep -oE '(inv|pay|chk)_[0-9]+' | head -1)
@@ -68,6 +69,9 @@ echo
     "/revenue sweep --seeds 2 --payments 150 --checkouts 40 --invoices 30" \
     "/revenue stress --seeds 1 --payments 150 --checkouts 40 --invoices 30" \
     "/revenue audit --verify $TRAIL" \
+    "/guard agents guardfeed" \
+    "/guard eval guardfeed --limit 6" \
+    "/guard score guardfeed" \
     "/reconcile books" \
     "/reconcile books --exceptions"
   do
@@ -135,6 +139,9 @@ check "/revenue recover"         "hash-chained and signed"
 check "/revenue stress"           "touched nothing out of bounds in any of them"
 check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
+check "/guard agents"            "anything else is escalated"
+check "/guard eval"              "proceeded with nobody asked"
+check "/guard score"             "ordinary actions were intervened on"
 check "/reconcile"               "EXCEPTIONS"
 check "/triage asks inline"      "a accept   d dismiss   s suppress"
 check "/triage records"          "accepted[[:space:]]+SIR-SEC"

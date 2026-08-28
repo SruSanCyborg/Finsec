@@ -1855,3 +1855,81 @@ looked*. A reader who notices it starts wondering what else was not read.
 
 One `plural(count, one, many?)` in `kit.ts`, with irregulars passed explicitly
 rather than guessed — a guess produces `entrys`, and no rule would not.
+
+## D-056 — `guard`: the control layer for agents that can move money
+
+CSI ORIGIN 2026's Problem Statement 7 asks for a security and control layer for
+autonomous financial agents: something that continuously decides whether an
+agent's intended action is authorised, contextually appropriate and safe
+*before* it touches money. Explicitly not conventional transaction
+authentication, fraud detection or wallet security.
+
+sirius answered about a third of it. `revenue recover` already enforced policy
+with refusal as a first-class logged action and a hash-chained signed trail —
+which is the hard part — but it governed a batch workflow, not an agent, and had
+no notion of identity, intent, behavioural baselines or instruction
+manipulation.
+
+`guard` points that machinery at an agent's proposed actions, and adds the four
+that were missing. Six stages, each returning signals rather than a verdict,
+because the same fact means different things in combination: a first-time
+counterparty is routine, a large amount is routine, and a large amount to a
+first-time counterparty on an instruction fetched from a web page is not.
+
+**The verdict is graduated, and the middle tiers are the point.** Blocking
+everything unusual makes an autonomous agent pointless — an operator asked to
+approve every routine payment has become the agent. So `constrain` exists:
+refusing a ₹82,000 payment when the cap is ₹50,000 throws away the ₹50,000 the
+agent was entitled to move and pushes the operator toward raising the cap, which
+is the opposite of what a limit is for.
+
+**The verdict is the strongest signal raised, not a weighted score.** A score
+would let three mild signals outvote one categorical refusal, and some of these
+are categorical — a counterparty on a deny list is not 0.7 of a problem. Where
+combination genuinely matters it is written down as its own rule, so an operator
+can read why an action was refused and disagree with the reasoning.
+
+### Four things the first version got wrong, all found by running it
+
+**It stepped up 194 of 252 ordinary payments.** The hour-of-day test flagged any
+hour the agent had not yet reached, so an agent working through a day tripped it
+constantly. At twelve observations the histogram is three hours wide and every
+fourth hour looks unprecedented. Now Laplace-smoothed and silent until the
+histogram has seen the clock. This was the important failure: it caught every
+attack, and would still have been switched off inside a week.
+
+**The exposure limit measured loyalty.** Concentration accumulated forever, so an
+agent paying the same ten vendors every week breached its own cap doing exactly
+its job. It is a rolling window now — what a concentration limit is for is a
+counterparty being paid unusually *hard* in a short period.
+
+**The caps had no headroom**, so 79 ordinary payments were refused. A limit with
+no headroom is not a control, it is an outage.
+
+**It reported a prompt injection as `policy.rate_limit`,** because the rate limit
+happened to be evaluated first and both were true. An operator reading "12
+actions already in the last hour" would tune the rate limit and never learn that
+an email had tried to redirect the payment. Equal-tier signals are now ordered by
+how fundamental they are.
+
+### What the drain case taught
+
+The planted "drain the account" action was only caught once the fixture stopped
+being naive about it. At 3σ over the agent's usual, nothing fired — because a
+competent attacker does not exceed the cap, they sit just under it, where there
+is no limit breach at all and only 2σ on amount. `policy.near_cap` exists for
+that: an amount within 10% of the ceiling is weak evidence alone and decisive
+paired with a counterparty the agent has never used.
+
+### What it does not do
+
+The intent stage is lexical overlap between the stated purpose and the
+authorised objective, not a model call. A stage that needs a network round trip
+to a language model fails open under load, which is the worst failure mode a
+control layer has. It is crude, its crudeness is visible in the output, and that
+is better than a confident score nobody can audit.
+
+The manipulation patterns catch the common shapes, not every possible one, and
+the output quotes what matched so a person can judge it.
+
+Everything is simulated. There is no `--execute`.
