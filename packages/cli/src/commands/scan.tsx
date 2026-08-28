@@ -1,5 +1,5 @@
 /**
- * `finsec scan [path]` — the demo centerpiece.
+ * `sirius scan [path]` — the demo centerpiece.
  *
  * Shape of the command: resolve config, decide where frames come from (the API
  * or a recorded fixture), consume the stream, compute the gate locally, and
@@ -112,12 +112,12 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         hint: 'Generate one with `pnpm fixtures`.',
       });
     }
-    const speed = process.env.FINSEC_REPLAY_SPEED ? Number(process.env.FINSEC_REPLAY_SPEED) : 1;
+    const speed = process.env.SIRIUS_REPLAY_SPEED ? Number(process.env.SIRIUS_REPLAY_SPEED) : 1;
     frames = replayStream(fixture, Number.isFinite(speed) ? speed : 1);
   } else {
     if (!config.projectId) {
       throw new CliError('No project id configured.', {
-        hint: 'Run `finsec init`, pass --project <id>, or set FINSEC_PROJECT_ID.',
+        hint: 'Run `sirius init`, pass --project <id>, or set SIRIUS_PROJECT_ID.',
       });
     }
 
@@ -199,14 +199,14 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   if (
     outcome.serverExitCode !== null &&
     outcome.serverExitCode !== gate.exitCode &&
-    process.env.FINSEC_DEBUG
+    process.env.SIRIUS_DEBUG
   ) {
     process.stderr.write(
       `note: server proposed exit ${outcome.serverExitCode}, local gate computed ${gate.exitCode}\n`,
     );
   }
 
-  // ---- remember, so `finsec fix FIN-SEC-001` can resolve a rule id later
+  // ---- remember, so `sirius fix SIR-SEC-001` can resolve a rule id later
 
   if (outcome.findings.length > 0) {
     const root = findProjectRoot(target)?.dir ?? target;

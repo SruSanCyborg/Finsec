@@ -2,7 +2,7 @@
  * SARIF 2.1.0 output, for `github/codeql-action/upload-sarif@v3`.
  *
  * The one judgement call the PRD leaves open is the severity collapse: SARIF has
- * three levels and finsec has five (decisions.md D-006). `baselineState` needs
+ * three levels and sirius has five (decisions.md D-006). `baselineState` needs
  * no mapping — `new|unchanged|absent` are already SARIF's own tokens, which is
  * evidently why the schema uses them.
  */
@@ -31,7 +31,7 @@ export interface SarifOptions {
 }
 
 export function buildSarif(findings: readonly Finding[], options: SarifOptions): unknown {
-  // One SARIF rule per distinct finsec rule that actually fired, so the GitHub
+  // One SARIF rule per distinct sirius rule that actually fired, so the GitHub
   // Security tab can group and link them.
   const rules = new Map<string, unknown>();
   for (const finding of findings) {
@@ -56,9 +56,9 @@ export function buildSarif(findings: readonly Finding[], options: SarifOptions):
       {
         tool: {
           driver: {
-            name: 'finsec-lint',
+            name: 'sirius',
             version: options.toolVersion,
-            informationUri: options.informationUri ?? 'https://finsec.dev',
+            informationUri: options.informationUri ?? 'https://sirius.dev',
             rules: [...rules.values()],
           },
         },
@@ -81,7 +81,7 @@ export function buildSarif(findings: readonly Finding[], options: SarifOptions):
           ],
           // GitHub uses partialFingerprints to track a finding across commits,
           // which is exactly what our fingerprint is for.
-          ...(finding.fingerprint ? { partialFingerprints: { finsecFingerprint: finding.fingerprint } } : {}),
+          ...(finding.fingerprint ? { partialFingerprints: { siriusFingerprint: finding.fingerprint } } : {}),
           baselineState: finding.baseline_state ?? 'new',
           properties: {
             severity: finding.severity,
@@ -91,7 +91,7 @@ export function buildSarif(findings: readonly Finding[], options: SarifOptions):
             ...(finding.money_at_risk_inr ? { money_at_risk_inr: finding.money_at_risk_inr } : {}),
           },
           ...(finding.suppressed
-            ? { suppressions: [{ kind: 'external', justification: 'Suppressed by finsec policy' }] }
+            ? { suppressions: [{ kind: 'external', justification: 'Suppressed by sirius policy' }] }
             : {}),
         })),
       },

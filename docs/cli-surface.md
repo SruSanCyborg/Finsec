@@ -1,4 +1,4 @@
-# finsec-lint — the CLI surface
+# sirius — the CLI surface
 
 Everything the `cli` branch needs. Read [`system-overview.md`](system-overview.md) first for the contract and vocabularies; this document covers only the terminal client.
 
@@ -11,9 +11,9 @@ Everything the `cli` branch needs. Read [`system-overview.md`](system-overview.m
 ## 1. Command tree
 
 ```
-finsec
-├── login / logout                 # OAuth device flow → ~/.config/finsec/config.toml
-├── init                           # scaffold finsec.yaml + .finseclintrc
+sirius
+├── login / logout                 # OAuth device flow → ~/.config/sirius/config.toml
+├── init                           # scaffold sirius.yaml + .siriuslintrc
 ├── scan [path]                    # main; streaming findings
 │   ├── --diff --baseline <sha>    # diff-aware (Semgrep-style)
 │   ├── --severity-threshold <lvl> # gate level (Snyk-style)
@@ -39,9 +39,9 @@ Added by [`decisions.md`](decisions.md): global `--api-url`, `--project`, and `s
 |---|---|---|
 | `login` | `POST /auth/token`, `POST /auth/api-keys` | Device-flow endpoints **do not exist** in the API table — blocked, see decisions |
 | `logout` | `DELETE /auth/api-keys/{id}` or local-only | Scope undecided |
-| `init` | `GET/POST /projects`, `GET/PUT /projects/{id}/policy` | Writes `finsec.yaml` + `.finseclintrc`; no template content specified in the PRD |
+| `init` | `GET/POST /projects`, `GET/PUT /projects/{id}/policy` | Writes `sirius.yaml` + `.siriuslintrc`; no template content specified in the PRD |
 | `scan` | `POST /scans` → `WS /scans/{id}/stream` → `GET /scans/{id}/results`; `GET /scans/{id}` for polling fallback; `POST …/validate-secret` when `--validate-secrets` | §2 below |
-| `fix` | `POST /scans/{id}/findings/{fid}/fix` | Rule-id resolution via `.finsec/last-scan.json` |
+| `fix` | `POST /scans/{id}/findings/{fid}/fix` | Rule-id resolution via `.sirius/last-scan.json` |
 | `triage` | `GET /scans/{id}/results`, `PATCH /scans/{id}/findings/{fid}` | **S-auth only** — see the K/S contradiction |
 | `watch` | repeated `POST /scans` + WS; `DELETE /scans/{id}` to cancel superseded scans | debounce unspecified |
 | `rules` | `GET /rules`, `GET /rules/{id}`, `POST /rules/validate`, `POST /rules` | `test` has **no endpoint** |
@@ -102,9 +102,9 @@ Footer prints the verdict. Per [D-003](decisions.md), `--severity-threshold` set
 
 Modeled on Snyk: "0: success (scan completed), no vulnerabilities found; 1: action_needed (scan completed), vulnerabilities found; 2: failure, try to re-run the command; 3: failure, no supported projects detected."
 
-Escape hatch, verbatim: **`finsec scan … || true`**.
+Escape hatch, verbatim: **`sirius scan … || true`**.
 
-Undecided: whether per-file `FIN_ERR_PARSE` frames escalate to `2` (the mockup implies they're non-fatal — treat them as warnings), and what a canceled scan returns.
+Undecided: whether per-file `SIRIUS_ERR_PARSE` frames escalate to `2` (the mockup implies they're non-fatal — treat them as warnings), and what a canceled scan returns.
 
 ---
 
@@ -112,17 +112,17 @@ Undecided: whether per-file `FIN_ERR_PARSE` frames escalate to `2` (the mockup i
 
 | Artifact | Role | Lineage |
 |---|---|---|
-| `finsec.yaml` | project rules/policy | — |
-| `.finseclintrc` | per-dir overrides | eslintrc |
-| `~/.config/finsec/config.toml` | auth | Stripe's `config.toml` |
-| `.finsecignore` | path globs | gitignore |
-| `# finsec-ignore: FIN-SEC-010` | inline suppression | Bandit `# nosec` / Ruff `# noqa: CODE` |
+| `sirius.yaml` | project rules/policy | — |
+| `.siriuslintrc` | per-dir overrides | eslintrc |
+| `~/.config/sirius/config.toml` | auth | Stripe's `config.toml` |
+| `.siriusignore` | path globs | gitignore |
+| `# sirius-ignore: SIR-SEC-010` | inline suppression | Bandit `# nosec` / Ruff `# noqa: CODE` |
 | `--config <file>` | explicit override | — |
 | server `suppressions` | rule/path/fingerprint + reason + `expires_at` | `.snyk` |
 
-**Precedence is not stated anywhere in the PRD.** Decided in [`../AGENTS.md`](../AGENTS.md): flags > env > `.finseclintrc` > `finsec.yaml` > `config.toml` > defaults.
+**Precedence is not stated anywhere in the PRD.** Decided in [`../AGENTS.md`](../AGENTS.md): flags > env > `.siriuslintrc` > `sirius.yaml` > `config.toml` > defaults.
 
-Also undecided upstream: whether `.finsecignore` filters client-side (files never uploaded) or server-side; and whether inline `# finsec-ignore` findings still arrive over WS with `suppressed: true` (the DDL has a `suppressed BOOLEAN` column, which suggests yes — the worker must evaluate inline ignores since the CLI never parses code).
+Also undecided upstream: whether `.siriusignore` filters client-side (files never uploaded) or server-side; and whether inline `# sirius-ignore` findings still arrive over WS with `suppressed: true` (the DDL has a `suppressed BOOLEAN` column, which suggests yes — the worker must evaluate inline ignores since the CLI never parses code).
 
 ---
 
@@ -130,28 +130,28 @@ Also undecided upstream: whether `.finsecignore` filters client-side (files neve
 
 These are the visual spec. Reproduce component-for-component.
 
-### `finsec scan .`
+### `sirius scan .`
 
 ```
   ╭──────────────────────────────────────────────────────────────╮
-  │  finsec-lint v0.4.0   ·   FinSec Compliance Scanner           │
+  │  sirius v0.4.0   ·   Sirius Compliance Scanner           │
   │  project: paykit-api   ·   ruleset: p/fintech-core (52 rules) │
   ╰──────────────────────────────────────────────────────────────╯
 
   ⠹  Scanning 128 files ····································  86%   ▐████████▏
 
-  ✗ CRITICAL  FIN-SEC-001  Hardcoded Stripe secret key
+  ✗ CRITICAL  SIR-SEC-001  Hardcoded Stripe secret key
      src/config.py:14                          PCI-DSS 8.6.2 · DPDP §8
      14 │  STRIPE_KEY = "sk_live_51H8xR2eZv…"
         │               ╰── secret · ⚠ VERIFIED LIVE · ₹42,00,000 at risk
-     ↳ fix: env_lookup   run  finsec fix FIN-SEC-001
+     ↳ fix: env_lookup   run  sirius fix SIR-SEC-001
 
-  ✗ CRITICAL  FIN-SEC-010  SQL built with string formatting
+  ✗ CRITICAL  SIR-SEC-010  SQL built with string formatting
      src/ledger.py:88                          PCI-DSS 6.2.4 · CWE-89
      88 │  cur.execute("SELECT * FROM txns WHERE id = %s" % uid)
      ↳ fix: parameterize_query
 
-  ▲ HIGH      FIN-SEC-030  PAN written to application log
+  ▲ HIGH      SIR-SEC-030  PAN written to application log
      src/webhooks.py:52                        PCI-DSS 3.4.1 · GDPR Art.5
 
   ────────────────────────────────────────────────────────────────
@@ -162,13 +162,13 @@ These are the visual spec. Reproduce component-for-component.
   ────────────────────────────────────────────────────────────────
 ```
 
-### `finsec fix FIN-SEC-001`
+### `sirius fix SIR-SEC-001`
 
 ```
-  ╭─ Cerebus fix · FIN-SEC-001 ──────────────────────────────────╮
+  ╭─ Cerebus fix · SIR-SEC-001 ──────────────────────────────────╮
   │ quarantined model → { action: env_lookup, target: api_key }  │
   │ diff builder      → template: env_lookup                     │
-  │ verifier          → re-ran FIN-SEC-001 → ✓ PASS             │
+  │ verifier          → re-ran SIR-SEC-001 → ✓ PASS             │
   ╰──────────────────────────────────────────────────────────────╯
 
    src/config.py
@@ -184,7 +184,7 @@ These are the visual spec. Reproduce component-for-component.
 
 **Scan view**
 
-1. **`<Banner/>`** — rounded box `╭─╮│╰╯`, 2-space left indent, ~62 wide. Two lines: `finsec-lint v{version}   ·   FinSec Compliance Scanner` and `project: {name}   ·   ruleset: {p/...} ({n} rules)`.
+1. **`<Banner/>`** — rounded box `╭─╮│╰╯`, 2-space left indent, ~62 wide. Two lines: `sirius v{version}   ·   Sirius Compliance Scanner` and `project: {name}   ·   ruleset: {p/...} ({n} rules)`.
 2. **`<ScanProgress/>`** — braille spinner (`⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏`) + `Scanning {total} files ` + dot-leader run of `·` + right-aligned `{pct}%` + block bar `▐████████▏` with half-block caps. Driven by `progress`/`file.scanning`.
 3. **`<FindingCard/>`** —
    - `<SeverityBadge/>`: glyph + padded uppercase severity, color from the token table
@@ -192,7 +192,7 @@ These are the visual spec. Reproduce component-for-component.
    - location line: `{file}:{line}` left, compliance refs right-aligned
    - `<CodeFrame/>`: `{lineno} │  {source}` — number gutter, `│` rule, two spaces
    - `<UnderlineAnnotation/>`: continuation gutter, then a `╰──` elbow column-aligned to the offending token, carrying `secret · ⚠ VERIFIED LIVE · ₹42,00,000 at risk`. **Alignment needs `col`, which is missing from the WS frame** — see [D-005](decisions.md)
-   - `<FixHint/>`: `↳ fix: {action}` + optional `   run  finsec fix {RULE-ID}`
+   - `<FixHint/>`: `↳ fix: {action}` + optional `   run  sirius fix {RULE-ID}`
 4. **`<Summary/>`** — `────` rules (~64 wide) around four rows: counters · secrets validity · money-at-risk + score meter · gate verdict.
 
 **Fix view**
@@ -211,12 +211,12 @@ Verbatim from the PRD: "Respect `NO_COLOR`, detect TTY (auto-switch to plain whe
 - TTY detection via `process.stdout.isTTY` → plain renderer when piped; **never** emit spinners or cursor escapes to a pipe
 - `--json` forces machine mode and suppresses Ink entirely
 - `--sarif <file>` writes a real file consumable by `github/codeql-action/upload-sarif@v3`
-- `FINSEC_ASCII=1` (our addition) swaps every box-drawing/braille/`₹` glyph for ASCII
+- `SIRIUS_ASCII=1` (our addition) swaps every box-drawing/braille/`₹` glyph for ASCII
 
 **The plain renderer is a second, unmocked spec.** Every mockup is hard-coded to ~64 columns with right-aligned compliance refs. Decide the narrow/plain layout deliberately — one line per finding:
 
 ```
-CRITICAL FIN-SEC-001 src/config.py:14 Hardcoded Stripe secret key [PCI-DSS:8.6.2]
+CRITICAL SIR-SEC-001 src/config.py:14 Hardcoded Stripe secret key [PCI-DSS:8.6.2]
 ```
 
 Read `process.stdout.columns`; degrade below ~70.
@@ -227,11 +227,11 @@ Read `process.stdout.columns`; degrade below ~70.
 
 ## 7. Distribution
 
-From the PRD: `npm i -g finsec` · `brew install finsec` · `pipx install finsec` · `curl … | sh` single-binary · Docker `finsec/cli` · **`npx finsec scan` for a zero-install demo**.
+From the PRD: `npm i -g sirius` · `brew install sirius` · `pipx install sirius` · `curl … | sh` single-binary · Docker `sirius/cli` · **`npx sirius scan` for a zero-install demo**.
 
 Only npm/npx is in scope for the two-day build; it is also the demo path.
 
-Distribution-adjacent artifacts the CLI feeds: `finsec/scan-action@v1` (GitHub Action), a GitLab CI template, and a pre-commit hook.
+Distribution-adjacent artifacts the CLI feeds: `sirius/scan-action@v1` (GitHub Action), a GitLab CI template, and a pre-commit hook.
 
 ---
 
@@ -239,15 +239,15 @@ Distribution-adjacent artifacts the CLI feeds: `finsec/scan-action@v1` (GitHub A
 
 The CLI owns **105 of the ~240 demo seconds**.
 
-**Beat 2 — (60s) live scan.** "`finsec scan .` — streaming findings, color-coded, PCI/RBI/DPDP clauses, a **VERIFIED LIVE** Stripe test key with ₹ money-at-risk. **This is the wow moment.**"
+**Beat 2 — (60s) live scan.** "`sirius scan .` — streaming findings, color-coded, PCI/RBI/DPDP clauses, a **VERIFIED LIVE** Stripe test key with ₹ money-at-risk. **This is the wow moment.**"
 
 Must hold up: time-to-first-finding <10s · the `⚠ VERIFIED LIVE` badge and `₹42,00,000 at risk` strings are what judges remember · every glyph survives the presentation terminal · `--replay` works with the network unplugged.
 
-**Beat 3 — (45s) Cerebus fix.** "`finsec fix FIN-SEC-001` — show quarantined→diff→verifier PASS, accept the diff."
+**Beat 3 — (45s) Cerebus fix.** "`sirius fix SIR-SEC-001` — show quarantined→diff→verifier PASS, accept the diff."
 
 Must hold up: the three-line provenance panel renders even with the LLM down (deterministic templates + a cached suggestion per demo finding) · `✓ PASS` appears · `[y]` visibly writes the file · rule-id resolution works without a scan id.
 
-Beat 4 (CI gate) runs this same CLI inside the Action with `severity_threshold: high`, `fail_on: verified-secrets`, `sarif: finsec.sarif`, `diff_aware: true`.
+Beat 4 (CI gate) runs this same CLI inside the Action with `severity_threshold: high`, `fail_on: verified-secrets`, `sarif: sirius.sarif`, `diff_aware: true`.
 
 ---
 
@@ -263,7 +263,7 @@ Beyond the twelve resolved in [`decisions.md`](decisions.md), these remain open 
 - **`watch`** — debounce interval, ignore globs, full vs incremental re-scan, cancel-in-flight vs queue, exit behavior.
 - **`triage` vs `fix` overlap** — the GUI keymap (`j/k` move, `a` accept, `d` dismiss, `f` fix, `s` suppress, `/` filter) is the model, but `PATCH …/findings/{fid}` maps to accept/dismiss/suppress states that have **no column in the `findings` DDL** (only `suppressed BOOLEAN`).
 - **`report`** — where the file lands, and whether the CLI verifies the detached JWS locally. The PRD assigns live signature verification to the web dashboard, but it is a natural CLI beat.
-- **`suppress`** — whether it writes server-side or to a local `.snyk`-style file, and how it interacts with `.finsecignore` and inline ignores.
+- **`suppress`** — whether it writes server-side or to a local `.snyk`-style file, and how it interacts with `.siriusignore` and inline ignores.
 - **`baseline set`** — from HEAD or a given sha, and where fingerprints are computed (must be server-side; the CLI has no engine).
 - **Housekeeping commands** — no `version`, `doctor`, `completion`, `--verbose/--quiet/--debug` are specified.
 - **Telemetry** — not mentioned at all. For a security tool the right answer is an explicit "none," and that should be stated rather than left silent.

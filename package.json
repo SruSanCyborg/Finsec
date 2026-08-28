@@ -1,5 +1,5 @@
 {
-  "name": "finsec-lint",
+  "name": "sirius",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -15,8 +15,8 @@
     "contract:lint": "redocly lint contract/openapi.yaml",
     "contract:types": "openapi-typescript contract/openapi.yaml -o packages/cli/src/api/types.ts",
     "cli": "node packages/cli/dist/cli.js",
-    "build": "pnpm --filter finsec build",
-    "test": "pnpm --filter finsec test"
+    "build": "pnpm --filter sirius build",
+    "test": "pnpm --filter sirius test"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",

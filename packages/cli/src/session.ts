@@ -1,12 +1,12 @@
 /**
- * The last-scan cache: `.finsec/last-scan.json`.
+ * The last-scan cache: `.sirius/last-scan.json`.
  *
- * Exists because the demo runs `finsec fix FIN-SEC-001` — a rule id, with no
+ * Exists because the demo runs `sirius fix SIR-SEC-001` — a rule id, with no
  * scan id — while the endpoint is keyed by scan id plus finding id. Rather than
  * make the user paste UUIDs, every scan records enough to resolve a rule id back
  * to the findings it produced (decisions.md D-007).
  *
- * `.finsec/` is gitignored. Nothing sensitive goes in here: file paths, line
+ * `.sirius/` is gitignored. Nothing sensitive goes in here: file paths, line
  * numbers, rule ids, and the scan id — never snippets, which can contain the
  * very secrets we just found.
  */
@@ -16,7 +16,7 @@ import { dirname, join } from 'node:path';
 
 import type { Finding, Severity } from './domain.js';
 
-const DIR = '.finsec';
+const DIR = '.sirius';
 const FILE = 'last-scan.json';
 
 export interface CachedFinding {
@@ -79,7 +79,7 @@ export function toCached(finding: Finding): CachedFinding {
 }
 
 /**
- * Resolve a user-supplied identifier — a rule id like `FIN-SEC-001`, a finding
+ * Resolve a user-supplied identifier — a rule id like `SIR-SEC-001`, a finding
  * UUID, or a `file:line` — against the cache.
  */
 export function resolveFindings(cache: LastScan, identifier: string): CachedFinding[] {

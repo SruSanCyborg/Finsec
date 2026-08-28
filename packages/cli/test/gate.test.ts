@@ -18,7 +18,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     file: 'src/app.py',
     line: 1,
     severity: 'high',
-    rule_id: 'FIN-SEC-999',
+    rule_id: 'SIR-SEC-999',
     category: 'secrets',
     message: 'test finding',
     ...overrides,

@@ -8,10 +8,10 @@ dist/
 .pnpm-store/
 
 # CLI runtime state
-.finsec/
+.sirius/
 *.sarif
-*.finsec-backup
-finsec-report.*
+*.sirius-backup
+sirius-report.*
 
 # Local config / secrets
 .env

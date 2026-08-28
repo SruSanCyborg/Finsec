@@ -7,7 +7,7 @@
  *
  * The ASCII fallback is not hypothetical politeness — the demo runs on an
  * unknown presentation machine, and a row of mojibake during the 60 seconds
- * that matter most is a real risk (FINSEC_ASCII=1 forces it).
+ * that matter most is a real risk (SIRIUS_ASCII=1 forces it).
  */
 
 import type { Severity, Validity } from '../domain.js';
@@ -33,7 +33,7 @@ export function detectCapabilities(options: CapabilityOptions = {}): Capabilitie
   const noColorEnv = env.NO_COLOR !== undefined && env.NO_COLOR !== '';
   const color = !options.noColor && !noColorEnv && !options.machineMode && tty;
 
-  const asciiForced = env.FINSEC_ASCII === '1' || env.FINSEC_ASCII === 'true';
+  const asciiForced = env.SIRIUS_ASCII === '1' || env.SIRIUS_ASCII === 'true';
   const utf8 = /UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '');
   // Windows Terminal and modern macOS/Linux terminals are fine; a bare TERM=dumb
   // or a non-UTF-8 locale is not.

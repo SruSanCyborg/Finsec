@@ -325,7 +325,7 @@ export interface components {
         Problem: {
             /**
              * Format: uri
-             * @example https://finsec.dev/errors/rule-invalid
+             * @example https://sirius.dev/errors/rule-invalid
              */
             type?: string;
             title: string;
@@ -333,9 +333,9 @@ export interface components {
             detail?: string;
             instance?: string;
             /**
-             * @description Non-standard sixth member, `FIN_ERR_*` namespace.
-             * @example FIN_ERR_RULE_SCHEMA
-             * @example FIN_ERR_PARSE
+             * @description Non-standard sixth member, `SIRIUS_ERR_*` namespace.
+             * @example SIRIUS_ERR_RULE_SCHEMA
+             * @example SIRIUS_ERR_PARSE
              */
             code?: string;
         };
@@ -424,7 +424,7 @@ export interface components {
              */
             col?: number | null;
             severity: components["schemas"]["Severity"];
-            /** @example FIN-SEC-001 */
+            /** @example SIR-SEC-001 */
             rule_id: string;
             category: components["schemas"]["Category"];
             /**
@@ -468,7 +468,18 @@ export interface components {
             target?: string;
             /** @example 0.92 */
             confidence?: number;
-            /** @description Unified diff against the finding's **snippet**, not the whole file. */
+            /**
+             * @description Unified diff against the finding's **snippet**, not the whole file.
+             *     Clients must re-locate the hunk by content rather than trusting the
+             *     line number, since the file may have changed since the scan.
+             *
+             *     The example is the SIR-SEC-001 fix from the demo fixture, and matches
+             *     contract/fixtures/chaos-repo/src/config.py line for line so that
+             *     `sirius fix` works end to end against the mock.
+             * @example @@ -14 +14 @@
+             *     -STRIPE_KEY = "sk_live_51H8xR2eZvNOTAREALKE"
+             *     +STRIPE_KEY = os.environ["STRIPE_API_KEY"]
+             */
             diff: string;
             /** @description Template side-effects, e.g. an .env.example entry. */
             side_effects?: {
@@ -484,7 +495,7 @@ export interface components {
             generated_at?: string;
         };
         Rule: {
-            /** @example FIN-SEC-001 */
+            /** @example SIR-SEC-001 */
             id: string;
             version: string;
             enabled: boolean;
@@ -494,7 +505,7 @@ export interface components {
             languages?: string[];
             compliance_ref?: string[];
             fix_action?: components["schemas"]["FixAction"];
-            /** @example # finsec-ignore: FIN-SEC-001 */
+            /** @example # sirius-ignore: SIR-SEC-001 */
             suppress_token?: string;
             yaml_body?: string;
         };
@@ -608,7 +619,7 @@ export interface components {
              * @enum {string}
              */
             type: "error";
-            /** @example FIN_ERR_PARSE */
+            /** @example SIRIUS_ERR_PARSE */
             code: string;
             path?: string;
             detail?: string;
@@ -783,12 +794,12 @@ export interface operations {
             /**
              * @description The report. `json` and `sarif` are returned inline; `pdf` returns a
              *     download URI. The detached JWS (ES256 over canonical JSON) is in the
-             *     `X-FinSec-Signature-JWS` header for inline formats.
+             *     `X-Sirius-Signature-JWS` header for inline formats.
              */
             200: {
                 headers: {
                     /** @description Detached JWS signature over the canonical JSON body */
-                    "X-FinSec-Signature-JWS"?: string;
+                    "X-Sirius-Signature-JWS"?: string;
                     [name: string]: unknown;
                 };
                 content: {

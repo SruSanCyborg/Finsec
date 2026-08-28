@@ -14,7 +14,7 @@ Chosen over the PRD's two stated alternatives.
 |---|---|---|---|
 | Mockup parity | Highest — the PRD's ANSI mockups are the agent-CLI idiom, and that idiom is Ink | Close; different default box glyphs | Precise, via Lip Gloss |
 | Language unity | Diverges from the Python worker | **Single language with worker/Core** | Third language in the stack |
-| Distribution | `npm`, **`npx finsec scan` zero-install demo**, Docker | `pipx`, Docker; no `npx` | Best single-binary story |
+| Distribution | `npm`, **`npx sirius scan` zero-install demo**, Docker | `pipx`, Docker; no `npx` | Best single-binary story |
 | Local toolchain | **Node v26.5.0, pnpm 11.18 ready** | **Python 3.9.6 system-only, no uv/pipx** | Go not installed |
 | PRD support | §7 and §13 both name Ink explicitly | named as "acceptable fallback" | named as "the alternative" |
 
@@ -48,7 +48,7 @@ Resolution: `--severity-threshold` sets the **bar** (which severities count). `-
 Exit 1 · gate: severity≥high, fail-on=verified-secrets → BLOCKED
 ```
 
-Note `--fail-on`'s value set intentionally diverges from Snyk's own `all|upgradable|patchable` — finsec redefines it, and that is fine as long as it is consistent.
+Note `--fail-on`'s value set intentionally diverges from Snyk's own `all|upgradable|patchable` — sirius redefines it, and that is fine as long as it is consistent.
 
 ---
 
@@ -76,9 +76,9 @@ Requested: add `col` (and `end_line`) to the frame. Until then the CLI locates t
 
 **Status:** accepted.
 
-SARIF 2.1.0 has three levels; finsec has five severities. The PRD never specifies the collapse.
+SARIF 2.1.0 has three levels; sirius has five severities. The PRD never specifies the collapse.
 
-| finsec | SARIF |
+| sirius | SARIF |
 |---|---|
 | `critical`, `high` | `error` |
 | `medium` | `warning` |
@@ -92,9 +92,9 @@ SARIF 2.1.0 has three levels; finsec has five severities. The PRD never specifie
 
 **Status:** accepted.
 
-The demo script invokes `finsec fix FIN-SEC-001` — a **rule id**, with no scan id — but the endpoint is `POST /scans/{id}/findings/{fid}/fix`, keyed by two UUIDs.
+The demo script invokes `sirius fix SIR-SEC-001` — a **rule id**, with no scan id — but the endpoint is `POST /scans/{id}/findings/{fid}/fix`, keyed by two UUIDs.
 
-Every scan writes `.finsec/last-scan.json` (scan id, project id, and the finding index: id, rule id, file, line). `fix` resolves the rule id against it. Multiple findings for one rule → prompt to pick, or `--all` to walk them in order. `.finsec/` is gitignored.
+Every scan writes `.sirius/last-scan.json` (scan id, project id, and the finding index: id, rule id, file, line). `fix` resolves the rule id against it. Multiple findings for one rule → prompt to pick, or `--all` to walk them in order. `.sirius/` is gitignored.
 
 ---
 
@@ -102,19 +102,19 @@ Every scan writes `.finsec/last-scan.json` (scan id, project id, and the finding
 
 **Status:** accepted.
 
-`POST /scans` requires `project_id`, but `finsec scan .` takes only a path.
+`POST /scans` requires `project_id`, but `sirius scan .` takes only a path.
 
-Resolution order: `--project` flag → `finsec.yaml` → `FINSEC_PROJECT_ID` → a clear error pointing at `finsec init`.
+Resolution order: `--project` flag → `sirius.yaml` → `SIRIUS_PROJECT_ID` → a clear error pointing at `sirius init`.
 
-For getting code to the server, `source` defaults to `upload`: tar the working tree, filtered by `.finsecignore` and `.gitignore`, with a size cap and a progress line. Use `source: git` when the tree is clean and a remote is configured. (The PRD's §2.4 threat model requires path-traversal guards on uploaded archives — that is the server's job, but the CLI should not construct pathological archives either.)
+For getting code to the server, `source` defaults to `upload`: tar the working tree, filtered by `.siriusignore` and `.gitignore`, with a size cap and a progress line. Use `source: git` when the tree is clean and a remote is configured. (The PRD's §2.4 threat model requires path-traversal guards on uploaded archives — that is the server's job, but the CLI should not construct pathological archives either.)
 
 ---
 
-## D-009 — `FINSEC_API_URL` / `--api-url`
+## D-009 — `SIRIUS_API_URL` / `--api-url`
 
 **Status:** accepted.
 
-The plan requires the CLI to work against a mock from hour one and swap to the real Core later, but the PRD specifies no way to point it anywhere. `FINSEC_API_URL` env var, `--api-url` flag override. Default is the production URL.
+The plan requires the CLI to work against a mock from hour one and swap to the real Core later, but the PRD specifies no way to point it anywhere. `SIRIUS_API_URL` env var, `--api-url` flag override. Default is the production URL.
 
 ---
 
@@ -156,6 +156,38 @@ Applying a diff is the only place the CLI mutates the user's files, so:
 
 ---
 
+## D-014 — Renamed from `finsec-lint` to `sirius`
+
+**Status:** accepted. **Contract impact:** breaking, including rule IDs.
+
+The product and the command are now **`sirius`**. The rename was taken all the way through, including the rule identifiers, in full knowledge that this diverges from [`original-prd.md`](original-prd.md).
+
+| Was | Now |
+|---|---|
+| `finsec` (command, npm package) | `sirius` |
+| `finsec-lint` (product) | `sirius` |
+| `FIN-SEC-001` … `FIN-SEC-060` | `SIR-SEC-001` … `SIR-SEC-060` |
+| `FIN_ERR_*` | `SIRIUS_ERR_*` |
+| `FINSEC_*` env vars | `SIRIUS_*` |
+| `finsec.yaml` | `sirius.yaml` |
+| `.finseclintrc` | `.siriuslintrc` |
+| `.finsecignore` | `.siriusignore` |
+| `~/.config/finsec/config.toml` | `~/.config/sirius/config.toml` |
+| `# finsec-ignore: FIN-SEC-010` | `# sirius-ignore: SIR-SEC-010` |
+| `.finsec/` state dir | `.sirius/` |
+| `X-FinSec-Signature` / `-Event` / `-Delivery` | `X-Sirius-Signature` / `-Event` / `-Delivery` |
+| `finsec.dev` | `sirius.dev` |
+| `finsecFingerprint` (SARIF) | `siriusFingerprint` |
+| banner `finsec-lint · FinSec Compliance Scanner` | `sirius · Fintech Compliance Scanner` |
+
+**Two things deliberately did not change.** The **numbering scheme** is untouched — still blocks of ten by category (`00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain), so `SIR-SEC-010` is the same rule `FIN-SEC-010` was. And **compliance clause references are untouched**: PCI-DSS `8.6.2`, `6.2.4`, `8.4.2`, `3.4.1`, `3.5.1`, RBI DPSC, DPDP §8, GDPR Art.5 are external standards and have nothing to do with our branding.
+
+**`original-prd.md` was left exactly as received** and still says `finsec-lint` throughout. It is the source research artifact; rewriting it would misrepresent what was actually delivered. Read it with this table in hand. It was renamed from `finsec-lint-prd.md` to `original-prd.md` so the filename does not carry a dead brand, but not one byte of its content was touched.
+
+**The cost, stated plainly:** whoever owns `auto` is building the rule engine, the YAML rule catalog, and the Cerebus fix templates against `FIN-SEC-*`. Those IDs appear 137 times across the PRD, the rule catalog table, both ANSI mockups, and the demo script. This rename has to be communicated before that work hardens, or the CLI and the engine will disagree about every rule id. That is a coordination task, not a code task, and it is not done.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.
@@ -163,7 +195,7 @@ Not ours to decide. Tracked here so no one re-derives them.
 1. **Compliance-score formula.** Arrives as `72.5`, renders `72/100`. Severity-weighted? Category coverage? Both the CLI footer meter and the web gauge depend on it.
 2. **Fingerprint algorithm.** Drives baseline diffing, dedup, and suppression matching across all four surfaces. Presumably rule id + path + normalized snippet hash, deliberately line-number-insensitive — but it must be defined once, server-side.
 3. **Money-at-risk model.** Explicitly a heuristic table per the PRD, but no table, no per-rule multipliers, and only one `money_at_risk_model` value (`provider_key`) is named.
-4. **The K/S auth contradiction.** `PATCH /scans/{id}/findings/{fid}` (triage), `GET/POST /rules`, `POST /rules/validate`, `GET/POST /suppressions`, `GET/POST /baselines`, and `GET/PUT /projects/{id}/policy` are marked **S = session/JWT only**, but `finsec triage`, `suppress`, `baseline`, and `rules` are CLI commands authenticating with **K = Bearer API key**. As specified, those commands cannot work in CI. Either those endpoints accept `K`, or the command tree is wrong.
+4. **The K/S auth contradiction.** `PATCH /scans/{id}/findings/{fid}` (triage), `GET/POST /rules`, `POST /rules/validate`, `GET/POST /suppressions`, `GET/POST /baselines`, and `GET/PUT /projects/{id}/policy` are marked **S = session/JWT only**, but `sirius triage`, `suppress`, `baseline`, and `rules` are CLI commands authenticating with **K = Bearer API key**. As specified, those commands cannot work in CI. Either those endpoints accept `K`, or the command tree is wrong.
 5. **Device-flow endpoints.** `login` is specified as "OAuth device flow" but no `/auth/device/code` or `/auth/device/token` endpoints exist in the API table. Also unstated: the `config.toml` schema, the env var name for an API key in CI, and profile support.
 6. **`rules test`** has no backing endpoint and would require either a local engine (violating the golden rule) or a new endpoint.
 7. **Pagination convention** for `GET /scans/{id}/results` and `GET /scans` — cursor vs offset, param names, envelope shape — and how paginated results reconcile with findings already delivered over WebSocket.

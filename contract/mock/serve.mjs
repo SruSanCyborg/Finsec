@@ -4,7 +4,7 @@
  *   - Prism serving REST from contract/openapi.yaml on :4010
  *   - the WebSocket frame replayer on :4011
  *
- * Point the CLI at it with FINSEC_API_URL=http://localhost:4010.
+ * Point the CLI at it with SIRIUS_API_URL=http://localhost:4010.
  */
 
 import { spawn } from 'node:child_process';
@@ -53,9 +53,9 @@ run('rest', 'npx', ['prism', 'mock', 'contract/openapi.yaml', '--port', REST_POR
 run('ws', process.execPath, ['contract/mock/ws-server.mjs'], { PORT: WS_PORT });
 
 console.log(`
-  finsec-lint mock backend
+  sirius mock backend
     REST  http://localhost:${REST_PORT}
     WS    ws://localhost:${WS_PORT}/api/v1/scans/{id}/stream
 
-  FINSEC_API_URL=http://localhost:${REST_PORT} pnpm cli scan .
+  SIRIUS_API_URL=http://localhost:${REST_PORT} pnpm cli scan .
 `);

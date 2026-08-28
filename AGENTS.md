@@ -1,10 +1,10 @@
-# finsec-lint
+# sirius
 
 A security & compliance linter **for money-handling code**. It scans API specs and SDK code before deployment, maps every finding to a specific compliance clause (PCI-DSS v4.0, RBI DPSC, DPDP 2023, GDPR), quantifies **money-at-risk in ₹**, emits a cryptographically signed report a CI pipeline can gate on, and proposes guardrailed autofixes through a dual-LLM design called **Cerebus**.
 
 Built for a hackathon demo. The credibility strategy is deliberate: copy proven conventions wholesale — Semgrep (YAML rules, `--baseline-commit`, SARIF, inline suppression), Snyk (`--severity-threshold`, `--fail-on`, 0/1/2/3 exit codes, expiring ignores), TruffleHog (live secret validation), Simon Willison's dual-LLM pattern.
 
-**Canonical spec:** [`docs/finsec-lint-prd.md`](docs/finsec-lint-prd.md) (588 lines — the full PRD, architecture, API spec, and per-surface design report).
+**Canonical spec:** [`docs/original-prd.md`](docs/original-prd.md) (588 lines — the full PRD, architecture, API spec, and per-surface design report).
 Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md)
 
 ---
@@ -38,15 +38,15 @@ What this means in practice:
 
 ## Locked decisions
 
-- **CLI is Ink (TypeScript + React-for-terminal)**, not Python Rich or Go Bubble Tea. Rationale: aesthetic parity with the PRD's ANSI mockups, `npx finsec scan` zero-install demo, and the local toolchain (Node 26 present; Python is 3.9.6 system-only with no uv/pipx). See [`docs/decisions.md`](docs/decisions.md).
-- **The CLI is a pure client.** It builds against the mock server first and swaps to the real Core with one env var: `FINSEC_API_URL` (or `--api-url`).
+- **CLI is Ink (TypeScript + React-for-terminal)**, not Python Rich or Go Bubble Tea. Rationale: aesthetic parity with the PRD's ANSI mockups, `npx sirius scan` zero-install demo, and the local toolchain (Node 26 present; Python is 3.9.6 system-only with no uv/pipx). See [`docs/decisions.md`](docs/decisions.md).
+- **The CLI is a pure client.** It builds against the mock server first and swaps to the real Core with one env var: `SIRIUS_API_URL` (or `--api-url`).
 - **Exit codes are computed client-side** by `gate.ts` and cross-checked against the server's value. Deterministic, testable, works offline.
 
 ---
 
 ## Conventions no surface may violate
 
-**Exit codes** (Snyk-modeled): `0` clean · `1` findings at/above threshold (*action needed, not an error*) · `2` CLI/execution failure (auth, network, parse) · `3` no supported target found. Escape hatch: `finsec scan … || true`.
+**Exit codes** (Snyk-modeled): `0` clean · `1` findings at/above threshold (*action needed, not an error*) · `2` CLI/execution failure (auth, network, parse) · `3` no supported target found. Escape hatch: `sirius scan … || true`.
 
 **Vocabularies** (from the DDL — these are the wire contract, do not drift):
 
@@ -60,9 +60,9 @@ What this means in practice:
 | `verifier_status` | `pass` `fail` `escalated` |
 | `source` / `trigger` | `upload` `git` `inline` / `manual` `ci` `webhook` `schedule` |
 
-**Rule IDs** are `FIN-SEC-NNN`, numbered in blocks of ten by category: `00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain.
+**Rule IDs** are `SIR-SEC-NNN`, numbered in blocks of ten by category: `00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain.
 
-**Suppression**, three layers: inline `# finsec-ignore: FIN-SEC-010` (Bandit `# nosec` lineage) · `.finsecignore` path globs · server-side `suppressions` rows with a mandatory `reason` and ISO-8601 `expires_at`.
+**Suppression**, three layers: inline `# sirius-ignore: SIR-SEC-010` (Bandit `# nosec` lineage) · `.siriusignore` path globs · server-side `suppressions` rows with a mandatory `reason` and ISO-8601 `expires_at`.
 
 **`compliance_ref`** is a JSON string array with colon namespacing: `["PCI-DSS:8.6.2","RBI-DPSC","DPDP:8"]`. Use **v4.0** PCI numbers — injection is `6.2.4` (not v3.2.1's `6.5.1`), MFA into the CDE is `8.4.2` (not `8.3.x`), hardcoded keys is `8.6.2`.
 
@@ -70,10 +70,10 @@ What this means in practice:
 
 **Config precedence** (highest wins) — not stated in the PRD, decided here:
 ```
-CLI flags > env (FINSEC_*) > .finseclintrc (nearest dir, walking up)
-          > finsec.yaml (project root) > ~/.config/finsec/config.toml > defaults
+CLI flags > env (SIRIUS_*) > .siriuslintrc (nearest dir, walking up)
+          > sirius.yaml (project root) > ~/.config/sirius/config.toml > defaults
 ```
-`config.toml` holds auth/profile only (modeled on Stripe's). `.finsecignore` and inline ignores are result filters, not config.
+`config.toml` holds auth/profile only (modeled on Stripe's). `.siriusignore` and inline ignores are result filters, not config.
 
 ---
 
@@ -82,8 +82,8 @@ CLI flags > env (FINSEC_*) > .finseclintrc (nearest dir, walking up)
 ```bash
 pnpm install
 pnpm mock                      # Prism REST :4010 + WS frame replay :4011
-pnpm --filter finsec build     # tsc → packages/cli/dist
-pnpm --filter finsec test      # vitest
+pnpm --filter sirius build     # tsc → packages/cli/dist
+pnpm --filter sirius test      # vitest
 pnpm fixtures                  # regenerate contract/fixtures/demo.jsonl
 pnpm contract:lint             # redocly lint
 pnpm contract:types            # regenerate packages/cli/src/api/types.ts
@@ -93,8 +93,8 @@ node contract/mock/smoke.mjs   # assert the mock still matches the PRD mockup
 Against the live mock:
 
 ```bash
-env FINSEC_API_URL=http://localhost:4010 FINSEC_WS_URL=http://localhost:4011 \
-    FINSEC_API_KEY=demo-key FINSEC_PROJECT_ID=11111111-1111-4111-8111-111111111111 \
+env SIRIUS_API_URL=http://localhost:4010 SIRIUS_WS_URL=http://localhost:4011 \
+    SIRIUS_API_KEY=demo-key SIRIUS_PROJECT_ID=11111111-1111-4111-8111-111111111111 \
     node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo
 ```
 
@@ -105,15 +105,15 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
      --replay contract/fixtures/demo.jsonl
 ```
 
-`--replay` exists because the PRD's risk register calls WebSocket instability a stage risk. The same JSONL fixture format feeds the mock server, `--replay`, and the deterministic streaming tests — write it once. `FINSEC_REPLAY_SPEED=0` replays instantly; `0.15` is a good pace for rehearsal.
+`--replay` exists because the PRD's risk register calls WebSocket instability a stage risk. The same JSONL fixture format feeds the mock server, `--replay`, and the deterministic streaming tests — write it once. `SIRIUS_REPLAY_SPEED=0` replays instantly; `0.15` is a good pace for rehearsal.
 
 ## Status
 
 | Area | State |
 |---|---|
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
-| `finsec scan` | Done — streaming TTY view, plain renderer, `--json`, `--sarif`, `--replay`, exit codes |
-| `finsec fix` | Done — Cerebus panel, diff, interactive apply with backup |
+| `sirius scan` | Done — streaming TTY view, plain renderer, `--json`, `--sarif`, `--replay`, exit codes |
+| `sirius fix` | Done — Cerebus panel, diff, interactive apply with backup |
 | Everything else in the command tree | Scaffolded in `--help`, throws "not implemented" |
 | Tests | 73 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals) |
 
@@ -125,10 +125,10 @@ Not started: `login`/`logout`, `init`, `triage`, `watch`, `rules`, `suppress`, `
 
 The CLI owns the two highest-value beats of the ~4-minute pitch:
 
-1. **(60s) `finsec scan .`** — streaming findings with a `⚠ VERIFIED LIVE` Stripe *test* key and `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
-2. **(45s) `finsec fix FIN-SEC-001`** — the Cerebus provenance panel (quarantined model → diff builder → verifier `✓ PASS`), then accept the diff. That panel *is* the security argument made visible.
+1. **(60s) `sirius scan .`** — streaming findings with a `⚠ VERIFIED LIVE` Stripe *test* key and `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
+2. **(45s) `sirius fix SIR-SEC-001`** — the Cerebus provenance panel (quarantined model → diff builder → verifier `✓ PASS`), then accept the diff. That panel *is* the security argument made visible.
 
-Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `FINSEC_ASCII=1`.
+Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
 
 ---
 

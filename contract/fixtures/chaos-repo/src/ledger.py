@@ -1,7 +1,7 @@
 """Double-entry ledger queries.
 
 DELIBERATELY VULNERABLE — scanner test fixture.
-FIN-SEC-010 is expected at line 88.
+SIR-SEC-010 is expected at line 88.
 """
 
 from dataclasses import dataclass
@@ -84,7 +84,7 @@ class LedgerRepository:
 
     def find_transaction(self, uid: str) -> Optional[tuple]:
         cur = self._conn.cursor()
-        # FIN-SEC-010 — SQL built with string formatting (PCI-DSS 6.2.4, CWE-89)
+        # SIR-SEC-010 — SQL built with string formatting (PCI-DSS 6.2.4, CWE-89)
         cur.execute("SELECT * FROM txns WHERE id = %s" % uid)
         return cur.fetchone()
 

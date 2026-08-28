@@ -5,10 +5,10 @@
  * precedence below is decided in AGENTS.md and enforced in `load.ts`. Each file
  * has a narrow job:
  *
- *   ~/.config/finsec/config.toml   auth and profiles only (Stripe's model)
- *   finsec.yaml                    project: rules, policy, project id
- *   .finseclintrc                  per-directory overrides
- *   .finsecignore                  path globs (a result filter, not config)
+ *   ~/.config/sirius/config.toml   auth and profiles only (Stripe's model)
+ *   sirius.yaml                    project: rules, policy, project id
+ *   .siriuslintrc                  per-directory overrides
+ *   .siriusignore                  path globs (a result filter, not config)
  */
 
 import { z } from 'zod';
@@ -16,7 +16,7 @@ import { z } from 'zod';
 const severity = z.enum(['critical', 'high', 'medium', 'low', 'info']);
 const failOn = z.enum(['all', 'new', 'verified-secrets']);
 
-/** `~/.config/finsec/config.toml` — credentials, keyed by profile. */
+/** `~/.config/sirius/config.toml` — credentials, keyed by profile. */
 export const configTomlSchema = z.object({
   default_profile: z.string().optional(),
   profile: z
@@ -32,7 +32,7 @@ export const configTomlSchema = z.object({
     .optional(),
 });
 
-/** `finsec.yaml` — project settings. Also the shape `finsec init` scaffolds. */
+/** `sirius.yaml` — project settings. Also the shape `sirius init` scaffolds. */
 export const projectConfigSchema = z.object({
   project_id: z.string().optional(),
   api_url: z.string().url().optional(),
@@ -54,7 +54,7 @@ export const projectConfigSchema = z.object({
     .optional(),
 });
 
-/** `.finseclintrc` — the same keys, applied per directory. */
+/** `.siriuslintrc` — the same keys, applied per directory. */
 export const rcConfigSchema = projectConfigSchema;
 
 export type ConfigToml = z.infer<typeof configTomlSchema>;
@@ -90,12 +90,12 @@ export interface ResolvedConfig {
   baselineCommit: string | undefined;
   exclude: string[];
   policy: NonNullable<ProjectConfig['policy']> | undefined;
-  /** Where each value came from, for `finsec config` and for debugging. */
+  /** Where each value came from, for `sirius config` and for debugging. */
   sources: Record<string, string>;
 }
 
 export const DEFAULTS = {
-  apiUrl: 'https://api.finsec.dev/api/v1',
+  apiUrl: 'https://api.sirius.dev/api/v1',
   severityThreshold: 'high',
   failOn: 'all',
   rulesets: ['p/fintech-core'],

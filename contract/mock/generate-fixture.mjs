@@ -31,7 +31,7 @@ const fid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
  */
 const FINDINGS = [
   {
-    rule_id: 'FIN-SEC-001', severity: 'critical', category: 'secrets',
+    rule_id: 'SIR-SEC-001', severity: 'critical', category: 'secrets',
     // col 14 is the opening quote of the literal, so the `╰──` elbow lands
     // under the secret rather than partway through it.
     file: 'src/config.py', line: 14, col: 14,
@@ -42,7 +42,7 @@ const FINDINGS = [
     fix_action: 'env_lookup',
   },
   {
-    rule_id: 'FIN-SEC-010', severity: 'critical', category: 'injection',
+    rule_id: 'SIR-SEC-010', severity: 'critical', category: 'injection',
     file: 'src/ledger.py', line: 88, col: 17,
     message: 'SQL built with string formatting',
     compliance_ref: ['PCI-DSS:6.2.4', 'CWE-89'],
@@ -50,7 +50,7 @@ const FINDINGS = [
     fix_action: 'parameterize_query',
   },
   {
-    rule_id: 'FIN-SEC-030', severity: 'high', category: 'logging',
+    rule_id: 'SIR-SEC-030', severity: 'high', category: 'logging',
     file: 'src/webhooks.py', line: 52, col: 22,
     message: 'PAN written to application log',
     compliance_ref: ['PCI-DSS:3.4.1', 'GDPR:Art.5'],
@@ -58,7 +58,7 @@ const FINDINGS = [
     fix_action: 'redact_pii_log',
   },
   {
-    rule_id: 'FIN-SEC-021', severity: 'high', category: 'auth',
+    rule_id: 'SIR-SEC-021', severity: 'high', category: 'auth',
     file: 'src/auth.py', line: 31, col: 24,
     message: 'JWT decoded without signature verification',
     compliance_ref: ['PCI-DSS:8.4.2', 'RBI-DPSC'],
@@ -66,7 +66,7 @@ const FINDINGS = [
     money_at_risk_inr: 350_000, fix_action: 'enforce_jwt_verify',
   },
   {
-    rule_id: 'FIN-SEC-031', severity: 'high', category: 'pii',
+    rule_id: 'SIR-SEC-031', severity: 'high', category: 'pii',
     file: 'src/models/card.py', line: 19, col: 5,
     message: 'Full PAN stored unmasked',
     compliance_ref: ['PCI-DSS:3.5.1', 'RBI-DPSC'],
@@ -74,7 +74,7 @@ const FINDINGS = [
     money_at_risk_inr: 400_000, fix_action: 'tokenize_pan',
   },
   {
-    rule_id: 'FIN-SEC-041', severity: 'high', category: 'crypto',
+    rule_id: 'SIR-SEC-041', severity: 'high', category: 'crypto',
     file: 'src/client.py', line: 12, col: 15,
     message: 'Cardholder data sent over plain HTTP',
     compliance_ref: ['PCI-DSS:4.2.1', 'RBI-DPSC'],
@@ -82,7 +82,7 @@ const FINDINGS = [
     money_at_risk_inr: 90_000, fix_action: 'enforce_tls',
   },
   {
-    rule_id: 'FIN-SEC-002', severity: 'high', category: 'secrets',
+    rule_id: 'SIR-SEC-002', severity: 'high', category: 'secrets',
     file: 'src/settings.py', line: 7, col: 14,
     message: 'High-entropy string in configuration',
     compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
@@ -94,18 +94,18 @@ const FINDINGS = [
 // Nine medium and three low findings, spread across the tree. They never render
 // as cards in the demo but they must exist for the footer counters to be true.
 const FILLER = [
-  ['FIN-SEC-050', 'medium', 'ratelimit', 'src/api/transfer.py', 44, 'Money-movement endpoint without a rate limit', ['PCI-DSS:6.2.4'], 'add_rate_limit'],
-  ['FIN-SEC-051', 'medium', 'ratelimit', 'src/api/transfer.py', 61, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
-  ['FIN-SEC-050', 'medium', 'ratelimit', 'src/api/payout.py', 28, 'Money-movement endpoint without a rate limit', ['PCI-DSS:6.2.4'], 'add_rate_limit'],
-  ['FIN-SEC-051', 'medium', 'ratelimit', 'src/api/payout.py', 39, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
-  ['FIN-SEC-051', 'medium', 'ratelimit', 'src/api/refund.py', 22, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
-  ['FIN-SEC-040', 'medium', 'crypto', 'src/util/hash.py', 9, 'Weak hash algorithm (MD5)', ['PCI-DSS:6.2.4'], 'upgrade_crypto'],
-  ['FIN-SEC-040', 'medium', 'crypto', 'src/util/token.py', 15, 'Static initialization vector', ['PCI-DSS:3.6.1'], 'upgrade_crypto'],
-  ['FIN-SEC-020', 'medium', 'auth', 'src/api/admin.py', 12, 'Route missing an auth decorator', ['PCI-DSS:8.4.2'], 'add_auth_decorator'],
-  ['FIN-SEC-020', 'medium', 'auth', 'src/api/reports.py', 8, 'Route missing an auth decorator', ['PCI-DSS:8.4.2'], 'add_auth_decorator'],
-  ['FIN-SEC-060', 'low', 'supplychain', 'requirements.txt', 14, 'Dependency runs an install script', ['PCI-DSS:6.3.2'], 'pin_or_remove_dep'],
-  ['FIN-SEC-060', 'low', 'supplychain', 'requirements.txt', 21, 'Dependency pinned to a floating range', ['PCI-DSS:6.3.2'], 'pin_or_remove_dep'],
-  ['FIN-SEC-002', 'low', 'secrets', 'tests/fixtures/sample.json', 3, 'High-entropy string in test fixture', ['PCI-DSS:8.6.2'], 'env_lookup'],
+  ['SIR-SEC-050', 'medium', 'ratelimit', 'src/api/transfer.py', 44, 'Money-movement endpoint without a rate limit', ['PCI-DSS:6.2.4'], 'add_rate_limit'],
+  ['SIR-SEC-051', 'medium', 'ratelimit', 'src/api/transfer.py', 61, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
+  ['SIR-SEC-050', 'medium', 'ratelimit', 'src/api/payout.py', 28, 'Money-movement endpoint without a rate limit', ['PCI-DSS:6.2.4'], 'add_rate_limit'],
+  ['SIR-SEC-051', 'medium', 'ratelimit', 'src/api/payout.py', 39, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
+  ['SIR-SEC-051', 'medium', 'ratelimit', 'src/api/refund.py', 22, 'Money POST without an idempotency key', [], 'add_idempotency_key'],
+  ['SIR-SEC-040', 'medium', 'crypto', 'src/util/hash.py', 9, 'Weak hash algorithm (MD5)', ['PCI-DSS:6.2.4'], 'upgrade_crypto'],
+  ['SIR-SEC-040', 'medium', 'crypto', 'src/util/token.py', 15, 'Static initialization vector', ['PCI-DSS:3.6.1'], 'upgrade_crypto'],
+  ['SIR-SEC-020', 'medium', 'auth', 'src/api/admin.py', 12, 'Route missing an auth decorator', ['PCI-DSS:8.4.2'], 'add_auth_decorator'],
+  ['SIR-SEC-020', 'medium', 'auth', 'src/api/reports.py', 8, 'Route missing an auth decorator', ['PCI-DSS:8.4.2'], 'add_auth_decorator'],
+  ['SIR-SEC-060', 'low', 'supplychain', 'requirements.txt', 14, 'Dependency runs an install script', ['PCI-DSS:6.3.2'], 'pin_or_remove_dep'],
+  ['SIR-SEC-060', 'low', 'supplychain', 'requirements.txt', 21, 'Dependency pinned to a floating range', ['PCI-DSS:6.3.2'], 'pin_or_remove_dep'],
+  ['SIR-SEC-002', 'low', 'secrets', 'tests/fixtures/sample.json', 3, 'High-entropy string in test fixture', ['PCI-DSS:8.6.2'], 'env_lookup'],
 ].map(([rule_id, severity, category, file, line, message, compliance_ref, fix_action]) => ({
   rule_id, severity, category, file, line, col: 5, message, compliance_ref, fix_action,
   snippet: null,
@@ -156,7 +156,7 @@ FILE_LIST.forEach((path, i) => {
 });
 
 // One non-fatal parse error, so clients are forced to handle the branch.
-push(20, { type: 'error', code: 'FIN_ERR_PARSE', path: 'src/vendor/minified.js', detail: 'Unsupported syntax; file skipped' });
+push(20, { type: 'error', code: 'SIRIUS_ERR_PARSE', path: 'src/vendor/minified.js', detail: 'Unsupported syntax; file skipped' });
 
 push(150, {
   type: 'scan.completed',

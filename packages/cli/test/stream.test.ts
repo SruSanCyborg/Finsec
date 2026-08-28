@@ -29,7 +29,7 @@ async function drain(): Promise<WsFrame[]> {
 describe('deriveWsUrl', () => {
   it('upgrades the scheme', () => {
     expect(deriveWsUrl('http://localhost:4010')).toBe('ws://localhost:4010');
-    expect(deriveWsUrl('https://api.finsec.dev/api/v1')).toBe('wss://api.finsec.dev/api/v1');
+    expect(deriveWsUrl('https://api.sirius.dev/api/v1')).toBe('wss://api.sirius.dev/api/v1');
   });
 
   it('prefers an explicit override, since the mock splits REST and WS ports', () => {
@@ -72,7 +72,7 @@ describe('the demo fixture', () => {
 
   it('carries the demo hero finding with its column, validity, and rupee figure', async () => {
     const frames = await drain();
-    const hero = frames.find((f) => f.type === 'finding' && (f as any).finding.rule_id === 'FIN-SEC-001') as any;
+    const hero = frames.find((f) => f.type === 'finding' && (f as any).finding.rule_id === 'SIR-SEC-001') as any;
 
     expect(hero.finding).toMatchObject({
       file: 'src/config.py',
@@ -105,7 +105,7 @@ describe('plain renderer', () => {
       file: 'src/config.py',
       line: 14,
       severity: 'critical',
-      rule_id: 'FIN-SEC-001',
+      rule_id: 'SIR-SEC-001',
       category: 'secrets',
       message: 'Hardcoded Stripe secret key',
       compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
@@ -114,7 +114,7 @@ describe('plain renderer', () => {
     } as Finding);
 
     expect(line).toBe(
-      'CRITICAL FIN-SEC-001 src/config.py:14 Hardcoded Stripe secret key ' +
+      'CRITICAL SIR-SEC-001 src/config.py:14 Hardcoded Stripe secret key ' +
         '[PCI-DSS:8.6.2, DPDP:8] (VERIFIED LIVE, ₹42,00,000 at risk)',
     );
   });

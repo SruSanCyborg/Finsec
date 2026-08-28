@@ -1,11 +1,11 @@
 /**
  * A single finding.
  *
- *   ✗ CRITICAL  FIN-SEC-001  Hardcoded Stripe secret key
+ *   ✗ CRITICAL  SIR-SEC-001  Hardcoded Stripe secret key
  *      src/config.py:14                          PCI-DSS 8.6.2 · DPDP §8
  *      14 │  STRIPE_KEY = "sk_live_51H8xR2eZv…"
  *         │               ╰── secret · ⚠ VERIFIED LIVE · ₹42,00,000 at risk
- *      ↳ fix: env_lookup   run  finsec fix FIN-SEC-001
+ *      ↳ fix: env_lookup   run  sirius fix SIR-SEC-001
  *
  * The mockup shows three densities: a full card with a code frame and an
  * underline annotation, a medium card without the annotation, and a compact
@@ -25,7 +25,7 @@ export interface FindingCardProps {
   finding: Finding;
   glyphs: Glyphs;
   capabilities: Capabilities;
-  /** Append `run finsec fix <RULE-ID>` to the fix hint. */
+  /** Append `run sirius fix <RULE-ID>` to the fix hint. */
   showRunHint?: boolean;
 }
 
@@ -118,7 +118,7 @@ export function FindingCard({ finding, glyphs, capabilities, showRunHint = false
           <Text color={muted}>{`     ${glyphs.arrow} fix: `}</Text>
           <Text color={capabilities.color ? COLOR.success : undefined}>{finding.fix_action}</Text>
           {showRunHint ? (
-            <Text color={muted}>{`   run  finsec fix ${finding.rule_id}`}</Text>
+            <Text color={muted}>{`   run  sirius fix ${finding.rule_id}`}</Text>
           ) : null}
         </Box>
       ) : null}

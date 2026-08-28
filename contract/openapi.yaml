@@ -1,10 +1,10 @@
 openapi: 3.1.0
 
 info:
-  title: finsec-lint Core API
+  title: sirius Core API
   version: 0.4.0
   description: |
-    Shared contract for all finsec-lint surfaces (cli, gui, web, auto).
+    Shared contract for all sirius surfaces (cli, gui, web, auto).
 
     **Golden rule:** this API is the single source of truth. CLI, GUI, Web, and
     Automation are all clients. None talk to the scan engine or the Cerebus
@@ -14,14 +14,14 @@ info:
     the web/GUI surfaces (teams, integrations, audit-log, SSO) are listed in
     `docs/system-overview.md` but not yet specified here.
 
-    Deviations from `docs/finsec-lint-prd.md` are recorded in `docs/decisions.md`
+    Deviations from `docs/original-prd.md` are recorded in `docs/decisions.md`
     and marked `x-decision` below.
 
 servers:
-  - url: https://api.finsec.dev/api/v1
+  - url: https://api.sirius.dev/api/v1
     description: Production
   - url: http://localhost:4010
-    description: Prism mock (set FINSEC_API_URL to this)
+    description: Prism mock (set SIRIUS_API_URL to this)
 
 security:
   - apiKey: []
@@ -142,9 +142,9 @@ paths:
           description: |
             The report. `json` and `sarif` are returned inline; `pdf` returns a
             download URI. The detached JWS (ES256 over canonical JSON) is in the
-            `X-FinSec-Signature-JWS` header for inline formats.
+            `X-Sirius-Signature-JWS` header for inline formats.
           headers:
-            X-FinSec-Signature-JWS:
+            X-Sirius-Signature-JWS:
               schema: { type: string }
               description: Detached JWS signature over the canonical JSON body
           content:
@@ -266,7 +266,7 @@ paths:
 
   /rules/{ruleId}:
     parameters:
-      - { name: ruleId, in: path, required: true, schema: { type: string, examples: ['FIN-SEC-001'] } }
+      - { name: ruleId, in: path, required: true, schema: { type: string, examples: ['SIR-SEC-001'] } }
     get:
       tags: [rules]
       operationId: getRule
@@ -517,15 +517,15 @@ components:
       type: object
       required: [title, status]
       properties:
-        type: { type: string, format: uri, examples: ['https://finsec.dev/errors/rule-invalid'] }
+        type: { type: string, format: uri, examples: ['https://sirius.dev/errors/rule-invalid'] }
         title: { type: string }
         status: { type: integer }
         detail: { type: string }
         instance: { type: string }
         code:
           type: string
-          description: Non-standard sixth member, `FIN_ERR_*` namespace.
-          examples: [FIN_ERR_RULE_SCHEMA, FIN_ERR_PARSE]
+          description: Non-standard sixth member, `SIRIUS_ERR_*` namespace.
+          examples: [SIRIUS_ERR_RULE_SCHEMA, SIRIUS_ERR_PARSE]
 
     SeverityCounts:
       type: object
@@ -603,7 +603,7 @@ components:
             though present in the DDL. Added to both here. Clients must degrade
             to an unaligned annotation when null.
         severity: { $ref: '#/components/schemas/Severity' }
-        rule_id: { type: string, examples: ['FIN-SEC-001'] }
+        rule_id: { type: string, examples: ['SIR-SEC-001'] }
         category: { $ref: '#/components/schemas/Category' }
         compliance_ref:
           type: array
@@ -650,9 +650,9 @@ components:
             Clients must re-locate the hunk by content rather than trusting the
             line number, since the file may have changed since the scan.
 
-            The example is the FIN-SEC-001 fix from the demo fixture, and matches
+            The example is the SIR-SEC-001 fix from the demo fixture, and matches
             contract/fixtures/chaos-repo/src/config.py line for line so that
-            `finsec fix` works end to end against the mock.
+            `sirius fix` works end to end against the mock.
           example: |-
             @@ -14 +14 @@
             -STRIPE_KEY = "sk_live_51H8xR2eZvNOTAREALKE"
@@ -673,7 +673,7 @@ components:
       type: object
       required: [id, version, enabled]
       properties:
-        id: { type: string, examples: ['FIN-SEC-001'] }
+        id: { type: string, examples: ['SIR-SEC-001'] }
         version: { type: string }
         enabled: { type: boolean }
         category: { $ref: '#/components/schemas/Category' }
@@ -686,7 +686,7 @@ components:
           type: array
           items: { type: string }
         fix_action: { $ref: '#/components/schemas/FixAction' }
-        suppress_token: { type: string, examples: ['# finsec-ignore: FIN-SEC-001'] }
+        suppress_token: { type: string, examples: ['# sirius-ignore: SIR-SEC-001'] }
         yaml_body: { type: string }
 
     SuppressionCreate:
@@ -812,6 +812,6 @@ components:
       description: Per-file and non-fatal. Does not by itself change the exit code.
       properties:
         type: { type: string, const: error }
-        code: { type: string, examples: [FIN_ERR_PARSE] }
+        code: { type: string, examples: [SIRIUS_ERR_PARSE] }
         path: { type: string }
         detail: { type: string }

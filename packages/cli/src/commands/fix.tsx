@@ -1,5 +1,5 @@
 /**
- * `finsec fix [finding]` — request a Cerebus suggestion and optionally apply it.
+ * `sirius fix [finding]` — request a Cerebus suggestion and optionally apply it.
  *
  * Applying a diff is the only place this CLI writes to the user's files, so the
  * safety rules here are deliberate and non-negotiable:
@@ -83,7 +83,7 @@ export function applyDiffToFile(filePath: string, expectedLine: number, diff: st
 
   if (index < 0) {
     throw new CliError(`Could not find the line to replace in ${filePath}.`, {
-      hint: 'The file has changed since the scan. Re-run `finsec scan .` and try again.',
+      hint: 'The file has changed since the scan. Re-run `sirius scan .` and try again.',
     });
   }
 
@@ -92,7 +92,7 @@ export function applyDiffToFile(filePath: string, expectedLine: number, diff: st
   const replacement = added.map((line, i) => (i === 0 ? indent + line : indent + line));
   lines.splice(index, removed.length, ...replacement);
 
-  const backup = `${filePath}.finsec-backup`;
+  const backup = `${filePath}.sirius-backup`;
   copyFileSync(filePath, backup);
   writeFileSync(filePath, lines.join('\n'), 'utf8');
   return { backup };
@@ -105,7 +105,7 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
   const cache = loadLastScan(root);
   if (!cache) {
     throw new CliError('No recent scan to fix from.', {
-      hint: 'Run `finsec scan .` first — fix resolves rule ids against the last scan.',
+      hint: 'Run `sirius scan .` first — fix resolves rule ids against the last scan.',
     });
   }
 
@@ -113,13 +113,13 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
   // plainly rather than letting the API reject a synthetic id.
   if (cache.scan_id === 'replay') {
     throw new CliError('The last scan was a replay, so there is nothing on the server to fix.', {
-      hint: 'Run `finsec scan .` against a real API first.',
+      hint: 'Run `sirius scan .` against a real API first.',
     });
   }
 
   if (!identifier && !flags.all) {
     throw new CliError('Which finding? Pass a rule id, a finding id, or --all.', {
-      hint: `e.g. finsec fix ${cache.findings[0]?.rule_id ?? 'FIN-SEC-001'}`,
+      hint: `e.g. sirius fix ${cache.findings[0]?.rule_id ?? 'SIR-SEC-001'}`,
     });
   }
 

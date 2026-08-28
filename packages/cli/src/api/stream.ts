@@ -107,7 +107,7 @@ export async function* websocketStream(options: StreamOptions): FrameStream {
       queue.push(JSON.parse(data.toString()) as WsFrame);
     } catch {
       // A malformed frame is the server's bug, not a reason to abandon the scan.
-      queue.push({ type: 'error', code: 'FIN_ERR_FRAME', detail: 'Malformed frame from server' } as WsFrame);
+      queue.push({ type: 'error', code: 'SIRIUS_ERR_FRAME', detail: 'Malformed frame from server' } as WsFrame);
     }
     wake();
   });
@@ -121,7 +121,7 @@ export async function* websocketStream(options: StreamOptions): FrameStream {
   ws.on('close', (code, reason) => {
     if (code === 4401) {
       failure = new CliError('The API rejected these credentials on the scan stream.', {
-        hint: 'Run `finsec login`, or set FINSEC_API_KEY.',
+        hint: 'Run `sirius login`, or set SIRIUS_API_KEY.',
       });
     } else if (code !== 1000 && queue.length === 0 && !failure) {
       failure = new CliError(`Scan stream closed unexpectedly (${code}${reason ? `: ${reason}` : ''})`);

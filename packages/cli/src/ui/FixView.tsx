@@ -1,10 +1,10 @@
 /**
  * The Cerebus fix view.
  *
- *   ╭─ Cerebus fix · FIN-SEC-001 ──────────────────────────────────╮
+ *   ╭─ Cerebus fix · SIR-SEC-001 ──────────────────────────────────╮
  *   │ quarantined model → { action: env_lookup, target: api_key }  │
  *   │ diff builder      → template: env_lookup                     │
- *   │ verifier          → re-ran FIN-SEC-001 → ✓ PASS             │
+ *   │ verifier          → re-ran SIR-SEC-001 → ✓ PASS             │
  *   ╰──────────────────────────────────────────────────────────────╯
  *
  * The provenance panel is the security argument made visible: a quarantined

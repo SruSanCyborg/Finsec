@@ -5,13 +5,13 @@
  * never orders them):
  *
  *   1. CLI flags
- *   2. environment (FINSEC_*)
- *   3. .finseclintrc   nearest directory, walking up toward the project root
- *   4. finsec.yaml     project root
- *   5. ~/.config/finsec/config.toml
+ *   2. environment (SIRIUS_*)
+ *   3. .siriuslintrc   nearest directory, walking up toward the project root
+ *   4. sirius.yaml     project root
+ *   5. ~/.config/sirius/config.toml
  *   6. built-in defaults
  *
- * `.finseclintrc` files merge shallowly from the outermost inward, so a nested
+ * `.siriuslintrc` files merge shallowly from the outermost inward, so a nested
  * directory can override its parent without restating everything.
  */
 
@@ -30,12 +30,12 @@ import {
 } from './schema.js';
 import type { ConfigOverrides, ConfigToml, ProjectConfig, ResolvedConfig } from './schema.js';
 
-const PROJECT_FILES = ['finsec.yaml', 'finsec.yml'];
-const RC_FILE = '.finseclintrc';
+const PROJECT_FILES = ['sirius.yaml', 'sirius.yml'];
+const RC_FILE = '.siriuslintrc';
 
 export function configTomlPath(): string {
   const xdg = process.env.XDG_CONFIG_HOME;
-  return xdg ? join(xdg, 'finsec', 'config.toml') : join(homedir(), '.config', 'finsec', 'config.toml');
+  return xdg ? join(xdg, 'sirius', 'config.toml') : join(homedir(), '.config', 'sirius', 'config.toml');
 }
 
 /** Reads and validates a file, reporting the path when it is malformed. */
@@ -79,7 +79,7 @@ function ancestors(from: string): string[] {
   return chain;
 }
 
-/** The nearest ancestor containing a `finsec.yaml`, if any. */
+/** The nearest ancestor containing a `sirius.yaml`, if any. */
 export function findProjectRoot(from: string): { dir: string; file: string } | undefined {
   for (const dir of ancestors(from)) {
     for (const name of PROJECT_FILES) {
@@ -93,11 +93,11 @@ export function findProjectRoot(from: string): { dir: string; file: string } | u
 function envOverrides(): ConfigOverrides {
   const env = process.env;
   return {
-    apiUrl: env.FINSEC_API_URL,
-    wsUrl: env.FINSEC_WS_URL,
-    apiKey: env.FINSEC_API_KEY,
-    projectId: env.FINSEC_PROJECT_ID,
-    profile: env.FINSEC_PROFILE,
+    apiUrl: env.SIRIUS_API_URL,
+    wsUrl: env.SIRIUS_WS_URL,
+    apiKey: env.SIRIUS_API_KEY,
+    projectId: env.SIRIUS_PROJECT_ID,
+    profile: env.SIRIUS_PROFILE,
   };
 }
 
@@ -124,7 +124,7 @@ export function loadConfig({ cwd, overrides = {} }: LoadOptions): ResolvedConfig
   if (existsSync(tomlPath)) {
     toml = readConfigFile(tomlPath, (raw) => parseToml(raw), configTomlSchema);
   }
-  const profileName = overrides.profile ?? process.env.FINSEC_PROFILE ?? toml.default_profile ?? 'default';
+  const profileName = overrides.profile ?? process.env.SIRIUS_PROFILE ?? toml.default_profile ?? 'default';
   const profile = toml.profile?.[profileName] ?? {};
   if (overrides.profile && !toml.profile?.[overrides.profile]) {
     throw new CliError(`No profile named "${overrides.profile}" in ${tomlPath}`, {
@@ -135,7 +135,7 @@ export function loadConfig({ cwd, overrides = {} }: LoadOptions): ResolvedConfig
   note('apiUrl', tomlPath, profile.api_url);
   note('projectId', tomlPath, profile.project_id);
 
-  // ---- layer 4: finsec.yaml at the project root
+  // ---- layer 4: sirius.yaml at the project root
   const explicit = overrides.configFile ? resolve(overrides.configFile) : undefined;
   if (explicit && !existsSync(explicit)) {
     throw new CliError(`Config file not found: ${overrides.configFile}`);
@@ -150,7 +150,7 @@ export function loadConfig({ cwd, overrides = {} }: LoadOptions): ResolvedConfig
     for (const key of Object.keys(defined(projectConfig))) note(key, project.file, true);
   }
 
-  // ---- layer 3: .finseclintrc files, outermost first so nearest wins
+  // ---- layer 3: .siriuslintrc files, outermost first so nearest wins
   const rcRoot = project?.dir ?? parsePath(resolve(cwd)).root;
   const rcChain = ancestors(cwd)
     .filter((dir) => dir === rcRoot || dir.startsWith(rcRoot))
@@ -194,11 +194,11 @@ export function loadConfig({ cwd, overrides = {} }: LoadOptions): ResolvedConfig
 }
 
 /**
- * Reads `.finsecignore` if present. Returns glob patterns in gitignore style;
+ * Reads `.siriusignore` if present. Returns glob patterns in gitignore style;
  * blank lines and `#` comments are dropped.
  */
 export function loadIgnorePatterns(dir: string): string[] {
-  const path = join(dir, '.finsecignore');
+  const path = join(dir, '.siriusignore');
   if (!existsSync(path)) return [];
   return readFileSync(path, 'utf8')
     .split('\n')

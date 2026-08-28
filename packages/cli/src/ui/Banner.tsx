@@ -2,7 +2,7 @@
  * The header box.
  *
  *   ╭──────────────────────────────────────────────────────────────╮
- *   │  finsec-lint v0.4.0   ·   FinSec Compliance Scanner           │
+ *   │  sirius v0.4.0   ·   Fintech Compliance Scanner          │
  *   │  project: paykit-api   ·   ruleset: p/fintech-core (52 rules) │
  *   ╰──────────────────────────────────────────────────────────────╯
  */
@@ -26,7 +26,7 @@ const INNER_WIDTH = 62;
 
 export function Banner({ version, project, ruleset, ruleCount, glyphs, capabilities }: BannerProps) {
   const sep = glyphs.separator.trim();
-  const line1 = `finsec-lint v${version}   ${sep}   FinSec Compliance Scanner`;
+  const line1 = `sirius v${version}   ${sep}   Fintech Compliance Scanner`;
   const line2 = [
     project ? `project: ${project}` : undefined,
     ruleset ? `ruleset: ${ruleset}${ruleCount ? ` (${ruleCount} rules)` : ''}` : undefined,

@@ -1,12 +1,12 @@
-# finsec-lint — whole-system overview
+# sirius — whole-system overview
 
-Distilled from [`finsec-lint-prd.md`](finsec-lint-prd.md). This document is the fast path: read it instead of the 588-line PRD, and go back to the PRD only for the sections it points you at.
+Distilled from [`original-prd.md`](original-prd.md). This document is the fast path: read it instead of the 588-line PRD, and go back to the PRD only for the sections it points you at.
 
 ---
 
 ## 1. Thesis and personas
 
-Fintech teams ship code that touches cardholder data, auth flows, and money movement, but generic SAST tools don't speak PCI-DSS, RBI, or DPDP, and don't quantify business risk. `finsec-lint` is a linter for financial data handling: AST-based detection via YAML rules, compliance mapping per finding, money-at-risk in ₹, a signed report CI can gate on, and a guardrailed LLM autofix.
+Fintech teams ship code that touches cardholder data, auth flows, and money movement, but generic SAST tools don't speak PCI-DSS, RBI, or DPDP, and don't quantify business risk. `sirius` is a linter for financial data handling: AST-based detection via YAML rules, compliance mapping per finding, money-at-risk in ₹, a signed report CI can gate on, and a guardrailed LLM autofix.
 
 | Persona | Wants |
 |---|---|
@@ -114,32 +114,32 @@ Plus `severity_threshold` and `fail_on`, added by [D-002](decisions.md#d-002--th
 ### Error envelope (RFC-7807 + one extra member)
 
 ```json
-{ "type": "https://finsec.dev/errors/rule-invalid", "title": "...", "status": 422,
-  "detail": "...", "instance": "...", "code": "FIN_ERR_RULE_SCHEMA" }
+{ "type": "https://sirius.dev/errors/rule-invalid", "title": "...", "status": 422,
+  "detail": "...", "instance": "...", "code": "SIRIUS_ERR_RULE_SCHEMA" }
 ```
 
-`code` is a non-standard sixth member in the `FIN_ERR_*` namespace. Known values: `FIN_ERR_RULE_SCHEMA`, `FIN_ERR_PARSE`.
+`code` is a non-standard sixth member in the `SIRIUS_ERR_*` namespace. Known values: `SIRIUS_ERR_RULE_SCHEMA`, `SIRIUS_ERR_PARSE`.
 
 ### WebSocket frames — six types
 
 ```json
 { "type": "scan.started", "scan_id": "…", "total_files": 128, "ts": "…" }
 { "type": "file.scanning", "path": "src/payments.py", "index": 12, "total": 128 }
-{ "type": "finding", "finding": { "rule_id": "FIN-SEC-001", "severity": "critical",
+{ "type": "finding", "finding": { "rule_id": "SIR-SEC-001", "severity": "critical",
   "file": "src/config.py", "line": 14, "compliance_ref": ["PCI-DSS:8.6.2"],
   "message": "Hardcoded Stripe secret key", "validity": "verified_live",
   "money_at_risk_inr": 4200000 } }
 { "type": "progress", "scanned": 64, "total": 128, "findings_so_far": 7 }
 { "type": "scan.completed", "compliance_score": 72.5,
   "counts": { "critical": 2, "high": 5, "medium": 9, "low": 3 }, "exit_code": 1 }
-{ "type": "error", "code": "FIN_ERR_PARSE", "path": "src/x.py", "detail": "…" }
+{ "type": "error", "code": "SIRIUS_ERR_PARSE", "path": "src/x.py", "detail": "…" }
 ```
 
 Precision notes: the payload nests under a `finding` key rather than being flattened; it is a *subset* of the `findings` columns (notably **`col` is missing** — see [D-005](decisions.md)); `exit_code` is server-computed; `error` frames are per-file and non-fatal; auth failure closes with **4401**.
 
 ### Webhook HMAC
 
-Inbound and outbound both use HMAC-SHA256 hex over the **raw body**, constant-time compared, modeled on Razorpay's `X-Razorpay-Signature` and GitHub's `X-Hub-Signature-256`. Headers: `X-FinSec-Signature: sha256=<hexdigest>`, `X-FinSec-Event`, `X-FinSec-Delivery` (UUID, for idempotency).
+Inbound and outbound both use HMAC-SHA256 hex over the **raw body**, constant-time compared, modeled on Razorpay's `X-Razorpay-Signature` and GitHub's `X-Hub-Signature-256`. Headers: `X-Sirius-Signature: sha256=<hexdigest>`, `X-Sirius-Event`, `X-Sirius-Delivery` (UUID, for idempotency).
 
 ---
 
@@ -169,7 +169,7 @@ Enumerated values are listed in [`../AGENTS.md`](../AGENTS.md) — that's the co
 
 ```yaml
 rule:
-  id: FIN-SEC-001
+  id: SIR-SEC-001
   category: secrets
   severity: critical
   languages: [python, javascript, go]
@@ -199,7 +199,7 @@ rule:
   fix:
     action: env_lookup
     target: api_key
-  suppress: "# finsec-ignore: FIN-SEC-001"
+  suppress: "# sirius-ignore: SIR-SEC-001"
 ```
 
 ### Rule catalog
@@ -208,19 +208,19 @@ The PRD's heading says "12 rules" but the table has 13 rows; the CLI banner adve
 
 | Rule ID | Category | Catches | Sev | PCI-DSS v4.0 | Other | Fix action |
 |---|---|---|---|---|---|---|
-| FIN-SEC-001 | secrets | Hardcoded `sk_live_`/`rk_live_`/AWS keys | critical | **8.6.2** | RBI DPSC; DPDP §8 | `env_lookup` |
-| FIN-SEC-002 | secrets | High-entropy string in source/config | high | 8.6.2 | DPDP §8 | `env_lookup` |
-| FIN-SEC-010 | injection | SQL via string concat/f-string | critical | **6.2.4** | RBI DPSC | `parameterize_query` |
-| FIN-SEC-011 | injection | OS command from user input (`shell=True`) | critical | 6.2.4 | — | `sanitize_input` |
-| FIN-SEC-020 | auth | Route missing auth decorator | high | **8.4.2** | RBI 2FA mandate | `add_auth_decorator` |
-| FIN-SEC-021 | auth | JWT `verify=False` / `alg=none` | critical | 8.4.2 / 8.3.1 | RBI DPSC | `enforce_jwt_verify` |
-| FIN-SEC-030 | pii/logging | PAN/Aadhaar/PII written to logs | high | **3.4.1** | DPDP §8; GDPR Art.5 | `redact_pii_log` |
-| FIN-SEC-031 | pii | Full PAN stored unmasked in DB model | critical | **3.5.1** / 3.4.1 | RBI tokenization | `tokenize_pan` |
-| FIN-SEC-040 | crypto | Weak hash (MD5/SHA1) / ECB / static IV | high | **6.2.4** / **3.6.1** | RBI DPSC | `upgrade_crypto` |
-| FIN-SEC-041 | crypto | HTTP (not TLS) for cardholder data | high | **4.2.1** | RBI DPSC | `enforce_tls` |
-| FIN-SEC-050 | ratelimit | Money endpoint w/o rate limit | medium | 6.2.4 | RBI velocity checks | `add_rate_limit` |
-| FIN-SEC-051 | ratelimit | Money POST w/o idempotency key | medium | — | Stripe best-practice | `add_idempotency_key` |
-| FIN-SEC-060 | supplychain | Dependency w/ install script/obfuscation | high | 6.3.2 | — | `pin_or_remove_dep` |
+| SIR-SEC-001 | secrets | Hardcoded `sk_live_`/`rk_live_`/AWS keys | critical | **8.6.2** | RBI DPSC; DPDP §8 | `env_lookup` |
+| SIR-SEC-002 | secrets | High-entropy string in source/config | high | 8.6.2 | DPDP §8 | `env_lookup` |
+| SIR-SEC-010 | injection | SQL via string concat/f-string | critical | **6.2.4** | RBI DPSC | `parameterize_query` |
+| SIR-SEC-011 | injection | OS command from user input (`shell=True`) | critical | 6.2.4 | — | `sanitize_input` |
+| SIR-SEC-020 | auth | Route missing auth decorator | high | **8.4.2** | RBI 2FA mandate | `add_auth_decorator` |
+| SIR-SEC-021 | auth | JWT `verify=False` / `alg=none` | critical | 8.4.2 / 8.3.1 | RBI DPSC | `enforce_jwt_verify` |
+| SIR-SEC-030 | pii/logging | PAN/Aadhaar/PII written to logs | high | **3.4.1** | DPDP §8; GDPR Art.5 | `redact_pii_log` |
+| SIR-SEC-031 | pii | Full PAN stored unmasked in DB model | critical | **3.5.1** / 3.4.1 | RBI tokenization | `tokenize_pan` |
+| SIR-SEC-040 | crypto | Weak hash (MD5/SHA1) / ECB / static IV | high | **6.2.4** / **3.6.1** | RBI DPSC | `upgrade_crypto` |
+| SIR-SEC-041 | crypto | HTTP (not TLS) for cardholder data | high | **4.2.1** | RBI DPSC | `enforce_tls` |
+| SIR-SEC-050 | ratelimit | Money endpoint w/o rate limit | medium | 6.2.4 | RBI velocity checks | `add_rate_limit` |
+| SIR-SEC-051 | ratelimit | Money POST w/o idempotency key | medium | — | Stripe best-practice | `add_idempotency_key` |
+| SIR-SEC-060 | supplychain | Dependency w/ install script/obfuscation | high | 6.3.2 | — | `pin_or_remove_dep` |
 
 Rulesets are namespaced Semgrep-style: `p/fintech-core`, `p/secrets`.
 
@@ -278,7 +278,7 @@ Use **v4.0** numbers. The v3.2.1 → v4.0 renumbering matters: injection moved `
 
 **Hour-by-hour (4 people, ~24h):** H0–2 freeze the contract and stand up the mock, all four branches scaffolded · H2–8 Core + CLI-against-mock + web shell + GUI shell · H8–14 worker + tree-sitter + 8–12 rules + WS end-to-end + secret validity + Cerebus loop · H14–20 JWS signing + GitHub Action + SARIF + score/money + GUI diff viewer + web charts · H20–23 chaos repo, polish, demo script, rehearse · H23–24 buffer.
 
-**Demo (3–5 min):** (30s) hook + chaos repo → **(60s) `finsec scan .`, streaming, VERIFIED LIVE key with ₹ money-at-risk — the wow moment** → (45s) `finsec fix FIN-SEC-001`, quarantined→diff→verifier PASS → (45s) PR opens, Action annotates and blocks, SARIF in the Security tab → (45s) web dashboard, attack-path graph, download the signed report and **verify the signature live** → (15s) close on India relevance.
+**Demo (3–5 min):** (30s) hook + chaos repo → **(60s) `sirius scan .`, streaming, VERIFIED LIVE key with ₹ money-at-risk — the wow moment** → (45s) `sirius fix SIR-SEC-001`, quarantined→diff→verifier PASS → (45s) PR opens, Action annotates and blocks, SARIF in the Security tab → (45s) web dashboard, attack-path graph, download the signed report and **verify the signature live** → (15s) close on India relevance.
 
 **Risk register:**
 

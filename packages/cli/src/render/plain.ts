@@ -5,7 +5,7 @@
  * rather than a fallback that fell out of broken box-drawing. One line per
  * finding, grep-friendly, stable enough to snapshot in tests:
  *
- *   CRITICAL FIN-SEC-001 src/config.py:14 Hardcoded Stripe secret key [PCI-DSS:8.6.2, DPDP:8] (VERIFIED LIVE, Rs 42,00,000 at risk)
+ *   CRITICAL SIR-SEC-001 src/config.py:14 Hardcoded Stripe secret key [PCI-DSS:8.6.2, DPDP:8] (VERIFIED LIVE, Rs 42,00,000 at risk)
  */
 
 import { formatScore } from '../gate.js';

@@ -50,7 +50,7 @@ const DEFAULT_THRESHOLD: Severity = 'high';
 const DEFAULT_FAIL_ON: FailOn = 'all';
 
 /**
- * Suppressed findings never gate. The worker evaluates inline `# finsec-ignore`
+ * Suppressed findings never gate. The worker evaluates inline `# sirius-ignore`
  * comments and server-side suppression rows, and marks them; the CLI only has
  * to honor the flag.
  */

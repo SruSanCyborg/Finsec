@@ -1,7 +1,7 @@
 """Inbound payment webhook handling.
 
 DELIBERATELY VULNERABLE — scanner test fixture.
-FIN-SEC-030 is expected at line 52.
+SIR-SEC-030 is expected at line 52.
 """
 
 import hashlib
@@ -48,7 +48,7 @@ def handle_payment_webhook():
     log.debug("received event %s of type %s", event["id"], event["type"])
     card = event["data"].get("card", {})
 
-    # FIN-SEC-030 — PAN written to application log (PCI-DSS 3.4.1, GDPR Art.5)
+    # SIR-SEC-030 — PAN written to application log (PCI-DSS 3.4.1, GDPR Art.5)
     log.info("charge for card %s", card.get("number"))
 
     return "", 204

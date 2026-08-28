@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * `finsec` entry point.
+ * `sirius` entry point.
  *
  * Two responsibilities and no more: assemble the command tree, and funnel every
  * failure into a single exit-code decision. Commands throw; this file decides
@@ -38,13 +38,13 @@ export function buildProgram(): Command {
   const program = new Command();
 
   program
-    .name('finsec')
+    .name('sirius')
     .description('A security & compliance linter for money-handling code')
     .version(VERSION, '-v, --version')
-    .option('--api-url <url>', 'Core API base URL (env: FINSEC_API_URL)')
-    .option('--ws-url <url>', 'WebSocket origin, when it differs from --api-url (env: FINSEC_WS_URL)')
-    .option('--project <id>', 'project id (env: FINSEC_PROJECT_ID)')
-    .option('--profile <name>', 'credential profile from ~/.config/finsec/config.toml')
+    .option('--api-url <url>', 'Core API base URL (env: SIRIUS_API_URL)')
+    .option('--ws-url <url>', 'WebSocket origin, when it differs from --api-url (env: SIRIUS_WS_URL)')
+    .option('--project <id>', 'project id (env: SIRIUS_PROJECT_ID)')
+    .option('--profile <name>', 'credential profile from ~/.config/sirius/config.toml')
     .option('--no-color', 'disable color (NO_COLOR is honored too)')
     .showHelpAfterError();
 
@@ -56,7 +56,7 @@ export function buildProgram(): Command {
     .option('--baseline <sha>', 'baseline commit for diff-aware scanning')
     .option('--severity-threshold <level>', 'minimum severity that counts', severityArg)
     .option('--fail-on <predicate>', 'which findings block: all | new | verified-secrets', failOnArg)
-    .option('--config <file>', 'explicit finsec.yaml to use')
+    .option('--config <file>', 'explicit sirius.yaml to use')
     .option('--ruleset <name>', 'ruleset to run (repeatable)', collect)
     .option('--json', 'machine-readable JSON on stdout')
     .option('--sarif <file>', 'write SARIF 2.1.0 to a file')
@@ -72,7 +72,7 @@ export function buildProgram(): Command {
   program
     .command('fix')
     .description('Apply a Cerebus fix suggestion')
-    .argument('[finding]', 'finding id or rule id, e.g. FIN-SEC-001')
+    .argument('[finding]', 'finding id or rule id, e.g. SIR-SEC-001')
     .option('--all', 'walk every matching finding')
     .option('--apply', 'write without prompting (implies non-interactive)')
     .action(async (finding: string | undefined, options: Record<string, unknown>, command: Command) => {
@@ -81,11 +81,11 @@ export function buildProgram(): Command {
     });
 
   // Commands below are scaffolded but not yet implemented. They exist so that
-  // `finsec --help` shows the real surface and so nobody re-litigates the tree.
+  // `sirius --help` shows the real surface and so nobody re-litigates the tree.
   const planned: Array<[string, string]> = [
     ['login', 'Authenticate and store credentials'],
     ['logout', 'Clear stored credentials'],
-    ['init', 'Scaffold finsec.yaml and .finseclintrc'],
+    ['init', 'Scaffold sirius.yaml and .siriuslintrc'],
     ['triage', 'Review findings interactively'],
     ['watch', 'Re-scan on file change'],
     ['rules', 'List, show, validate, or test rules'],
@@ -101,7 +101,7 @@ export function buildProgram(): Command {
       .description(`${description} (not yet implemented)`)
       .allowUnknownOption()
       .action(() => {
-        throw new CliError(`\`finsec ${name}\` is not implemented yet.`, {
+        throw new CliError(`\`sirius ${name}\` is not implemented yet.`, {
           hint: 'Implemented so far: scan, fix.',
         });
       });
@@ -121,7 +121,7 @@ function report(error: unknown): ExitCodeValue {
 
   const message = error instanceof Error ? error.message : String(error);
   process.stderr.write(`\nerror: ${message}\n\n`);
-  if (process.env.FINSEC_DEBUG && error instanceof Error && error.stack) {
+  if (process.env.SIRIUS_DEBUG && error instanceof Error && error.stack) {
     process.stderr.write(`${error.stack}\n\n`);
   }
   return ExitCode.CLI_ERROR;

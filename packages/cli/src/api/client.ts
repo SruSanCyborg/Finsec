@@ -49,7 +49,7 @@ export class ApiClient {
     this.baseUrl = options.baseUrl.replace(/\/+$/, '');
     this.apiKey = options.apiKey;
     this.timeoutMs = options.timeoutMs ?? 30_000;
-    this.userAgent = options.userAgent ?? 'finsec-cli';
+    this.userAgent = options.userAgent ?? 'sirius-cli';
   }
 
   private url(path: string, query?: RequestOptions['query']): string {
