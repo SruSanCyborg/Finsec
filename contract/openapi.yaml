@@ -123,6 +123,65 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/FindingPage' }
+              # A realistic page, so `sirius triage` has something to review
+              # against the mock. `next_cursor: null` matters — a generated
+              # placeholder cursor never advances, which makes a paginating
+              # client loop forever.
+              example:
+                total: 7
+                next_cursor: null
+                items:
+                  - { id: '00000000-0000-4000-8000-000000000001', file: src/config.py, line: 14, col: 14,
+                      severity: critical, rule_id: SIR-SEC-001, category: secrets,
+                      message: Hardcoded Stripe secret key,
+                      compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
+                      snippet: 'STRIPE_KEY = "sk_live_51H8xR2eZv…"',
+                      validity: verified_live, money_at_risk_inr: 4200000,
+                      baseline_state: new, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-001_1, fix_action: env_lookup }
+                  - { id: '00000000-0000-4000-8000-000000000002', file: src/ledger.py, line: 88, col: 17,
+                      severity: critical, rule_id: SIR-SEC-010, category: injection,
+                      message: SQL built with string formatting,
+                      compliance_ref: ['PCI-DSS:6.2.4', 'CWE:89'],
+                      snippet: 'cur.execute("SELECT * FROM txns WHERE id = %s" % uid)',
+                      baseline_state: new, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-010_2, fix_action: parameterize_query }
+                  - { id: '00000000-0000-4000-8000-000000000003', file: src/webhooks.py, line: 52, col: 22,
+                      severity: high, rule_id: SIR-SEC-030, category: logging,
+                      message: PAN written to application log,
+                      compliance_ref: ['PCI-DSS:3.4.1', 'GDPR:Art.5'],
+                      snippet: 'log.info("charge for card %s", card.number)',
+                      baseline_state: new, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-030_3, fix_action: redact_pii_log }
+                  - { id: '00000000-0000-4000-8000-000000000004', file: src/auth.py, line: 31, col: 24,
+                      severity: high, rule_id: SIR-SEC-021, category: auth,
+                      message: JWT decoded without signature verification,
+                      compliance_ref: ['PCI-DSS:8.4.2', 'RBI-DPSC'],
+                      snippet: 'jwt.decode(token, verify=False)',
+                      money_at_risk_inr: 350000,
+                      baseline_state: new, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-021_4, fix_action: enforce_jwt_verify }
+                  - { id: '00000000-0000-4000-8000-000000000005', file: src/models/card.py, line: 19, col: 5,
+                      severity: high, rule_id: SIR-SEC-031, category: pii,
+                      message: Full PAN stored unmasked,
+                      compliance_ref: ['PCI-DSS:3.5.1', 'RBI-DPSC'],
+                      snippet: 'pan = Column(String(19))',
+                      money_at_risk_inr: 400000,
+                      baseline_state: unchanged, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-031_5, fix_action: tokenize_pan }
+                  - { id: '00000000-0000-4000-8000-000000000006', file: src/util/hash.py, line: 9, col: 5,
+                      severity: medium, rule_id: SIR-SEC-040, category: crypto,
+                      message: Weak hash algorithm (MD5),
+                      compliance_ref: ['PCI-DSS:6.2.4'],
+                      snippet: 'digest = hashlib.md5(token).hexdigest()',
+                      baseline_state: unchanged, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-040_6, fix_action: upgrade_crypto }
+                  - { id: '00000000-0000-4000-8000-000000000007', file: requirements.txt, line: 14, col: 1,
+                      severity: low, rule_id: SIR-SEC-060, category: supplychain,
+                      message: Dependency runs an install script,
+                      compliance_ref: ['PCI-DSS:6.3.2'],
+                      baseline_state: new, triage_state: open, suppressed: false,
+                      fingerprint: fp_sir-sec-060_7, fix_action: pin_or_remove_dep }
         '404': { $ref: '#/components/responses/Problem' }
 
   /scans/{id}/report:

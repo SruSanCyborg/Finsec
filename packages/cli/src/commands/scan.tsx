@@ -73,7 +73,10 @@ function assertTarget(path: string): string {
 export async function runScan(path: string, flags: ScanFlags, globals: GlobalFlags): Promise<void> {
   const target = assertTarget(path);
 
-  const machineMode = Boolean(flags.json || flags.sarif);
+  // Only --json has to own stdout. --sarif writes to a file, so the rich view
+  // can still render alongside it — which is what the CI beat of the demo wants:
+  // a human-readable scan that also drops a SARIF artifact.
+  const machineMode = Boolean(flags.json);
   const capabilities = detectCapabilities({
     noColor: globals.color === false,
     machineMode,

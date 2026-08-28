@@ -119,14 +119,32 @@ export class ApiClient {
    * (`--sarif`, `triage`) rather than the stream.
    */
   async getAllResults(scanId: string, query: RequestOptions['query'] = {}): Promise<Finding[]> {
-    const findings: Finding[] = [];
+    // Two guards, because pagination is where this hangs or double-counts.
+    //
+    // A server that returns the same `next_cursor` on every page — or an empty
+    // page with a cursor still set — would otherwise spin forever, and the
+    // symptom is a command that looks frozen with no error. So: never revisit a
+    // cursor, and stop as soon as a page stops producing anything.
+    //
+    // Findings are keyed by id, so a repeated page cannot inflate the count.
+    // This is also what reconciles paginated results against findings already
+    // delivered over the WebSocket.
+    const byId = new Map<string, Finding>();
+    const seenCursors = new Set<string>();
     let cursor: string | undefined;
+
     do {
       const page = await this.getResultsPage(scanId, { ...query, cursor });
-      findings.push(...(page.items ?? []));
-      cursor = page.next_cursor ?? undefined;
+      const items = page.items ?? [];
+      for (const finding of items) byId.set(finding.id, finding);
+
+      const next = page.next_cursor ?? undefined;
+      if (!next || items.length === 0 || seenCursors.has(next)) break;
+      seenCursors.add(next);
+      cursor = next;
     } while (cursor);
-    return findings;
+
+    return [...byId.values()];
   }
 
   getReport(scanId: string, format: 'pdf' | 'json' | 'sarif'): Promise<unknown> {
