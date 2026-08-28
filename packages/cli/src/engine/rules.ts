@@ -729,7 +729,18 @@ const missingIdempotency: Rule = {
   severity: 'medium',
   category: 'ratelimit',
   message: 'Money-movement POST without an idempotency key',
-  compliance_ref: [],
+  // The only rule that shipped with an empty `compliance_ref`, which the README
+  // exposed by generating its table from this catalogue instead of by hand: a
+  // tool whose headline claim is "every finding maps to a clause" had one that
+  // mapped to nothing.
+  //
+  // RBI's Master Direction on Digital Payment Security Controls is the honest
+  // home. It requires payment operators to prevent duplicate and replayed
+  // transactions, which is exactly what an idempotency key on a money-movement
+  // POST is for. PCI-DSS is deliberately not cited: 6.2.4 is about injection
+  // flaws and none of its requirements speak to duplicate submission, so
+  // borrowing it would be the invented citation this rule was missing.
+  compliance_ref: ['RBI-DPSC'],
   fix_action: 'add_idempotency_key',
   run(file) {
     const findings: RawFinding[] = [];

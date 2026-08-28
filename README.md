@@ -257,7 +257,7 @@ and that it leaves good code alone.
 | `SIR-SEC-040` | medium | Weak hash algorithm | PCI-DSS 6.2.4 · PCI-DSS 3.6.1 · RBI DPSC |
 | `SIR-SEC-041` | high | Cardholder data sent over plain HTTP | PCI-DSS 4.2.1 · RBI DPSC |
 | `SIR-SEC-050` | medium | Money-movement endpoint without a rate limit | PCI-DSS 6.2.4 · RBI DPSC |
-| `SIR-SEC-051` | medium | Money-movement POST without an idempotency key | — |
+| `SIR-SEC-051` | medium | Money-movement POST without an idempotency key | RBI DPSC |
 | `SIR-SEC-060` | high | Dependency declared outside the registry | PCI-DSS 6.3.2 |
 
 PCI numbers are **v4.0**: injection is `6.2.4` (not v3.2.1's `6.5.1`), MFA into the

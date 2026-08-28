@@ -96,6 +96,17 @@ describe('the JavaScript gallery', () => {
 describe('the catalogue does not advertise what it cannot do', () => {
   const rules = localRules('test');
 
+  it('maps every rule to at least one compliance clause', () => {
+    // The product's headline claim is that every finding maps to a specific
+    // clause. `SIR-SEC-051` shipped with `compliance_ref: []` and nothing
+    // noticed, because the README's table was typed by hand — generating that
+    // table from this catalogue is what exposed it. A finding that cites
+    // nothing is a finding a compliance officer cannot act on.
+    for (const rule of rules) {
+      expect(rule.compliance_ref?.length, `${rule.id} cites no clause`).toBeGreaterThan(0);
+    }
+  });
+
   it('gives every rule at least one language', () => {
     for (const rule of rules) {
       expect(rule.languages?.length, rule.id).toBeGreaterThan(0);
