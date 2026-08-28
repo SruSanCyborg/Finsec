@@ -1,0 +1,17 @@
+# Paths sirius should not scan, gitignore syntax.
+# .gitignore is honored too; this file is for things you track but do not want scanned.
+
+# Dependencies and build output
+node_modules/
+vendor/
+dist/
+build/
+*.min.js
+
+# Test fixtures often contain deliberately fake secrets
+**/fixtures/**
+**/__snapshots__/**
+
+# Generated code
+*.pb.go
+*_pb2.py

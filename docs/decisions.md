@@ -1246,3 +1246,44 @@ One case is pinned because it is the easy mistake: `src` must not prune
 would take both.
 
 ---
+## D-038 — A question is not a reason to take the terminal
+
+`/triage` unmounted the shell, handed the whole screen to a child, and remounted
+on the way back. Watching it happen makes the cost obvious: the transcript
+vanishes, the scan you are triaging goes with it, nothing else can be running,
+and coming back is a remount — a great deal of machinery for what is a question
+with three answers.
+
+It runs inline now, as a panel above the prompt, which is the shape this shell
+already had for `/fix`'s confirmation. The keyboard is taken; the terminal is
+not. Scrolling still works while the panel is open, because reading back over
+the findings is exactly what you want to do while deciding about one.
+
+**This also answers the split-terminal question, which I had been answering
+backwards.** The old note (D-…) said a split means a pty, a terminal emulator
+and a native dependency — a multiplexer for two commands. True, but it was the
+answer to the wrong question. A split only looked necessary because `/triage`
+and `/watch` each drew a full screen and took the terminal. Nothing needs to sit
+beside anything else if neither takes over: they are both just things happening
+in one scrolling transcript. `/watch` is the remaining takeover and does not
+need to be one either — it re-scans and prints findings, which is output, and
+this shell has a place for output.
+
+Two things the first version got wrong, both found by using it:
+
+**The queue was filtered to undecided findings**, so a decision was final the
+moment it was taken — the finding left the queue and `k` could never reach it
+again. It now holds every finding, opens at the first unanswered one, and the
+panel shows the verdict already on file so a finding you have not reached is
+distinguishable from one you decided ten keystrokes ago. Re-deciding replaces
+and the transcript says `(was accepted)`.
+
+**There was no way to see what you had chosen.** The decisions were on disk and
+nothing read them back. `/triage --decided` lists them without reopening the
+queue, and closing prints a tally rather than a bare count.
+
+`clearTriage` is new and is a real undo rather than "decide the other way":
+accepted, dismissed and suppressed are three claims about a finding, and none of
+them means "I have not looked at this yet".
+
+---

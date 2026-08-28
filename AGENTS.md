@@ -136,7 +136,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
 | `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2. `--format pdf` writes the page itself, no renderer |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
-| `triage` | Done both ways — decisions to `.sirius/`, or PATCHed to the API. Driven in a pty |
+| `triage` | Done — inline in the shell, one keypress per finding, revisable; or full-screen standalone. Decisions to `.sirius/`, or PATCHed to the API |
 | `doctor` | Done — reports against the mode the scan will actually run in, self-tests both engines, and fails on a signing key that is not 0600 |
 | `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
 | `watch`, `explain` | Done |
@@ -258,6 +258,16 @@ extending it. `revenue eval` was 217 columns and `recover` 205 — on a projecto
 that wraps into the row beneath and stops being a table, while every character
 is still present, so nothing fails. `render-width.test.ts` checks 60/80/100/120
 and colour. See D-032.
+
+**`/triage` runs inline, in a panel above the prompt.** It asks a question with
+a few answers, and a question is not a reason to take the terminal: the
+transcript stays visible, the scan you are triaging is still above it, and one
+keypress decides. `k` walks back to anything already answered — the queue holds
+every finding, not only the open ones — and deciding again replaces the old
+answer and says `(was accepted)` rather than looking like a first decision. `u`
+undoes, because *accepted*, *dismissed* and *suppressed* are three claims and
+none of them means "not looked at yet". `/triage --decided` lists what you
+chose without reopening the queue.
 
 **Full-screen commands hand over rather than refuse.** `/triage` and `/watch`
 draw their own UI, so the shell unmounts, gives them the real terminal, and

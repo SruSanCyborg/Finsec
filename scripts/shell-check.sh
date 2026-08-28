@@ -78,8 +78,11 @@ echo
   # The two that take the whole terminal, last, each with the key that quits it.
   # A handover that failed would leave the shell unusable, so anything after
   # these would fail too — which is why they run at the end.
-  printf '/triage\r'; sleep 6
-  printf 'q';          sleep 5
+  # `/triage` is inline now: a panel above the prompt, answered with one key.
+  # No handover, so no unmount and nothing to come back from.
+  printf '/triage\r'; sleep 5
+  printf 'a';          sleep 3
+  printf 'q';          sleep 3
   printf '/watch .\r'; sleep 6
   printf '\003';       sleep 5
   printf '/rules list\r'; sleep 4
@@ -128,8 +131,8 @@ check "/revenue stress"           "touched nothing out of bounds in any of them"
 check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
 check "/reconcile"               "EXCEPTIONS"
-check "/triage handover"         "handed the terminal to /triage"
-check "/triage came back"        "/triage finished"
+check "/triage asks inline"      "a accept   d dismiss   s suppress"
+check "/triage records"          "accepted  SIR-SEC"
 check "/watch handover"          "handed the terminal to /watch"
 check "/watch came back"         "/watch finished"
 # Not "12 rules": the catalogue grows, and a marker pinned to its size fails the

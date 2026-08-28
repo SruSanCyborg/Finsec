@@ -43,7 +43,8 @@ import { renderWordmark } from '../ui/wordmark.js';
 import { note, truncate } from '../ui/kit.js';
 import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
-import type { TranscriptLine } from '../ui/FullScreenShell.js';
+import type { Finding } from '../domain.js';
+import type { ReviewPanel, TranscriptLine } from '../ui/FullScreenShell.js';
 import type { ShellCommand } from '../ui/CommandPalette.js';
 import type { Capabilities, Glyphs } from '../ui/theme.js';
 
@@ -57,7 +58,10 @@ const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), '..', 'cli.js');
  * the terminal, rather than telling the user to go and run them elsewhere,
  * which is what it used to do.
  */
-const NEEDS_REAL_TERMINAL = new Set(['triage', 'watch', 'shell']);
+// `triage` is not here any more: it asks a question with a few answers, and a
+// question is not a reason to take the terminal. It runs inline, in a panel
+// above the prompt, the way this shell already asks anything else.
+const NEEDS_REAL_TERMINAL = new Set(['watch', 'shell']);
 
 /** Batching window for captured output, and the transcript's memory ceiling. */
 const FLUSH_MS = 60;
@@ -200,6 +204,49 @@ const HELP_GROUPS: { title: string; flow: string; commands: string[] }[] = [
   },
 ];
 
+/**
+ * The current finding, as the body of the inline question.
+ *
+ * Deliberately the same facts the full-screen view showed — severity, rule,
+ * location, message, clauses, money — because nothing about that was wrong. It
+ * was only ever shown in the wrong place.
+ */
+function reviewPanel(
+  state: { findings: Finding[]; index: number; verdicts: Map<string, string> } | null,
+  glyphs: Glyphs,
+): ReviewPanel | undefined {
+  if (!state) return undefined;
+  const finding = state.findings[state.index];
+  if (!finding) return undefined;
+
+  // The answer already on file, if there is one. Without it there is no way to
+  // tell a finding you have not reached from one you decided ten keystrokes
+  // ago, which makes going back to change something guesswork.
+  const held = state.verdicts.get(
+    finding.fingerprint
+      ? `fp:${finding.fingerprint}`
+      : `${finding.rule_id.toUpperCase()}@${finding.file}:${finding.line}`,
+  );
+
+  const money = finding.money_at_risk_inr
+    ? `₹${new Intl.NumberFormat('en-IN').format(finding.money_at_risk_inr)} at risk`
+    : '';
+  const clauses = (finding.compliance_ref ?? []).join(` ${glyphs.separator.trim()} `);
+
+  return {
+    title: `${finding.severity.toUpperCase()}  ${finding.rule_id}`,
+    position: `${state.index + 1} of ${state.findings.length}${held ? `  ·  ${held}` : ''}`,
+    body: [
+      `${finding.file}:${finding.line}`,
+      finding.message ?? '',
+      [clauses, money].filter(Boolean).join('   '),
+    ].filter((line) => line.length > 0),
+    keys: held
+      ? `a accept   d dismiss   s suppress   u undo ${held}   j/k move   q done`
+      : 'a accept   d dismiss   s suppress   j/k move   q done',
+  };
+}
+
 function helpLines(width = 80): string[] {
   const out: string[] = [''];
   const shown = new Set<string>();
@@ -285,6 +332,23 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         );
       }
 
+      /** An open triage queue: the findings, where we are, and what was decided. */
+      interface ReviewState {
+        root: string;
+        /**
+         * Every finding, not only the undecided ones.
+         *
+         * Filtering the queue to what was still open meant a decision was final
+         * the moment it was taken: the finding left the queue and `k` could
+         * never reach it again. Changing your mind is the most ordinary thing
+         * to want to do while triaging.
+         */
+        findings: Finding[];
+        index: number;
+        /** Current verdict per finding, keyed by `triageKey`. */
+        verdicts: Map<string, string>;
+      }
+
       /** What survives an unmount: everything the user would be sorry to lose. */
       const kept: { lines: TranscriptLine[]; history: string[] } = { lines: initial, history: [] };
 
@@ -312,6 +376,13 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         // render time.
         const pendingRef = useRef<{ name: string; args: string[] } | null>(null);
         const [pendingLabel, setPendingLabel] = useState<string | null>(null);
+
+        // The triage queue, when one is open. Held in state so the panel
+        // re-renders as decisions are taken, and in a ref so the key handler
+        // reads the current value rather than one captured at render time.
+        const [review, setReview] = useState<ReviewState | null>(null);
+        const reviewRef = useRef<ReviewState | null>(null);
+        reviewRef.current = review;
         // What `/scan` last targeted. `/fix` runs as a child whose cwd is the
         // shell's, not the scan's, so without this it would fall back to
         // searching for a scan cache — and then write to whatever it found.
@@ -359,6 +430,158 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         const finish = () => {
           exit();
           resolvePromise();
+        };
+
+        /**
+         * Opens the triage queue from the last scan.
+         *
+         * Everything it needs is already on disk: `scan` caches its findings
+         * and `recordTriage` writes the decisions. What was missing was a way
+         * to ask without taking the screen.
+         */
+        const startReview = async (args: string[]): Promise<void> => {
+          const { locateLastScan } = await import('../session.js');
+          const { loadTriage, triageKey } = await import('../engine/store.js');
+
+          const found = locateLastScan(process.cwd());
+          if (!found) {
+            append('No scan to triage yet. Run /scan . first.', 'error');
+            return;
+          }
+
+          const decisions = loadTriage(found.root);
+          const verdicts = new Map(decisions.map((entry) => [triageKey(entry), entry.state as string]));
+
+          // `--decided` answers "what did I choose?" without reopening the
+          // queue. The decisions are a record somebody reviews later, so there
+          // has to be a way to read them that is not "walk the whole batch
+          // again".
+          if (args.includes('--decided')) {
+            if (decisions.length === 0) {
+              append('Nothing decided yet.', 'note');
+              return;
+            }
+            append(`${decisions.length} decision(s), newest last:`, 'note');
+            for (const entry of decisions) {
+              append(
+                `  ${entry.state.padEnd(10)} ${entry.rule_id}  ${entry.file}:${entry.line}` +
+                  (entry.reason ? `   ${entry.reason}` : ''),
+                'output',
+              );
+            }
+            append('Reopen with /triage — k moves back, and deciding again replaces the old answer.', 'note');
+            return;
+          }
+
+          const severity = args.find((arg) => !arg.startsWith('-'));
+          const queue = (found.cache.findings as Finding[]).filter(
+            (finding) => !severity || finding.severity === severity,
+          );
+
+          if (queue.length === 0) {
+            append('No findings to triage.', 'note');
+            return;
+          }
+
+          // Opens at the first thing without an answer, but the ones behind it
+          // are still in the queue and `k` reaches them.
+          const first = queue.findIndex((finding) => !verdicts.has(triageKey(finding as never)));
+          const open = queue.length - verdicts.size;
+
+          append(
+            `triaging ${queue.length} finding(s), ${open} still open — ` +
+              `a accept · d dismiss · s suppress · u undo · j/k move · q done`,
+            'note',
+          );
+          setReview({ root: found.root, findings: queue, index: first < 0 ? 0 : first, verdicts });
+        };
+
+        /** One keypress against the open queue. */
+        const onReviewKey = (input: string, key: { escape?: boolean }): void => {
+          const state = reviewRef.current;
+          if (!state) return;
+
+          const finding = state.findings[state.index];
+
+          const tally = (verdicts: Map<string, string>): string => {
+            const counts: Record<string, number> = {};
+            for (const verdict of verdicts.values()) counts[verdict] = (counts[verdict] ?? 0) + 1;
+            const parts = Object.entries(counts).map(([verdict, n]) => `${n} ${verdict}`);
+            const open = state.findings.length - verdicts.size;
+            return [...parts, open > 0 ? `${open} still open` : 'nothing left open'].join(' · ');
+          };
+
+          if (key.escape || input === 'q') {
+            append(`triage closed — ${tally(state.verdicts)}`, 'note');
+            append('See them again with  /triage --decided', 'note');
+            setReview(null);
+            return;
+          }
+
+          if (input === 'j' || input === 'k') {
+            const delta = input === 'j' ? 1 : -1;
+            setReview({
+              ...state,
+              index: Math.max(0, Math.min(state.findings.length - 1, state.index + delta)),
+            });
+            return;
+          }
+
+          const verdict =
+            input === 'a' ? 'accepted' : input === 'd' ? 'dismissed' : input === 's' ? 'suppressed' : undefined;
+          if ((!verdict && input !== 'u') || !finding) return;
+
+          void (async () => {
+            const { recordTriage, clearTriage, triageKey } = await import('../engine/store.js');
+            const identity = triageKey(finding as never);
+            const verdicts = new Map(state.verdicts);
+            const previous = verdicts.get(identity);
+
+            if (input === 'u') {
+              if (!previous) return;
+              clearTriage(state.root, identity);
+              verdicts.delete(identity);
+              append(`undone     ${finding.rule_id}  ${finding.file}:${finding.line}`, 'note');
+              setReview({ ...state, verdicts });
+              return;
+            }
+
+            recordTriage(state.root, {
+              rule_id: finding.rule_id,
+              file: finding.file,
+              line: finding.line,
+              ...(finding.fingerprint ? { fingerprint: finding.fingerprint } : {}),
+              state: verdict as 'accepted' | 'dismissed' | 'suppressed',
+              // A dismissal and a suppression both want a reason, and a panel
+              // has no room to type one. Recorded as decided here and refined
+              // with `/suppress <rule> --reason "…"`, which is where a reason
+              // that has to survive review belongs anyway.
+              ...(verdict === 'accepted' ? {} : { reason: 'decided in /triage' }),
+              decided_at: new Date().toISOString(),
+            });
+            verdicts.set(identity, verdict as string);
+
+            // Says so when it replaced an answer, rather than looking the same
+            // as a first decision.
+            append(
+              `${(verdict as string).padEnd(10)} ${finding.rule_id}  ${finding.file}:${finding.line}` +
+                (previous && previous !== verdict ? `   (was ${previous})` : ''),
+              'output',
+            );
+
+            // Forward to the next thing without an answer, wrapping once, so a
+            // pass through the batch ends where there is nothing left to do.
+            const order = state.findings.map((_, offset) => (state.index + 1 + offset) % state.findings.length);
+            const next = order.find((candidate) => !verdicts.has(triageKey(state.findings[candidate] as never)));
+
+            if (next === undefined) {
+              append(`triage done — ${tally(verdicts)}`, 'note');
+              append('See them again with  /triage --decided', 'note');
+              setReview(null);
+              return;
+            }
+            setReview({ ...state, index: next, verdicts });
+          })();
         };
 
         const submit = (line: string) => {
@@ -424,6 +647,11 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
 
           if (parsed.name === 'shell') {
             append('you are already in it.', 'note');
+            return;
+          }
+
+          if (parsed.name === 'triage') {
+            void startReview(parsed.args);
             return;
           }
 
@@ -531,6 +759,8 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
             busy={busy}
             busyLabel={busyLabel}
             prompt={pendingLabel ?? undefined}
+            review={reviewPanel(review, glyphs)}
+            onKey={review ? onReviewKey : undefined}
             history={history}
             onSubmit={submit}
             onCancel={() => {

@@ -230,6 +230,19 @@ export function loadTriage(root: string): TriageDecision[] {
   return readJson<TriageDecision[]>(triagePath(root)) ?? [];
 }
 
+/**
+ * Forgets a decision, so the finding is open again.
+ *
+ * Undo has to be a real operation rather than "decide the other way": accepted,
+ * dismissed and suppressed are three claims, and none of them means "I have not
+ * looked at this yet". Without it, a mis-keyed verdict is permanent.
+ */
+export function clearTriage(root: string, key: string): TriageDecision[] {
+  const remaining = loadTriage(root).filter((entry) => triageKey(entry) !== key);
+  writeJson(triagePath(root), remaining);
+  return remaining;
+}
+
 /** Records a decision, replacing any earlier one about the same finding. */
 export function recordTriage(root: string, decision: TriageDecision): TriageDecision[] {
   const key = triageKey(decision);

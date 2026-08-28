@@ -21,6 +21,17 @@ import { copyToClipboard } from './clipboard.js';
 import type { ShellCommand } from './CommandPalette.js';
 import type { Capabilities, Glyphs } from './theme.js';
 
+/** A question with its own body, asked inline. */
+export interface ReviewPanel {
+  title: string;
+  /** The body, already coloured by the caller. One entry per line. */
+  body: string[];
+  /** The key legend, shown at the foot of the panel. */
+  keys: string;
+  /** Progress, shown beside the title: `3 of 30`. */
+  position?: string;
+}
+
 export interface TranscriptLine {
   id: number;
   text: string;
@@ -44,6 +55,20 @@ export interface FullScreenShellProps {
    * ignored, so a prompt inside one can never be answered.
    */
   prompt?: string | undefined;
+  /**
+   * A decision the shell is waiting on, answered with one keypress.
+   *
+   * Rendered as a panel above the input rather than by taking the terminal.
+   * `/triage` used to unmount the shell and hand the whole screen to a child,
+   * which meant the transcript vanished, nothing else could be running, and
+   * coming back was a remount — a lot of machinery for what is a question with
+   * a few answers.
+   *
+   * While this is set, keystrokes go to `onKey` and never reach the text
+   * buffer: an answer is one key, not a line to be submitted.
+   */
+  review?: ReviewPanel | undefined;
+  onKey?: ((input: string, key: { escape?: boolean; return?: boolean }) => void) | undefined;
   history: string[];
   onSubmit: (line: string) => void;
   onCancel: () => void;
@@ -73,6 +98,8 @@ export function FullScreenShell({
   busy,
   busyLabel,
   prompt,
+  review,
+  onKey,
   history,
   onSubmit,
   onCancel,
@@ -105,7 +132,14 @@ export function FullScreenShell({
   // nullish, and `height={0}` clips the entire app to nothing. Exactly the bug
   // already fixed for `columns` in theme.ts — same trap, other axis.
   const rows = stdout?.rows || 24;
-  const viewportHeight = Math.max(3, rows - HEADER_HEIGHT - INPUT_HEIGHT - FOOTER_HEIGHT);
+  // The review panel takes its rows out of the transcript's budget, or the
+  // input box is pushed off the bottom of the screen and the whole thing looks
+  // broken at exactly the moment the user is being asked a question.
+  const reviewHeight = review ? review.body.length + 4 : 0;
+  const viewportHeight = Math.max(
+    3,
+    rows - HEADER_HEIGHT - INPUT_HEIGHT - FOOTER_HEIGHT - reviewHeight,
+  );
 
   const showPalette = value.startsWith('/') && !busy;
   const matches = useMemo(() => (showPalette ? filterCommands(value) : []), [showPalette, value]);
@@ -137,6 +171,18 @@ export function FullScreenShell({
   );
 
   useInput((input, key) => {
+    // A review takes the keyboard, but not the terminal. Scrolling is left
+    // alone below so the transcript stays readable while deciding — the whole
+    // point of asking inline rather than on a screen of its own.
+    if (review && onKey) {
+      const scrolls =
+        key.upArrow || key.downArrow || key.pageUp || key.pageDown || /\[<(64|65);/.test(input);
+      if (!scrolls) {
+        onKey(input, { escape: key.escape, return: key.return });
+        return;
+      }
+    }
+
     // Scrolling stays live while a command runs — watching output go by is
     // exactly when you want to look back at something.
     //
@@ -435,6 +481,19 @@ export function FullScreenShell({
           <Text key={`pad-${i}`}> </Text>
         ))}
       </Box>
+
+      {review ? (
+        <Box flexDirection="column" borderStyle={capabilities.unicode ? 'round' : 'classic'} borderColor={COLOR.accent} paddingX={1}>
+          <Box>
+            <Text bold color={COLOR.accent}>{review.title}</Text>
+            {review.position ? <Text color={muted}>{`   ${review.position}`}</Text> : null}
+          </Box>
+          {review.body.map((line, index) => (
+            <Text key={`review-${index}`} wrap="truncate-end">{line}</Text>
+          ))}
+          <Text color={muted} wrap="truncate-end">{review.keys}</Text>
+        </Box>
+      ) : null}
 
       {showPalette && matches.length > 0 ? (
         <Box flexDirection="column">
