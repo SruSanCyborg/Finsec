@@ -36,6 +36,54 @@ detection or wallet security.
 
 ---
 
+## If you are picking this up cold
+
+Run these three, in order. They orient faster than any amount of reading:
+
+```bash
+pnpm install && pnpm --filter sirius build
+node packages/cli/dist/cli.js brief --plain          # what this is, in two minutes
+node packages/cli/dist/cli.js guard gen feed
+node packages/cli/dist/cli.js guard eval feed --narrate
+```
+
+**Read next:** [`docs/guard.md`](docs/guard.md) for the lead surface, then
+[`docs/decisions.md`](docs/decisions.md) — every decision here has a numbered
+record with the reasoning, and the recent ones (D-046 onward) cover the
+attestation model, the polyglot rules, the width discipline, `guard`, and
+`brief`.
+
+**Five rules this repo does not bend.** Each was learned by getting it wrong:
+
+1. **A status row says what was verified, not what was written.** Seven features
+   were once listed Done while being unreachable in the default configuration.
+   `pnpm rehearse` and `pnpm shell:check` drive the real thing in a real pty
+   before anything is believed.
+2. **A regression test that has not been *seen to fail* has not been shown to
+   test anything.** Revert the fix, watch it go red, restore. The first
+   `ink-width.test.tsx` passed against the unfixed code because
+   `ink-testing-library` hard-codes `columns = 100`.
+3. **Layout gives way; content does not.** A column may narrow, a row may stack,
+   a value may wrap. Nothing is shortened into something that still reads as a
+   valid value — at 64 columns the footer once rendered `₹89,30,000` as
+   `₹89,30,00`.
+4. **Never print a number nobody computed.** Figures in the README, the artifact
+   and the brief are generated from live runs; `pnpm artifact:check` fails the
+   build when they drift.
+5. **No AI attribution anywhere** — not in commit trailers, not in file names,
+   not in prose. Commits are authored by `SruSanCyborg
+   <sanjaysivakumar71@gmail.com>` and nothing else.
+
+**Do not move** `contract/fixtures/chaos-repo`'s totals (6 findings, ₹89,30,000,
+60/100). New rule coverage goes in `contract/fixtures/rule-gallery`, which holds
+one planted example per rule beside a correct counterpart.
+
+**Where the work is published:** `SruSanCyborg/Finsec_CLI` (`main`) and
+`SruSanCyborg/Finsec` (`CLI`, whose commits are re-dated to a single day and
+pushed from the local `finsec-cli` branch — see the note in `docs/decisions.md`).
+
+---
+
 ## The golden rule (verbatim, non-negotiable)
 
 > **One Core API is the single source of truth. CLI, GUI, Web, and Automation are all CLIENTS. None talk to the scan engine or the Cerebus guardrail directly.**
