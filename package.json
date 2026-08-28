@@ -21,7 +21,8 @@
     "probe:mouse": "bash scripts/probe-mouse.sh",
     "rehearse": "bash scripts/rehearse.sh",
     "rehearse:revenue": "bash scripts/rehearse-revenue.sh",
-    "shell:check": "bash scripts/shell-check.sh"
+    "shell:check": "bash scripts/shell-check.sh",
+    "artifact": "node scripts/artifact/collect.mjs && node scripts/artifact/build.mjs"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",

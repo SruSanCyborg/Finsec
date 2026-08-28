@@ -308,6 +308,23 @@ seconds of terminal time across the three, so the rest of the slot is narration.
 `SIRIUS_REVENUE_PACE` sets the per-line delay and `0` turns it off — as it is
 automatically for `--json`, a pipe, and CI.
 
+## The published page
+
+```bash
+pnpm artifact
+```
+
+`scripts/artifact/collect.mjs` runs the CLI against the two seeds and writes
+every figure the page shows into `metrics.json`; `build.mjs` renders the HTML
+from it. Nothing on the page is typed except the prose, and where the prose
+makes a numeric claim it interpolates the same figure the table does, so the two
+cannot drift.
+
+It exists because the first version was transcribed from a terminal and went
+stale twice in a day — once when the risk-block hold changed the baselines, once
+when the calibration wording changed. A number that has to be copied is a number
+that will be wrong.
+
 ## What is synthetic, and what is not
 
 Every batch and every set of books is generated from a seed, and the same seed

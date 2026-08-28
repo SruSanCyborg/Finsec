@@ -93,6 +93,7 @@ node contract/mock/smoke.mjs   # assert the mock still matches the PRD mockup
 pnpm rehearse                  # the scan/fix beat, in a real pty
 pnpm rehearse:revenue          # the revenue beat, with per-beat timings
 pnpm shell:check               # every slash command, dispatched by the shell
+pnpm artifact                  # regenerate the published page from a live run
 ```
 
 Against the live mock:
