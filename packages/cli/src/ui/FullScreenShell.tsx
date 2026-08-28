@@ -122,8 +122,16 @@ export function FullScreenShell({
     // escape stripped, so it is matched here rather than as a key: button 64 is
     // wheel-up, 65 wheel-down. Three lines a notch matches most terminals'
     // native feel.
-    const wheel = /\[<(6[45]);\d+;\d+[Mm]/.exec(input);
-    if (wheel) return scrollBy(wheel[1] === '64' ? -3 : 3);
+    const mouse = /\[<(\d+);\d+;\d+([Mm])/.exec(input);
+    if (mouse) {
+      // Buttons 64 and 65 are the wheel. Everything else is a click or a drag
+      // and is swallowed here — an unmatched sequence used to fall through to
+      // the printable branch below and get typed into the prompt as garbage.
+      const button = Number(mouse[1]);
+      if (button === 64) return scrollBy(-3);
+      if (button === 65) return scrollBy(3);
+      return;
+    }
 
     if (key.pageUp) return scrollBy(-halfPage);
     if (key.pageDown) return scrollBy(halfPage);
@@ -144,7 +152,12 @@ export function FullScreenShell({
           // would show the summary the user has already read. Jump to the first
           // piece of evidence — pressing "why" should answer "why".
           const firstEvidence = nextShown.findIndex((l) => l.detail);
-          setScrollOffset(firstEvidence < 0 ? null : Math.max(0, Math.min(firstEvidence - 2, nextMax)));
+          // Only move if there is somewhere to move to. Pinning an offset on a
+          // transcript that already fits leaves the view marked as scrolled-up
+          // for no reason, which then hides the hint for getting back.
+          setScrollOffset(
+            firstEvidence < 0 || nextMax === 0 ? null : Math.max(0, Math.min(firstEvidence - 2, nextMax)),
+          );
           return next;
         }
 
@@ -331,7 +344,7 @@ export function FullScreenShell({
             ? busy
               ? ' ctrl-c cancel · ↑↓ scroll'
               : ` / commands · ↑↓ scroll · ctrl-p history · ctrl-e ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
-            : ` ${hiddenBelow} below · ↑↓ scroll · ctrl-g top · esc back to bottom`}
+            : ` ${hiddenBelow} below · ↑↓ scroll · ctrl-e ${expanded ? 'hide' : 'why'} · esc bottom`}
         </Text>
       </Box>
     </Box>

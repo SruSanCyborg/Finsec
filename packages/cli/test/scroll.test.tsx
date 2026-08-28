@@ -84,6 +84,6 @@ describe('scrolling', () => {
     stdin.write(`${ESC}[5~`);
     await settle();
 
-    expect(lastFrame()).toContain('esc back to bottom');
+    expect(lastFrame()).toContain('esc bottom');
   });
 });

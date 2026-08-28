@@ -43,7 +43,11 @@ let teardownRegistered = false;
  */
 /** Whether to capture mouse events. Off entirely when the alt screen is off. */
 export function mouseReportingAvailable(): boolean {
-  if (process.env.SIRIUS_NO_MOUSE === '1') return false;
+  // Opt-in, not opt-out. Capturing the mouse takes click-drag selection away
+  // from the terminal — you can no longer select and copy output, which is a
+  // core thing a terminal is for. That is too high a price for wheel
+  // scrolling now that the arrow keys scroll properly.
+  if (process.env.SIRIUS_MOUSE !== '1') return false;
   return alternateScreenAvailable();
 }
 
