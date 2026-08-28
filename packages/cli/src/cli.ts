@@ -200,6 +200,21 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('reconcile')
+    .description('Match the ledger against gateway settlements and the bank statement')
+    .argument('[books]', 'directory holding the three sets of books', 'books')
+    .option('--gen', 'generate a set of books to reconcile')
+    .option('--seed <value>', 'seed for --gen')
+    .option('--orders <n>', 'captures to generate', (v) => Number.parseInt(v, 10))
+    .option('--limit <n>', 'exception lines to print per kind', (v) => Number.parseInt(v, 10))
+    .option('--exceptions', 'print every exception, not a sample')
+    .option('--json', 'machine-readable output')
+    .action(async (books: string, options: Record<string, unknown>, command: Command) => {
+      const { runReconcile } = await import('./commands/reconcile.js');
+      await runReconcile(books, options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('shell')
     .description('Open the interactive shell (the default when run with no arguments)')
     .action(async (options: Record<string, unknown>, command: Command) => {
