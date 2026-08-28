@@ -1,16 +1,20 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { siriusApiClient, mockApiService } from './client';
 import { FindingSeverity, FindingStatus } from '@sirius/types';
+import { getSiriusEnv } from '@sirius/utils';
+
+const env = getSiriusEnv();
 
 export function useProjectsQuery() {
   return useQuery({
     queryKey: ['projects'],
     queryFn: async () => {
+      if (env.VITE_USE_MOCK_API) return mockApiService.getProjects();
       try {
-        const real = await siriusApiClient.getProjects();
-        if (real && real.length > 0) return real;
+        const res = await siriusApiClient.getProjects();
+        if (res && res.length > 0) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.getProjects();
     },
@@ -22,11 +26,12 @@ export function useProjectQuery(projectId: string | null) {
     queryKey: ['project', projectId],
     queryFn: async () => {
       if (!projectId) return null;
+      if (env.VITE_USE_MOCK_API) return mockApiService.getProjectById(projectId);
       try {
-        const real = await siriusApiClient.getProjectById(projectId);
-        if (real) return real;
+        const res = await siriusApiClient.getProjectById(projectId);
+        if (res) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.getProjectById(projectId);
     },
@@ -38,11 +43,12 @@ export function useScansQuery(projectId?: string) {
   return useQuery({
     queryKey: ['scans', projectId],
     queryFn: async () => {
+      if (env.VITE_USE_MOCK_API) return mockApiService.getScans(projectId);
       try {
-        const real = await siriusApiClient.getScans({ projectId });
-        if (real && real.length > 0) return real;
+        const res = await siriusApiClient.getScans({ projectId });
+        if (res && res.length > 0) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.getScans(projectId);
     },
@@ -54,11 +60,12 @@ export function useScanQuery(scanId: string | null) {
     queryKey: ['scan', scanId],
     queryFn: async () => {
       if (!scanId) return null;
+      if (env.VITE_USE_MOCK_API) return mockApiService.getScanById(scanId);
       try {
-        const real = await siriusApiClient.getScanById(scanId);
-        if (real) return real;
+        const res = await siriusApiClient.getScanById(scanId);
+        if (res) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.getScanById(scanId);
     },
@@ -76,16 +83,19 @@ export function useCreateScanMutation() {
       severityThreshold?: FindingSeverity;
       failOn?: 'all' | 'new' | 'verified-secrets';
     }) => {
+      if (env.VITE_USE_MOCK_API) {
+        return mockApiService.startScan(params.projectId, params.branch);
+      }
       try {
-        const real = await siriusApiClient.startScan({
+        const res = await siriusApiClient.startScan({
           projectId: params.projectId,
           branch: params.branch,
           severityThreshold: params.severityThreshold,
           failOn: params.failOn,
         });
-        if (real) return real;
+        if (res) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.startScan(params.projectId, params.branch);
     },
@@ -100,11 +110,12 @@ export function useFindingsQuery(projectId?: string, scanId?: string) {
   return useQuery({
     queryKey: ['findings', projectId, scanId],
     queryFn: async () => {
+      if (env.VITE_USE_MOCK_API) return mockApiService.getFindings(projectId, scanId);
       try {
-        const real = await siriusApiClient.getFindings({ projectId, scanId });
-        if (real && real.length > 0) return real;
+        const res = await siriusApiClient.getFindings({ projectId, scanId });
+        if (res && res.length > 0) return res;
       } catch {
-        // Fallback to mock
+        // Fallback for tests/offline
       }
       return mockApiService.getFindings(projectId, scanId);
     },
