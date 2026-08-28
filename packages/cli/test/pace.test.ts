@@ -10,7 +10,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { pace, resolvePace, writePaced } from '../src/engine/pace.js';
+import { pace, resolvePace, writeLinesPaced, writePaced } from '../src/engine/pace.js';
 import { wrapText, wrapLabelled } from '../src/wrap.js';
 import { explain } from '../src/engine/exposure-model.js';
 import type { WsFrame } from '../src/domain.js';
@@ -177,5 +177,73 @@ describe('the reasoning lines wrap instead of truncating', () => {
   it('still fits at a narrow width', () => {
     const lines = explain({ ruleId: 'SIR-SEC-001', severity: 'critical' }, 60);
     expect(lines.every((l) => l.length <= 60)).toBe(true);
+  });
+});
+
+/**
+ * The line pacer, and the trap that made the first version of it a no-op.
+ *
+ * `writePaced` groups by blank line and sleeps between *blocks*. Handed one
+ * line it writes it in the final flush and never sleeps at all — so the revenue
+ * timeline, "paced" a line at a time through that function, still arrived in a
+ * single paint. The two functions do different jobs and the tests say which.
+ */
+describe('writeLinesPaced', () => {
+  const capture = () => {
+    const written: string[] = [];
+    const original = process.stdout.write.bind(process.stdout);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stdout as any).write = (chunk: string) => {
+      written.push(String(chunk));
+      return true;
+    };
+    return { written, restore: () => ((process.stdout as never as { write: unknown }).write = original) };
+  };
+
+  it('writes every line, in order', async () => {
+    const { written, restore } = capture();
+    try {
+      await writeLinesPaced(['one', 'two', 'three'], 0);
+    } finally {
+      restore();
+    }
+    expect(written.join('')).toBe('one\ntwo\nthree\n');
+  });
+
+  it('actually sleeps between lines, which is the whole point', async () => {
+    const { written, restore } = capture();
+    const started = Date.now();
+    try {
+      await writeLinesPaced(['a', 'b', 'c', 'd'], 12);
+    } finally {
+      restore();
+    }
+    // Four lines at 12ms cannot finish instantly. The bug this catches made the
+    // same call return in under a millisecond.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(30);
+    expect(written).toHaveLength(4);
+  });
+
+  it('is a plain write when pacing is off', async () => {
+    const { written, restore } = capture();
+    const started = Date.now();
+    try {
+      await writeLinesPaced(['a', 'b', 'c'], 0);
+    } finally {
+      restore();
+    }
+    expect(Date.now() - started).toBeLessThan(20);
+    // One write, not three: a pipeline should not pay for the loop either.
+    expect(written).toHaveLength(1);
+  });
+
+  it('writes nothing at all for no lines', async () => {
+    const { written, restore } = capture();
+    try {
+      await writeLinesPaced([], 0);
+    } finally {
+      restore();
+    }
+    expect(written).toHaveLength(0);
   });
 });

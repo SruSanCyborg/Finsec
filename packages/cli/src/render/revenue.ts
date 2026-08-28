@@ -17,6 +17,7 @@ import { formatInr, formatInrCompact } from '../money.js';
 import type { Evaluation } from '../revenue/evaluate.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
+import type { AuditEntry } from '../revenue/audit.js';
 import type { RecoveryOutcome } from '../revenue/recover.js';
 import type { Assessment, RiskRecord } from '../revenue/types.js';
 
@@ -35,7 +36,7 @@ export interface RevenueRenderOptions {
   width?: number;
 }
 
-interface Palette {
+export interface Palette {
   dim: (text: string) => string;
   bold: (text: string) => string;
   green: (text: string) => string;
@@ -512,4 +513,53 @@ export function renderRecovery(
   }
 
   return lines.join('\n');
+}
+
+/**
+ * The recovery run as a timeline, one line per decision.
+ *
+ * The summary panel says what happened; this says it *happening*, which is a
+ * different thing to watch. It is also where the refusals stop being a count in
+ * a table and become the thing on screen — a message not sent at midnight, a
+ * fourth re-presentment declined — which is the argument the whole surface is
+ * making.
+ *
+ * Skipped records are left out. There are three hundred of them, they are all
+ * "considered and left alone", and they belong in the trail rather than on a
+ * screen somebody is reading in real time.
+ */
+export function renderRecoveryLog(
+  entries: readonly AuditEntry[],
+  palette: Palette,
+  limit = 120,
+): string[] {
+  const lines: string[] = [];
+
+  for (const entry of entries) {
+    if (entry.disposition === 'skipped') continue;
+    if (lines.length >= limit) break;
+
+    const clock = entry.at.slice(11, 16);
+    const id = entry.record_id.padEnd(12);
+    const action = entry.action.padEnd(22);
+
+    if (entry.disposition === 'executed') {
+      const recovered = entry.recovered_paise ?? 0;
+      lines.push(
+        `  ${palette.dim(clock)}  ${id}${palette.violet(action)}` +
+          (recovered > 0
+            ? `${palette.green(palette.glyph('check'))} ${palette.green(palette.rupee(recovered))}`
+            : `${palette.dim(palette.glyph('skip'))} ${palette.dim('no recovery')}`),
+      );
+      continue;
+    }
+
+    lines.push(
+      `  ${palette.dim(clock)}  ${id}${palette.amber(action)}` +
+        `${palette.amber(palette.glyph('hold'))} ${palette.amber(entry.rule_id ?? 'blocked')} ` +
+        palette.dim(`— ${entry.detail ?? ''}`),
+    );
+  }
+
+  return lines;
 }

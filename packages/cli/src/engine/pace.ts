@@ -108,6 +108,28 @@ export async function* pace(
 }
 
 /**
+ * Writes one line at a time, pausing after each.
+ *
+ * Distinct from `writePaced` below, which groups by blank line and pauses
+ * between *blocks*. Calling that with a single line pauses nowhere at all — the
+ * final flush writes without sleeping — which is how the revenue timeline came
+ * to be "paced" and still arrive in one paint. Two functions, because the two
+ * jobs are different: a report reads in paragraphs, a timeline reads a line at
+ * a time.
+ */
+export async function writeLinesPaced(lines: readonly string[], perLineMs: number): Promise<void> {
+  if (perLineMs <= 0) {
+    if (lines.length > 0) process.stdout.write(lines.join('\n') + '\n');
+    return;
+  }
+
+  for (const line of lines) {
+    process.stdout.write(line + '\n');
+    await sleep(perLineMs);
+  }
+}
+
+/**
  * Writes lines with a pause between them, so a viewport can paint as they land.
  *
  * The threat report is emitted after the stream has ended, so frame pacing does

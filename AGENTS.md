@@ -191,7 +191,24 @@ The CLI owns the two highest-value beats of the ~4-minute pitch:
 1. **(60s) `sirius scan .`** — streaming findings with a `⚠ VERIFIED LIVE` Stripe *test* key and `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
 2. **(45s) `sirius fix SIR-SEC-001`** — the Cerebus provenance panel (quarantined model → diff builder → verifier `✓ PASS`), then accept the diff. That panel *is* the security argument made visible.
 
+A third beat now exists on the revenue side, rehearsed the same way
+(`pnpm rehearse:revenue`, which checks eight beats land and prints each one's
+duration):
+
+3. **(45s) `/revenue detect` → `/revenue recover`** — records streaming with a
+   gateway outage named, a shared-signal cluster held for review, then the agent
+   working the queue and being *refused* by `quiet_hours`, `consent` and
+   `mandate_cap` in front of the audience. Roughly 6s of terminal time, so the
+   rest is narration. `--kind payment` shows the rails-and-failure-codes view;
+   the default money ranking puts invoices on top.
+
 Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
+
+**Everything on the demo path is paced.** The work finishes in a tenth of a
+second and writes fifty lines; without pacing a terminal paints once and the
+audience sees the last screenful. `SIRIUS_SCAN_PACE` and `SIRIUS_REVENUE_PACE`
+set it, `0` turns it off, and it is off automatically for `--json`, pipes and
+CI — a pipeline must not pay deliberate delay to look good for nobody.
 
 ---
 

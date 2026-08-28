@@ -188,6 +188,7 @@ export function buildProgram(): Command {
     .option('--capacity <n>', 'interventions available this run', (v) => Number.parseInt(v, 10))
     .option('--limit <n>', 'rows to print', (v) => Number.parseInt(v, 10))
     .option('--all', 'include records the agent would leave alone')
+    .option('--kind <name>', 'show only payments, checkouts or invoices')
     .option('--model <file>', 'score with a model fitted elsewhere')
     .option('--budget <rupees>', 'cap what the run may spend', (v) => Number.parseInt(v, 10))
     .option('--max-steps <n>', 'times one record may be worked', (v) => Number.parseInt(v, 10))

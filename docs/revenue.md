@@ -176,6 +176,24 @@ anything is unexplained, so a nightly close can gate on it.
 
 ---
 
+## Rehearsing it
+
+```bash
+pnpm rehearse:revenue
+```
+
+Drives the beat through the interactive shell in a real pty, checks that eight
+things actually landed on screen, and prints how long each one takes. The
+characteristic failure here is not a crash — it is fifty lines arriving in one
+paint, which reads as a paste rather than an agent working, and which a green
+test suite cannot see.
+
+Everything on the demo path is paced for that reason: `detect` a record at a
+time, `recover` a decision at a time, `reconcile` a block at a time. Roughly six
+seconds of terminal time across the three, so the rest of the slot is narration.
+`SIRIUS_REVENUE_PACE` sets the per-line delay and `0` turns it off — as it is
+automatically for `--json`, a pipe, and CI.
+
 ## What is synthetic, and what is not
 
 Every batch and every set of books is generated from a seed, and the same seed

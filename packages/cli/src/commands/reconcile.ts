@@ -79,7 +79,23 @@ export async function runReconcile(
     width: capabilities.width,
   });
 
-  process.stdout.write(render(result, palette, flags, dir));
+  // Paced in blocks, not lines: a reconciliation reads as a report — the tier
+  // table is one thought and each exception group is another. Pausing inside
+  // one of them would just look like stutter. Off for a pipe and for --json,
+  // where the whole point is arriving as fast as it is produced.
+  const { writePaced } = await import('../engine/pace.js');
+  const interactive = process.env.SIRIUS_STREAM_PLAIN === '1' || Boolean(process.stdout.isTTY);
+  const raw = process.env.SIRIUS_REVENUE_PACE;
+  const configured = raw === undefined ? undefined : Number(raw);
+  const pace =
+    configured !== undefined && Number.isFinite(configured) && configured >= 0
+      ? configured * 3
+      : interactive
+        ? 260
+        : 0;
+
+  await writePaced(render(result, palette, flags, dir).split('\n'), pace);
+
   // Unresolved exceptions are findings, not failures: exit 1 so a nightly close
   // can gate on "nothing unexplained" without parsing the output.
   if (result.exceptions.length > 0) process.exitCode = 1;

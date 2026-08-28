@@ -31,7 +31,7 @@ import { assessBatch, defaultCapacity, fitModel, isHeld } from '../revenue/model
 import type { Capacity, Model } from '../revenue/model.js';
 import { generateBatch, splitOf } from '../revenue/synth.js';
 import { loadBatch, loadTruth, hasTruth, writeBatch } from '../revenue/store.js';
-import type { Assessment, RiskRecord, Split } from '../revenue/types.js';
+import type { Assessment, RecordKind, RiskRecord, Split } from '../revenue/types.js';
 
 interface RevenueFlags {
   seed?: string;
@@ -45,6 +45,7 @@ interface RevenueFlags {
   json?: boolean;
   all?: boolean;
   model?: string;
+  kind?: string;
   capacity?: number;
   budget?: number;
   maxSteps?: number;
@@ -57,6 +58,29 @@ interface GlobalFlags {
 }
 
 const DEFAULT_BATCH = 'batch';
+
+/**
+ * Whether to pace the output, and by how much.
+ *
+ * The same problem `scan` has, for the same reason: the work finishes in a
+ * tenth of a second and writes fifty lines, so a terminal paints once and the
+ * viewer sees the last screenful. Pacing restores what a streamed path gets for
+ * free. Off for `--json`, off for a pipe, off in CI — a pipeline must not pay
+ * deliberate delay to look good for nobody.
+ *
+ * `SIRIUS_REVENUE_PACE` overrides the per-line delay in milliseconds; 0 turns
+ * it off, which is what the tests and the rehearsal's fast mode use.
+ */
+function paceMs(machineMode: boolean): number {
+  const raw = process.env.SIRIUS_REVENUE_PACE;
+  if (raw !== undefined) {
+    const parsed = Number(raw);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+  if (machineMode) return 0;
+  const interactive = process.env.SIRIUS_STREAM_PLAIN === '1' || Boolean(process.stdout.isTTY);
+  return interactive ? 85 : 0;
+}
 
 export async function runRevenue(
   subcommand: string | undefined,
@@ -152,28 +176,48 @@ async function detect(
   });
 
   const byId = new Map(batch.records.map((record) => [record.id, record]));
+
+  // Ranked by expected value, the top of the list is all invoices — they are
+  // the largest records, so they win a money ranking honestly. A payments team
+  // and a receivables team are different people with different queues, though,
+  // so `--kind` narrows the view without touching the selection: the agent
+  // still spent its capacity across the whole batch, and the totals below still
+  // say so.
+  const kind = parseKind(flags.kind);
   const shown = assessments
     .filter((assessment) => flags.all || assessment.flagged || isHeld(assessment))
+    .filter((assessment) => !kind || assessment.kind === kind)
     .sort((a, b) => b.expected_recovery_paise - a.expected_recovery_paise);
 
   process.stdout.write('\n');
   process.stdout.write(
     ` ${palette.bold('sirius revenue')}  ${palette.dim(
-      `${inSplit.length} records in front of it · split=${split} · floor ${model.threshold} · room for ${capacity.max_actions}`,
+      `${inSplit.length} records in front of it · split=${split}${kind ? ` · showing ${kind}s` : ''}` +
+        ` · floor ${model.threshold} · room for ${capacity.max_actions}`,
     )}\n\n`,
   );
 
+  const { writeLinesPaced, writePaced } = await import('../engine/pace.js');
+  const pace = paceMs(Boolean(flags.json));
+
   const limit = flags.limit ?? 25;
-  for (const assessment of shown.slice(0, limit)) {
-    const record = byId.get(assessment.record_id);
-    if (record) process.stdout.write(renderAssessment(assessment, record, palette) + '\n');
-  }
+  const rows = shown
+    .slice(0, limit)
+    .map((assessment) => {
+      const record = byId.get(assessment.record_id);
+      return record ? renderAssessment(assessment, record, palette) : '';
+    })
+    .filter(Boolean);
+
+  // A line at a time: this is the part a viewer reads one record at a time.
+  await writeLinesPaced(rows, pace);
+
   if (shown.length > limit) {
     process.stdout.write(palette.dim(`  … ${shown.length - limit} more (--limit to see them)\n`));
   }
 
   const incidents = renderIncidents(context, palette);
-  if (incidents) process.stdout.write(incidents + '\n');
+  if (incidents) await writePaced(incidents.split('\n'), pace * 3);
 
   const flagged = assessments.filter((a) => a.flagged);
   const held = assessments.filter(isHeld);
@@ -324,13 +368,21 @@ async function runRecovery(
     width: capabilities.width,
   });
 
-  const { renderRecovery } = await import('../render/revenue.js');
+  const { renderRecovery, renderRecoveryLog } = await import('../render/revenue.js');
+  const { writeLinesPaced, writePaced } = await import('../engine/pace.js');
+  const pace = paceMs(false);
+
   process.stdout.write(
     `\n ${palette.bold('sirius revenue recover')}  ${palette.dim(
       `run ${result.run_id} · split=${split} · room for ${capacity.max_actions} · nothing here left this machine`,
-    )}\n`,
+    )}\n\n`,
   );
-  process.stdout.write(renderRecovery(result.outcome, RULES, palette, trailPath));
+
+  // The timeline first, then the totals. A summary alone says what happened;
+  // watching the refusals arrive is what shows the agent stopping.
+  await writeLinesPaced(renderRecoveryLog(result.trail.entries, palette, flags.limit ?? 120), pace);
+
+  await writePaced(renderRecovery(result.outcome, RULES, palette, trailPath).split('\n'), pace * 3);
 }
 
 // ---- audit ------------------------------------------------------------------
@@ -459,6 +511,13 @@ function batchDir(target: string | undefined): string {
     });
   }
   return dir;
+}
+
+function parseKind(value: string | undefined): RecordKind | undefined {
+  if (!value) return undefined;
+  const singular = value.endsWith('s') ? value.slice(0, -1) : value;
+  if (singular === 'payment' || singular === 'checkout' || singular === 'invoice') return singular;
+  throw new CliError(`Unknown kind "${value}".`, { hint: 'Expected: payment, checkout, invoice.' });
 }
 
 function parseSplit(value: string | undefined): Split | 'all' {

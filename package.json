@@ -19,7 +19,8 @@
     "build": "pnpm --filter sirius build",
     "test": "pnpm --filter sirius test",
     "probe:mouse": "bash scripts/probe-mouse.sh",
-    "rehearse": "bash scripts/rehearse.sh"
+    "rehearse": "bash scripts/rehearse.sh",
+    "rehearse:revenue": "bash scripts/rehearse-revenue.sh"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",

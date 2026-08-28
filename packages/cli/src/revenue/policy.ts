@@ -331,7 +331,8 @@ export function check(
     }
 
     if (channel !== 'email' && inQuietHours(at, limits)) {
-      return deny('quiet_hours', `${localHour(at, limits.timezone)}:00 local is inside quiet hours`);
+      const hour = String(localHour(at, limits.timezone)).padStart(2, '0');
+      return deny('quiet_hours', `${hour}:00 local is inside quiet hours`);
     }
   }
 
