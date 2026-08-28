@@ -46,6 +46,10 @@ interface RevenueFlags {
   all?: boolean;
   model?: string;
   capacity?: number;
+  budget?: number;
+  maxSteps?: number;
+  output?: string;
+  verify?: string;
 }
 
 interface GlobalFlags {
@@ -67,9 +71,13 @@ export async function runRevenue(
       return detect(target, flags, globals);
     case 'eval':
       return evaluateBatch(target, flags, globals);
+    case 'recover':
+      return runRecovery(target, flags, globals);
+    case 'audit':
+      return auditTrail(target, flags);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: gen, detect, eval.',
+        hint: 'Expected one of: gen, detect, eval, recover, audit.',
       });
   }
 }
@@ -248,6 +256,112 @@ async function evaluateBatch(
   });
 
   process.stdout.write(renderEvaluation(evaluation, model, palette));
+}
+
+// ---- recover ----------------------------------------------------------------
+
+/**
+ * Runs the bounded workflow and writes a signed trail of everything it did.
+ *
+ * Simulated, and it says so in three places: the banner, the trail's `mode`,
+ * and the closing note. There is no `--execute`, because there is nothing
+ * behind it — an agent that can spend real money needs more than a flag, and
+ * shipping the flag before the safeguards is how the flag gets used.
+ */
+async function runRecovery(
+  target: string | undefined,
+  flags: RevenueFlags,
+  globals: GlobalFlags,
+): Promise<void> {
+  const dir = batchDir(target);
+  if (!hasTruth(dir)) {
+    throw new CliError(`${dir} has no labels, so a run against it could not be measured.`, {
+      hint: 'Generate a batch with `sirius revenue gen`.',
+    });
+  }
+
+  const split = parseSplit(flags.split);
+  const { batch, model, assessments, context, capacity, inSplit } = await scoreBatch(target, flags, split);
+  const truth = loadTruth(dir);
+
+  const { recover } = await import('../revenue/recover.js');
+  const { DEFAULT_LIMITS, RULES } = await import('../revenue/policy.js');
+
+  const startedAt = batch.manifest.as_of ? new Date(batch.manifest.as_of) : new Date();
+  const limits = flags.budget ? { ...DEFAULT_LIMITS, budget_paise: flags.budget * 100 } : DEFAULT_LIMITS;
+
+  const result = recover({
+    records: inSplit,
+    assessments,
+    truth,
+    context,
+    batch: batch.dir,
+    startedAt,
+    limits,
+    ...(flags.maxSteps ? { maxSteps: flags.maxSteps } : {}),
+  });
+
+  const trailPath = flags.output
+    ? resolve(process.cwd(), flags.output)
+    : join(batch.dir, `recovery-${result.run_id}.json`);
+  writeFileSync(trailPath, JSON.stringify(result.trail, null, 2) + '\n', 'utf8');
+
+  if (flags.json) {
+    process.stdout.write(
+      JSON.stringify(
+        { schema: 'sirius.revenue.recover/v1', run_id: result.run_id, trail: trailPath, outcome: result.outcome },
+        null,
+        2,
+      ) + '\n',
+    );
+    return;
+  }
+
+  const capabilities = detectCapabilities({ noColor: globals.color === false });
+  const palette = paletteFor({
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: capabilities.width,
+  });
+
+  const { renderRecovery } = await import('../render/revenue.js');
+  process.stdout.write(
+    `\n ${palette.bold('sirius revenue recover')}  ${palette.dim(
+      `run ${result.run_id} · split=${split} · room for ${capacity.max_actions} · nothing here left this machine`,
+    )}\n`,
+  );
+  process.stdout.write(renderRecovery(result.outcome, RULES, palette, trailPath));
+}
+
+// ---- audit ------------------------------------------------------------------
+
+async function auditTrail(target: string | undefined, flags: RevenueFlags): Promise<void> {
+  const path = flags.verify ?? target;
+  if (!path) {
+    throw new CliError('Which trail?', { hint: 'e.g. sirius revenue audit --verify recovery-1a2b3c4d.json' });
+  }
+
+  const file = resolve(process.cwd(), path);
+  if (!existsSync(file)) throw new CliError(`No such trail: ${path}`);
+
+  const { verifyTrail } = await import('../revenue/audit.js');
+  const result = verifyTrail(JSON.parse(readFileSync(file, 'utf8')));
+
+  if (!result.ok) {
+    process.stdout.write(`FAILED  ${path}\n        ${result.reason}\n`);
+    // Exit 1: a broken trail is a finding, not a crash.
+    process.exitCode = 1;
+    return;
+  }
+
+  process.stdout.write(`OK      ${path}\n`);
+  process.stdout.write(`        ${result.entries} entries, chained and unbroken\n`);
+  process.stdout.write(`        signed ${result.signedAt} by key ${result.keyId}\n`);
+  process.stdout.write(
+    `        This proves the trail has not been altered since it was signed. It does\n` +
+      `        not prove the actions were right, and the run was ${result.mode} —\n` +
+      `        no gateway was called and no message was sent.\n`,
+  );
 }
 
 // ---- shared -----------------------------------------------------------------

@@ -176,8 +176,8 @@ export function buildProgram(): Command {
 
   program
     .command('revenue')
-    .description('Detect, diagnose and price revenue at risk in a batch of records')
-    .argument('[subcommand]', 'gen | detect | eval', 'detect')
+    .description('Detect, diagnose and recover revenue at risk in a batch of records')
+    .argument('[subcommand]', 'gen | detect | eval | recover | audit', 'detect')
     .argument('[batch]', 'batch directory', 'batch')
     .option('--seed <value>', 'seed for `gen` — the same seed is the same batch')
     .option('--payments <n>', 'payments to generate', (v) => Number.parseInt(v, 10))
@@ -189,6 +189,10 @@ export function buildProgram(): Command {
     .option('--limit <n>', 'rows to print', (v) => Number.parseInt(v, 10))
     .option('--all', 'include records the agent would leave alone')
     .option('--model <file>', 'score with a model fitted elsewhere')
+    .option('--budget <rupees>', 'cap what the run may spend', (v) => Number.parseInt(v, 10))
+    .option('--max-steps <n>', 'times one record may be worked', (v) => Number.parseInt(v, 10))
+    .option('--output <file>', 'where to write the audit trail')
+    .option('--verify <file>', 'check a signed audit trail instead of running')
     .option('--json', 'machine-readable output')
     .action(async (subcommand: string, batch: string, options: Record<string, unknown>, command: Command) => {
       const { runRevenue } = await import('./commands/revenue.js');

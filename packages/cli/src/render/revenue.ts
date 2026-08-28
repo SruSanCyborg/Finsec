@@ -17,6 +17,7 @@ import { formatInr, formatInrCompact } from '../money.js';
 import type { Evaluation } from '../revenue/evaluate.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
+import type { RecoveryOutcome } from '../revenue/recover.js';
 import type { Assessment, RiskRecord } from '../revenue/types.js';
 
 const DIM = '\u001b[38;5;244m';
@@ -397,4 +398,118 @@ function shareOfCeiling(net: number, evaluation: Evaluation): string {
 
 function clock(iso: string): string {
   return iso.slice(11, 16);
+}
+
+/**
+ * The recovery run: the timeline, the money, and everything that was refused.
+ *
+ * The refusals get as much room as the recoveries. A recovery agent's most
+ * important property is not what it manages to collect — it is that it stopped
+ * where it was supposed to stop, and the only way to show that is to print it.
+ */
+export function renderRecovery(
+  outcome: RecoveryOutcome,
+  rules: Record<string, { says: string; basis: string }>,
+  palette: Palette,
+  trailPath?: string,
+): string {
+  const lines: string[] = [];
+  const pct = (value: number, of: number) => (of === 0 ? '—' : `${Math.round((value / of) * 100)}%`);
+
+  lines.push('');
+  lines.push(palette.hr);
+  lines.push(
+    ` ${palette.bold('RECOVERY RUN')}   ${palette.dim(
+      `${outcome.records_considered} records considered · ${outcome.records_worked} worked · ` +
+        `${outcome.actions_executed} actions · simulated`,
+    )}`,
+  );
+  lines.push(palette.hr);
+  lines.push('');
+
+  // ---- the money, as a waterfall from what was at stake to what was kept
+  const rows: [string, number, string][] = [
+    ['at risk', outcome.at_risk_paise, 'the money these records represent'],
+    ['recovered', outcome.recovered_paise, 'came back during the run'],
+    [
+      'would have anyway',
+      -(outcome.recovered_paise - outcome.attributable_paise),
+      'the same records recover this much untouched',
+    ],
+    ['attributable', outcome.attributable_paise, 'recovered because the agent acted'],
+    ['spent', -outcome.spent_paise, 'retries, messages and review time'],
+    ['net', outcome.net_paise, 'attributable less what it cost'],
+  ];
+
+  for (const [label, value, note] of rows) {
+    const emphasis = label === 'net' || label === 'attributable';
+    const paint = value < 0 ? palette.amber : emphasis ? palette.green : palette.bold;
+    const text = `${value < 0 ? '-' : ''}${palette.rupee(Math.abs(value))}`;
+    lines.push(
+      `  ${palette.dim(label.padEnd(20))}${paint(emphasis ? palette.bold(text.padStart(14)) : text.padStart(14))}  ` +
+        palette.dim(note),
+    );
+    if (label === 'would have anyway' || label === 'spent') {
+      lines.push(`  ${palette.dim('─'.repeat(36))}`);
+    }
+  }
+
+  lines.push('');
+  lines.push(
+    `  ${palette.dim('with no agent at all, these records return')} ${palette.bold(
+      palette.rupee(outcome.counterfactual_paise),
+    )}${palette.dim('.')}`,
+  );
+  lines.push('');
+
+  // ---- what worked
+  const actions = Object.entries(outcome.by_action).sort((a, b) => b[1].recovered_paise - a[1].recovered_paise);
+  if (actions.length > 0) {
+    lines.push(`  ${palette.bold('WHAT IT DID')}   ${palette.dim('and how often it worked')}`);
+    for (const [action, tally] of actions) {
+      const rate = tally.used === 0 ? 0 : tally.worked / tally.used;
+      lines.push(
+        `    ${action.padEnd(24)}${palette.dim(String(tally.used).padStart(4))} used  ` +
+          `${palette.violet(palette.bar(rate, 12))} ${pct(tally.worked, tally.used).padStart(4)}  ` +
+          `${palette.green(palette.rupee(tally.recovered_paise).padStart(13))}`,
+      );
+    }
+    lines.push('');
+  }
+
+  // ---- what it refused to do
+  const blocked = Object.entries(outcome.blocked_by).sort((a, b) => b[1] - a[1]);
+  if (blocked.length > 0) {
+    lines.push(
+      `  ${palette.bold('WHERE IT STOPPED')}   ${palette.dim(
+        `${outcome.actions_blocked} proposed actions were refused by a rule`,
+      )}`,
+    );
+    for (const [id, count] of blocked) {
+      const rule = rules[id];
+      lines.push(
+        `    ${palette.amber(String(count).padStart(4))}  ${palette.bold(id.padEnd(20))}${palette.dim(
+          rule?.says ?? '',
+        )}`,
+      );
+      if (rule?.basis) lines.push(`          ${palette.dim(rule.basis)}`);
+    }
+    lines.push('');
+  }
+
+  if (outcome.halted) {
+    lines.push(`  ${palette.red(palette.glyph('warn'))} ${palette.bold('run halted')} — ${outcome.halted}`);
+    lines.push('');
+  }
+
+  if (trailPath) {
+    lines.push(
+      palette.dim(
+        `  Every decision above — taken, refused and skipped — is in ${trailPath},\n` +
+          `  hash-chained and signed. Check it with:  sirius revenue audit --verify <file>\n`,
+      ),
+    );
+  }
+
+  return lines.join('\n');
 }
