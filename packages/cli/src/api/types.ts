@@ -937,6 +937,254 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example [
+                     *       {
+                     *         "id": "SIR-SEC-001",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "secrets",
+                     *         "severity": "critical",
+                     *         "message": "Hardcoded payment-provider secret key",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:8.6.2",
+                     *           "RBI-DPSC",
+                     *           "DPDP:8",
+                     *           "CWE:798"
+                     *         ],
+                     *         "fix_action": "env_lookup",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-001"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-002",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "secrets",
+                     *         "severity": "high",
+                     *         "message": "High-entropy string in source or config",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:8.6.2",
+                     *           "DPDP:8"
+                     *         ],
+                     *         "fix_action": "env_lookup",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-002"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-010",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "injection",
+                     *         "severity": "critical",
+                     *         "message": "SQL built with string concatenation or formatting",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:6.2.4",
+                     *           "RBI-DPSC",
+                     *           "CWE:89"
+                     *         ],
+                     *         "fix_action": "parameterize_query",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-010"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-011",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "injection",
+                     *         "severity": "critical",
+                     *         "message": "OS command built from user input",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:6.2.4",
+                     *           "CWE:78"
+                     *         ],
+                     *         "fix_action": "sanitize_input",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-011"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-020",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "auth",
+                     *         "severity": "high",
+                     *         "message": "Route missing an authentication decorator",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:8.4.2",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "add_auth_decorator",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-020"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-021",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "auth",
+                     *         "severity": "critical",
+                     *         "message": "JWT decoded without signature verification",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:8.4.2",
+                     *           "PCI-DSS:8.3.1",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "enforce_jwt_verify",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-021"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-030",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "logging",
+                     *         "severity": "high",
+                     *         "message": "PAN, Aadhaar, or other PII written to logs",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:3.4.1",
+                     *           "DPDP:8",
+                     *           "GDPR:Art.5"
+                     *         ],
+                     *         "fix_action": "redact_pii_log",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-030"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-031",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "pii",
+                     *         "severity": "critical",
+                     *         "message": "Full PAN stored unmasked",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:3.5.1",
+                     *           "PCI-DSS:3.4.1",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "tokenize_pan",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-031"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-040",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "crypto",
+                     *         "severity": "high",
+                     *         "message": "Weak hash, ECB mode, or a static initialization vector",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:6.2.4",
+                     *           "PCI-DSS:3.6.1",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "upgrade_crypto",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-040"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-041",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "crypto",
+                     *         "severity": "high",
+                     *         "message": "Cardholder data sent over plain HTTP",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript",
+                     *           "go"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:4.2.1",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "enforce_tls",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-041"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-050",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "ratelimit",
+                     *         "severity": "medium",
+                     *         "message": "Money-movement endpoint without a rate limit",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:6.2.4",
+                     *           "RBI-DPSC"
+                     *         ],
+                     *         "fix_action": "add_rate_limit",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-050"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-051",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "ratelimit",
+                     *         "severity": "medium",
+                     *         "message": "Money-movement POST without an idempotency key",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [],
+                     *         "fix_action": "add_idempotency_key",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-051"
+                     *       },
+                     *       {
+                     *         "id": "SIR-SEC-060",
+                     *         "version": "1",
+                     *         "enabled": true,
+                     *         "category": "supplychain",
+                     *         "severity": "high",
+                     *         "message": "Dependency runs an install script or ships obfuscated code",
+                     *         "languages": [
+                     *           "python",
+                     *           "javascript"
+                     *         ],
+                     *         "compliance_ref": [
+                     *           "PCI-DSS:6.3.2"
+                     *         ],
+                     *         "fix_action": "pin_or_remove_dep",
+                     *         "suppress_token": "# sirius-ignore: SIR-SEC-060"
+                     *       }
+                     *     ]
+                     */
                     "application/json": components["schemas"]["Rule"][];
                 };
             };
@@ -959,6 +1207,30 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    /**
+                     * @example {
+                     *       "id": "SIR-SEC-001",
+                     *       "version": "1",
+                     *       "enabled": true,
+                     *       "category": "secrets",
+                     *       "severity": "critical",
+                     *       "message": "Hardcoded payment-provider secret key",
+                     *       "languages": [
+                     *         "python",
+                     *         "javascript",
+                     *         "go"
+                     *       ],
+                     *       "compliance_ref": [
+                     *         "PCI-DSS:8.6.2",
+                     *         "RBI-DPSC",
+                     *         "DPDP:8",
+                     *         "CWE:798"
+                     *       ],
+                     *       "fix_action": "env_lookup",
+                     *       "suppress_token": "# sirius-ignore: SIR-SEC-001",
+                     *       "yaml_body": "rule:\n  id: SIR-SEC-001\n  category: secrets\n  severity: critical\n  languages: [python, javascript, go]\n  message: \"Hardcoded payment-provider secret key detected.\"\n  metadata:\n    compliance:\n      pci_dss: [\"8.6.2\"]\n      rbi_dpsc: [\"card-payment-security\"]\n      dpdp: [\"8\"]\n    cwe: [\"CWE-798\"]\n    money_at_risk_model: \"provider_key\"\n    remediation_action: env_lookup\n  match:\n    kind: ast + regex\n    patterns:\n      - regex: '(sk_live_[0-9a-zA-Z]{24,}|rk_live_[0-9a-zA-Z]{24,})'\n      - entropy: { min_bits: 3.5 }\n    validity_check:\n      provider: stripe\n      method: GET\n      endpoint: \"https://api.stripe.com/v1/balance\"\n  fix:\n    action: env_lookup\n    target: api_key\n  suppress: \"# sirius-ignore: SIR-SEC-001\"\n"
+                     *     }
+                     */
                     "application/json": components["schemas"]["Rule"];
                 };
             };

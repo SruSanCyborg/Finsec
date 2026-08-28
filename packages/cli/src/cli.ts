@@ -80,19 +80,96 @@ export function buildProgram(): Command {
       await runFix(finding, options, command.parent?.opts() ?? {});
     });
 
+  program
+    .command('init')
+    .description('Scaffold sirius.yaml and .siriusignore')
+    .option('--force', 'overwrite existing config files')
+    .option('--project <id>', 'project id to write into sirius.yaml')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runInit } = await import('./commands/init.js');
+      await runInit(options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('login')
+    .description('Store an API key in ~/.config/sirius/config.toml')
+    .option('--api-key <key>', 'the key to store (prompts if omitted)')
+    .option('--no-verify', 'skip the health check before storing')
+    .option('--list', 'list stored profiles instead of logging in')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runLogin } = await import('./commands/auth.js');
+      await runLogin(options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('logout')
+    .description('Remove a stored profile')
+    .action(async (_options: Record<string, unknown>, command: Command) => {
+      const { runLogout } = await import('./commands/auth.js');
+      await runLogout(command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('rules')
+    .description('List, show, or validate rules')
+    .argument('[subcommand]', 'list | show | validate', 'list')
+    .argument('[target]', 'rule id for show, file path for validate')
+    .option('--category <name>', 'filter by category')
+    .option('--ruleset <name>', 'filter by ruleset')
+    .option('--json', 'machine-readable output')
+    .action(async (sub: string, target: string | undefined, options: Record<string, unknown>, command: Command) => {
+      const { runRules } = await import('./commands/rules.js');
+      await runRules(sub, target, options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('suppress')
+    .description('Suppress a rule, with a reason and an expiry')
+    .argument('<rule>', 'rule id, e.g. SIR-SEC-010')
+    .option('--reason <text>', 'why this is suppressed (required)')
+    .option('--expires <date>', 'YYYY-MM-DD, so it gets revisited')
+    .option('--path <glob>', 'limit the suppression to matching paths')
+    .action(async (rule: string, options: Record<string, unknown>, command: Command) => {
+      const { runSuppress } = await import('./commands/governance.js');
+      await runSuppress(rule, options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('baseline')
+    .description('Set or show the baseline used by --fail-on new')
+    .argument('[subcommand]', 'set | show', 'show')
+    .option('--commit <sha>', 'commit to baseline against (defaults to HEAD)')
+    .option('--scan <id>', 'scan to take fingerprints from (defaults to the last one)')
+    .action(async (sub: string, options: Record<string, unknown>, command: Command) => {
+      const { runBaseline } = await import('./commands/governance.js');
+      await runBaseline(sub, options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('report')
+    .description('Download a signed compliance report')
+    .argument('[scan-id]', 'scan to report on (defaults to the last one)')
+    .option('--format <format>', 'pdf | json | sarif', 'json')
+    .option('-o, --output <file>', 'where to write it')
+    .action(async (scanId: string | undefined, options: Record<string, unknown>, command: Command) => {
+      const { runReport } = await import('./commands/governance.js');
+      await runReport(scanId, options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('badge')
+    .description('Print the compliance badge URL and embed snippets')
+    .option('--no-markdown', 'print only the URL')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runBadge } = await import('./commands/governance.js');
+      await runBadge(options, command.parent?.opts() ?? {});
+    });
+
   // Commands below are scaffolded but not yet implemented. They exist so that
   // `sirius --help` shows the real surface and so nobody re-litigates the tree.
   const planned: Array<[string, string]> = [
-    ['login', 'Authenticate and store credentials'],
-    ['logout', 'Clear stored credentials'],
-    ['init', 'Scaffold sirius.yaml and .siriuslintrc'],
     ['triage', 'Review findings interactively'],
     ['watch', 'Re-scan on file change'],
-    ['rules', 'List, show, validate, or test rules'],
-    ['suppress', 'Suppress a rule with a reason and expiry'],
-    ['baseline', 'Set or show the baseline'],
-    ['report', 'Download a signed compliance report'],
-    ['badge', 'Print the compliance badge URL and markdown'],
   ];
 
   for (const [name, description] of planned) {
@@ -102,7 +179,7 @@ export function buildProgram(): Command {
       .allowUnknownOption()
       .action(() => {
         throw new CliError(`\`sirius ${name}\` is not implemented yet.`, {
-          hint: 'Implemented so far: scan, fix.',
+          hint: 'Implemented: scan, fix, init, login, logout, rules, suppress, baseline, report, badge.',
         });
       });
   }
