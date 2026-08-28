@@ -1,0 +1,806 @@
+openapi: 3.1.0
+
+info:
+  title: finsec-lint Core API
+  version: 0.4.0
+  description: |
+    Shared contract for all finsec-lint surfaces (cli, gui, web, auto).
+
+    **Golden rule:** this API is the single source of truth. CLI, GUI, Web, and
+    Automation are all clients. None talk to the scan engine or the Cerebus
+    guardrail directly.
+
+    This spec covers the endpoints the CLI consumes. Endpoints owned entirely by
+    the web/GUI surfaces (teams, integrations, audit-log, SSO) are listed in
+    `docs/system-overview.md` but not yet specified here.
+
+    Deviations from `docs/finsec-lint-prd.md` are recorded in `docs/decisions.md`
+    and marked `x-decision` below.
+
+servers:
+  - url: https://api.finsec.dev/api/v1
+    description: Production
+  - url: http://localhost:4010
+    description: Prism mock (set FINSEC_API_URL to this)
+
+security:
+  - apiKey: []
+
+tags:
+  - name: scans
+  - name: findings
+  - name: rules
+  - name: governance
+  - name: projects
+  - name: meta
+
+paths:
+  /scans:
+    post:
+      tags: [scans]
+      operationId: createScan
+      summary: Create a scan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ScanCreate' }
+      responses:
+        '202':
+          description: Scan queued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Scan' }
+        '400': { $ref: '#/components/responses/Problem' }
+        '401': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+    get:
+      tags: [scans]
+      operationId: listScans
+      summary: List scans
+      parameters:
+        - { name: project_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ScanStatus' } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Scan' }
+                  next_cursor: { type: [string, 'null'] }
+        '401': { $ref: '#/components/responses/Problem' }
+
+  /scans/{id}:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+    get:
+      tags: [scans]
+      operationId: getScan
+      summary: Scan status
+      description: |
+        Also the polling fallback when the WebSocket stream is unavailable —
+        the PRD's risk register calls WS instability a demo-stage risk.
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Scan' }
+        '404': { $ref: '#/components/responses/Problem' }
+    delete:
+      tags: [scans]
+      operationId: cancelScan
+      summary: Cancel a scan
+      responses:
+        '202': { description: Cancellation accepted }
+        '409': { $ref: '#/components/responses/Problem' }
+
+  /scans/{id}/results:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+    get:
+      tags: [findings]
+      operationId: getScanResults
+      summary: Findings for a scan (paginated)
+      parameters:
+        - { name: severity, in: query, schema: { $ref: '#/components/schemas/Severity' } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+        - { name: baseline_state, in: query, schema: { $ref: '#/components/schemas/BaselineState' } }
+        - { name: include_suppressed, in: query, schema: { type: boolean, default: false } }
+        - { $ref: '#/components/parameters/Limit' }
+        - { $ref: '#/components/parameters/Cursor' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FindingPage' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /scans/{id}/report:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+    get:
+      tags: [scans]
+      operationId: getScanReport
+      summary: Signed compliance report
+      parameters:
+        - name: format
+          in: query
+          required: true
+          schema: { type: string, enum: [pdf, json, sarif] }
+      responses:
+        '200':
+          description: |
+            The report. `json` and `sarif` are returned inline; `pdf` returns a
+            download URI. The detached JWS (ES256 over canonical JSON) is in the
+            `X-FinSec-Signature-JWS` header for inline formats.
+          headers:
+            X-FinSec-Signature-JWS:
+              schema: { type: string }
+              description: Detached JWS signature over the canonical JSON body
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Report' }
+            application/sarif+json:
+              schema: { type: object }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /scans/{id}/findings/{fid}/fix:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+      - { $ref: '#/components/parameters/FindingId' }
+    post:
+      tags: [findings]
+      operationId: requestFix
+      summary: Request a Cerebus fix suggestion
+      description: |
+        Core forwards to the worker, which invokes Cerebus: a quarantined model
+        picks an `action` from a closed vocabulary, a deterministic builder
+        renders the diff from a template, and a verifier re-runs the original
+        detection rule against the patched snippet. The rule, not the model, is
+        the ground truth.
+      responses:
+        '200':
+          description: A fix suggestion (which may have failed verification)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/FixSuggestion' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '409':
+          $ref: '#/components/responses/Problem'
+          description: Scan not complete, or a fix already applied
+
+  /scans/{id}/findings/{fid}/validate-secret:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+      - { $ref: '#/components/parameters/FindingId' }
+    post:
+      tags: [findings]
+      operationId: validateSecret
+      summary: Opt-in live secret validity check
+      description: |
+        Makes a rate-limited, **read-only** call to the provider (e.g. GET
+        https://api.stripe.com/v1/balance) to determine whether a leaked key is
+        still active. Never writes. Opt-in only — live calls against third-party
+        APIs with found credentials carry legal and ToS implications.
+      responses:
+        '200':
+          description: Validity determined
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [validity]
+                properties:
+                  validity: { $ref: '#/components/schemas/Validity' }
+                  checked_at: { type: string, format: date-time }
+        '429':
+          $ref: '#/components/responses/Problem'
+          description: Rate limited
+
+  /projects/{id}/history:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [projects]
+      operationId: getProjectHistory
+      summary: Trend history for a project
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    scan_id: { type: string, format: uuid }
+                    created_at: { type: string, format: date-time }
+                    compliance_score: { type: number }
+                    money_at_risk_inr: { type: integer }
+                    counts: { $ref: '#/components/schemas/SeverityCounts' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /projects/{id}/badge.svg:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      tags: [projects]
+      operationId: getProjectBadge
+      summary: Shields-style compliance badge
+      security: []
+      responses:
+        '200':
+          description: SVG badge
+          content:
+            image/svg+xml:
+              schema: { type: string }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /rules:
+    get:
+      tags: [rules]
+      operationId: listRules
+      summary: List rules
+      parameters:
+        - { name: ruleset, in: query, schema: { type: string, examples: ['p/fintech-core'] } }
+        - { name: category, in: query, schema: { $ref: '#/components/schemas/Category' } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Rule' }
+
+  /rules/{ruleId}:
+    parameters:
+      - { name: ruleId, in: path, required: true, schema: { type: string, examples: ['FIN-SEC-001'] } }
+    get:
+      tags: [rules]
+      operationId: getRule
+      summary: Rule detail
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '404': { $ref: '#/components/responses/Problem' }
+
+  /rules/validate:
+    post:
+      tags: [rules]
+      operationId: validateRule
+      summary: Lint a rule YAML
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [yaml_body]
+              properties:
+                yaml_body: { type: string }
+      responses:
+        '200':
+          description: Validation result
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [valid]
+                properties:
+                  valid: { type: boolean }
+                  errors:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string }
+                        message: { type: string }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /suppressions:
+    get:
+      tags: [governance]
+      operationId: listSuppressions
+      summary: List suppressions
+      parameters:
+        - { name: project_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Suppression' }
+    post:
+      tags: [governance]
+      operationId: createSuppression
+      summary: Create a suppression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SuppressionCreate' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Suppression' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /baselines:
+    get:
+      tags: [governance]
+      operationId: listBaselines
+      summary: List baselines
+      parameters:
+        - { name: project_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Baseline' }
+    post:
+      tags: [governance]
+      operationId: createBaseline
+      summary: Create a baseline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [project_id, commit_sha]
+              properties:
+                project_id: { type: string, format: uuid }
+                commit_sha: { type: string }
+                scan_id:
+                  type: string
+                  format: uuid
+                  description: Take fingerprints from this scan. Fingerprints are computed server-side; the CLI has no engine.
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Baseline' }
+        '422': { $ref: '#/components/responses/Problem' }
+
+  /healthz:
+    get:
+      tags: [meta]
+      operationId: healthz
+      summary: Liveness probe
+      security: []
+      responses:
+        '200':
+          description: Alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, examples: [ok] }
+                  version: { type: string }
+        '503': { description: Unhealthy }
+
+components:
+
+  securitySchemes:
+    apiKey:
+      type: http
+      scheme: bearer
+      description: |
+        Project API key for CLI and CI (**K** in the PRD's auth column). Web and
+        GUI use a session cookie / JWT (**S**) instead.
+
+        x-decision: D-004 — the WebSocket at `/scans/{id}/stream` takes the same
+        `Authorization: Bearer <key>` header on the upgrade request, with a
+        `?token=` query fallback for browser clients, which cannot set headers on
+        a WebSocket handshake. Auth failure closes with code 4401.
+
+  parameters:
+    ScanId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    FindingId:
+      name: fid
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 500, default: 100 }
+    Cursor:
+      name: cursor
+      in: query
+      schema: { type: string }
+
+  responses:
+    Problem:
+      description: RFC-7807 problem detail
+      content:
+        application/problem+json:
+          schema: { $ref: '#/components/schemas/Problem' }
+
+  schemas:
+
+    # ---- enumerations (mirror the DDL exactly; these are the wire vocabulary)
+
+    Severity:
+      type: string
+      enum: [critical, high, medium, low, info]
+
+    Category:
+      type: string
+      enum: [secrets, auth, injection, pii, crypto, logging, ratelimit, supplychain]
+
+    ScanStatus:
+      type: string
+      enum: [queued, running, completed, failed, canceled]
+
+    ScanSource:
+      type: string
+      enum: [upload, git, inline]
+
+    ScanTrigger:
+      type: string
+      enum: [manual, ci, webhook, schedule]
+
+    BaselineState:
+      type: string
+      enum: [new, unchanged, absent]
+      description: SARIF 2.1.0 `baselineState`, carried through unchanged.
+
+    Validity:
+      type: string
+      enum: [verified_live, inactive, unknown]
+      description: Secret findings only. Per the PRD, only `verified_live` flips the CI gate.
+
+    VerifierStatus:
+      type: string
+      enum: [pass, fail, escalated]
+
+    FailOn:
+      type: string
+      enum: [all, new, verified-secrets]
+      description: |
+        The gate *predicate*. Deliberately diverges from Snyk's own
+        `all|upgradable|patchable`.
+
+        x-decision: D-003 — `fail_on` selects the predicate, `severity_threshold`
+        sets the bar. The PRD's ANSI mockup conflates the two by printing
+        `gate: fail-on=high`.
+
+    FixAction:
+      type: string
+      description: The closed vocabulary a quarantined model may choose from.
+      enum:
+        - env_lookup
+        - parameterize_query
+        - sanitize_input
+        - add_auth_decorator
+        - enforce_jwt_verify
+        - redact_pii_log
+        - tokenize_pan
+        - upgrade_crypto
+        - enforce_tls
+        - add_rate_limit
+        - add_idempotency_key
+        - pin_or_remove_dep
+
+    # ---- core objects
+
+    Problem:
+      type: object
+      required: [title, status]
+      properties:
+        type: { type: string, format: uri, examples: ['https://finsec.dev/errors/rule-invalid'] }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        instance: { type: string }
+        code:
+          type: string
+          description: Non-standard sixth member, `FIN_ERR_*` namespace.
+          examples: [FIN_ERR_RULE_SCHEMA, FIN_ERR_PARSE]
+
+    SeverityCounts:
+      type: object
+      properties:
+        critical: { type: integer }
+        high: { type: integer }
+        medium: { type: integer }
+        low: { type: integer }
+        info: { type: integer }
+
+    ScanCreate:
+      type: object
+      required: [project_id]
+      properties:
+        project_id: { type: string, format: uuid }
+        source: { $ref: '#/components/schemas/ScanSource' }
+        git_ref: { type: string, examples: ['refs/pull/42/head'] }
+        commit_sha: { type: string }
+        baseline_commit: { type: string }
+        diff_aware: { type: boolean, default: false }
+        rulesets:
+          type: array
+          items: { type: string }
+          examples: [['p/fintech-core', 'p/secrets']]
+        policy_id: { type: string, format: uuid }
+        validate_secrets: { type: boolean, default: false }
+        severity_threshold:
+          $ref: '#/components/schemas/Severity'
+          description: |
+            x-decision: D-002 — added to the PRD's body. The server echoes an
+            `exit_code` on `scan.completed`, but the CLI computes its own gate
+            verdict locally and treats the server value as a cross-check, so that
+            CI behavior stays deterministic offline and under --replay.
+        fail_on: { $ref: '#/components/schemas/FailOn' }
+
+    Scan:
+      type: object
+      required: [id, status]
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        status: { $ref: '#/components/schemas/ScanStatus' }
+        source: { $ref: '#/components/schemas/ScanSource' }
+        trigger: { $ref: '#/components/schemas/ScanTrigger' }
+        git_ref: { type: [string, 'null'] }
+        commit_sha: { type: [string, 'null'] }
+        baseline_commit: { type: [string, 'null'] }
+        compliance_score: { type: [number, 'null'], examples: [72.5] }
+        money_at_risk_inr:
+          type: [integer, 'null']
+          description: Scan-level aggregate over all findings, not just rendered ones.
+          examples: [5120000]
+        counts: { $ref: '#/components/schemas/SeverityCounts' }
+        exit_code: { type: [integer, 'null'], enum: [0, 1, 2, 3, null] }
+        started_at: { type: [string, 'null'], format: date-time }
+        finished_at: { type: [string, 'null'], format: date-time }
+        created_at: { type: string, format: date-time }
+
+    Finding:
+      type: object
+      required: [id, file, line, severity, rule_id, category, message]
+      properties:
+        id: { type: string, format: uuid }
+        scan_id: { type: string, format: uuid }
+        file: { type: string, examples: ['src/config.py'] }
+        line: { type: integer, examples: [14] }
+        end_line: { type: [integer, 'null'] }
+        col:
+          type: [integer, 'null']
+          description: |
+            1-indexed column of the offending token. Needed to align the `╰──`
+            underline annotation in the CLI.
+
+            x-decision: D-005 — absent from the PRD's WebSocket `finding` frame
+            though present in the DDL. Added to both here. Clients must degrade
+            to an unaligned annotation when null.
+        severity: { $ref: '#/components/schemas/Severity' }
+        rule_id: { type: string, examples: ['FIN-SEC-001'] }
+        category: { $ref: '#/components/schemas/Category' }
+        compliance_ref:
+          type: array
+          items: { type: string }
+          description: Colon-namespaced clause references.
+          examples: [['PCI-DSS:8.6.2', 'RBI-DPSC', 'DPDP:8']]
+        message: { type: string, examples: ['Hardcoded Stripe secret key'] }
+        snippet:
+          type: [string, 'null']
+          description: Secret literals must arrive already truncated. Never transmit a full key.
+          examples: ['STRIPE_KEY = "sk_live_51H8xR2eZv…"']
+        fingerprint:
+          type: [string, 'null']
+          description: Stable hash for baseline diffing and dedup. Algorithm is server-side and TBD.
+        baseline_state: { $ref: '#/components/schemas/BaselineState' }
+        validity: { $ref: '#/components/schemas/Validity' }
+        money_at_risk_inr: { type: [integer, 'null'], examples: [4200000] }
+        suppressed: { type: boolean, default: false }
+        fix_action: { $ref: '#/components/schemas/FixAction' }
+
+    FindingPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/Finding' }
+        next_cursor: { type: [string, 'null'] }
+        total: { type: integer }
+
+    FixSuggestion:
+      type: object
+      required: [action, diff, verifier_status]
+      properties:
+        id: { type: string, format: uuid }
+        finding_id: { type: string, format: uuid }
+        action: { $ref: '#/components/schemas/FixAction' }
+        target: { type: string, examples: ['api_key'] }
+        confidence: { type: number, minimum: 0, maximum: 1, examples: [0.92] }
+        diff:
+          type: string
+          description: Unified diff against the finding's **snippet**, not the whole file.
+        side_effects:
+          type: array
+          description: Template side-effects, e.g. an .env.example entry.
+          items:
+            type: object
+            properties:
+              file: { type: string, examples: ['.env.example'] }
+              content: { type: string, examples: ['STRIPE_API_KEY='] }
+        verifier_status: { $ref: '#/components/schemas/VerifierStatus' }
+        escalate: { type: boolean, default: false }
+        generated_at: { type: string, format: date-time }
+
+    Rule:
+      type: object
+      required: [id, version, enabled]
+      properties:
+        id: { type: string, examples: ['FIN-SEC-001'] }
+        version: { type: string }
+        enabled: { type: boolean }
+        category: { $ref: '#/components/schemas/Category' }
+        severity: { $ref: '#/components/schemas/Severity' }
+        message: { type: string }
+        languages:
+          type: array
+          items: { type: string }
+        compliance_ref:
+          type: array
+          items: { type: string }
+        fix_action: { $ref: '#/components/schemas/FixAction' }
+        suppress_token: { type: string, examples: ['# finsec-ignore: FIN-SEC-001'] }
+        yaml_body: { type: string }
+
+    SuppressionCreate:
+      type: object
+      required: [project_id, reason]
+      properties:
+        project_id: { type: string, format: uuid }
+        rule_id: { type: string }
+        path_glob: { type: string }
+        fingerprint: { type: string }
+        reason: { type: string, description: Mandatory. }
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+          description: ISO-8601, modeled on .snyk `expires`.
+
+    Suppression:
+      allOf:
+        - { $ref: '#/components/schemas/SuppressionCreate' }
+        - type: object
+          properties:
+            id: { type: string, format: uuid }
+            created_by: { type: [string, 'null'], format: uuid }
+
+    Baseline:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        project_id: { type: string, format: uuid }
+        commit_sha: { type: string }
+        fingerprints:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Report:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        scan_id: { type: string, format: uuid }
+        format: { type: string, enum: [pdf, json, sarif] }
+        uri: { type: string }
+        jws_signature: { type: [string, 'null'], description: 'Detached JWS, ES256 over canonical JSON.' }
+        signed_at: { type: [string, 'null'], format: date-time }
+        body: { type: object, description: Inline report body for json format. }
+
+    # ---- WebSocket frames
+    # Not reachable through the REST paths above. `WS /scans/{id}/stream` emits
+    # these as JSON text frames. Referenced here so every client generates the
+    # same types and the mock server and fixtures stay honest.
+
+    WsFrame:
+      oneOf:
+        - { $ref: '#/components/schemas/WsScanStarted' }
+        - { $ref: '#/components/schemas/WsFileScanning' }
+        - { $ref: '#/components/schemas/WsFinding' }
+        - { $ref: '#/components/schemas/WsProgress' }
+        - { $ref: '#/components/schemas/WsScanCompleted' }
+        - { $ref: '#/components/schemas/WsError' }
+      discriminator:
+        propertyName: type
+        # The mapping is required, not decorative: without it, code generators
+        # substitute the *schema name* ("WsFinding") for the wire value
+        # ("finding") and clients narrow on a string that never arrives.
+        mapping:
+          scan.started: '#/components/schemas/WsScanStarted'
+          file.scanning: '#/components/schemas/WsFileScanning'
+          finding: '#/components/schemas/WsFinding'
+          progress: '#/components/schemas/WsProgress'
+          scan.completed: '#/components/schemas/WsScanCompleted'
+          error: '#/components/schemas/WsError'
+
+    WsScanStarted:
+      type: object
+      required: [type, scan_id, total_files]
+      properties:
+        type: { type: string, const: scan.started }
+        scan_id: { type: string, format: uuid }
+        total_files: { type: integer }
+        ts: { type: string, format: date-time }
+
+    WsFileScanning:
+      type: object
+      required: [type, path, index, total]
+      properties:
+        type: { type: string, const: file.scanning }
+        path: { type: string }
+        index: { type: integer }
+        total: { type: integer }
+
+    WsFinding:
+      type: object
+      required: [type, finding]
+      properties:
+        type: { type: string, const: finding }
+        finding: { $ref: '#/components/schemas/Finding' }
+
+    WsProgress:
+      type: object
+      required: [type, scanned, total]
+      properties:
+        type: { type: string, const: progress }
+        scanned: { type: integer }
+        total: { type: integer }
+        findings_so_far: { type: integer }
+
+    WsScanCompleted:
+      type: object
+      required: [type, counts]
+      properties:
+        type: { type: string, const: scan.completed }
+        compliance_score: { type: number, examples: [72.5] }
+        money_at_risk_inr: { type: integer, examples: [5120000] }
+        counts: { $ref: '#/components/schemas/SeverityCounts' }
+        exit_code:
+          type: integer
+          enum: [0, 1, 2, 3]
+          description: Server's gate verdict. Advisory — see D-002.
+
+    WsError:
+      type: object
+      required: [type, code]
+      description: Per-file and non-fatal. Does not by itself change the exit code.
+      properties:
+        type: { type: string, const: error }
+        code: { type: string, examples: [FIN_ERR_PARSE] }
+        path: { type: string }
+        detail: { type: string }

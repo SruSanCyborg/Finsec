@@ -1,0 +1,27 @@
+{
+  "name": "finsec-lint",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "A security & compliance linter for money-handling code",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "mock": "node contract/mock/serve.mjs",
+    "mock:rest": "prism mock contract/openapi.yaml --port 4010 --dynamic",
+    "mock:ws": "node contract/mock/ws-server.mjs",
+    "fixtures": "node contract/mock/generate-fixture.mjs",
+    "contract:lint": "redocly lint contract/openapi.yaml",
+    "contract:types": "openapi-typescript contract/openapi.yaml -o packages/cli/src/api/types.ts",
+    "cli": "node packages/cli/dist/cli.js",
+    "build": "pnpm --filter finsec build",
+    "test": "pnpm --filter finsec test"
+  },
+  "devDependencies": {
+    "@redocly/cli": "^2.46.1",
+    "@stoplight/prism-cli": "^5.16.0",
+    "openapi-typescript": "^7.13.0",
+    "ws": "^8.21.3"
+  }
+}

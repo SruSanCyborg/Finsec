@@ -1,0 +1,6 @@
+packages:
+  - packages/*
+allowBuilds:
+  # Analytics package pulled in transitively. A security tool has no business
+  # phoning home, and nothing here needs its postinstall.
+  '@scarf/scarf': false

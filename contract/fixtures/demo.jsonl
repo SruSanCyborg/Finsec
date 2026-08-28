@@ -1,0 +1,158 @@
+{"delay_ms":0,"type":"scan.started","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","total_files":128,"ts":"2026-08-16T15:04:05Z"}
+{"delay_ms":28,"type":"file.scanning","path":"src/config.py","index":1,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000001","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-001_1","baseline_state":"new","validity":"verified_live","money_at_risk_inr":4200000,"suppressed":false,"rule_id":"FIN-SEC-001","severity":"critical","category":"secrets","file":"src/config.py","line":14,"col":18,"message":"Hardcoded Stripe secret key","compliance_ref":["PCI-DSS:8.6.2","DPDP:8"],"snippet":"STRIPE_KEY = \"sk_live_51H8xR2eZv…\"","fix_action":"env_lookup"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/ledger.py","index":2,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000002","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-010_2","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-010","severity":"critical","category":"injection","file":"src/ledger.py","line":88,"col":17,"message":"SQL built with string formatting","compliance_ref":["PCI-DSS:6.2.4","CWE-89"],"snippet":"cur.execute(\"SELECT * FROM txns WHERE id = %s\" % uid)","fix_action":"parameterize_query"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/webhooks.py","index":3,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000003","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-030_3","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-030","severity":"high","category":"logging","file":"src/webhooks.py","line":52,"col":22,"message":"PAN written to application log","compliance_ref":["PCI-DSS:3.4.1","GDPR:Art.5"],"snippet":"log.info(\"charge for card %s\", card.number)","fix_action":"redact_pii_log"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/auth.py","index":4,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000004","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-021_4","baseline_state":"new","validity":null,"money_at_risk_inr":350000,"suppressed":false,"rule_id":"FIN-SEC-021","severity":"high","category":"auth","file":"src/auth.py","line":31,"col":24,"message":"JWT decoded without signature verification","compliance_ref":["PCI-DSS:8.4.2","RBI-DPSC"],"snippet":"jwt.decode(token, verify=False)","fix_action":"enforce_jwt_verify"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/models/card.py","index":5,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000005","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-031_5","baseline_state":"new","validity":null,"money_at_risk_inr":400000,"suppressed":false,"rule_id":"FIN-SEC-031","severity":"high","category":"pii","file":"src/models/card.py","line":19,"col":5,"message":"Full PAN stored unmasked","compliance_ref":["PCI-DSS:3.5.1","RBI-DPSC"],"snippet":"pan = Column(String(19))","fix_action":"tokenize_pan"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/client.py","index":6,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000006","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-041_6","baseline_state":"new","validity":null,"money_at_risk_inr":90000,"suppressed":false,"rule_id":"FIN-SEC-041","severity":"high","category":"crypto","file":"src/client.py","line":12,"col":15,"message":"Cardholder data sent over plain HTTP","compliance_ref":["PCI-DSS:4.2.1","RBI-DPSC"],"snippet":"BASE_URL = \"http://payments.internal/v1\"","fix_action":"enforce_tls"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/settings.py","index":7,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000007","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-002_7","baseline_state":"new","validity":"inactive","money_at_risk_inr":80000,"suppressed":false,"rule_id":"FIN-SEC-002","severity":"high","category":"secrets","file":"src/settings.py","line":7,"col":14,"message":"High-entropy string in configuration","compliance_ref":["PCI-DSS:8.6.2","DPDP:8"],"snippet":"WEBHOOK_SECRET = \"whsec_9Jq2LmT4…\"","fix_action":"env_lookup"}}
+{"delay_ms":28,"type":"file.scanning","path":"src/api/transfer.py","index":8,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000008","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-050_8","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-050","severity":"medium","category":"ratelimit","file":"src/api/transfer.py","line":44,"col":5,"message":"Money-movement endpoint without a rate limit","compliance_ref":["PCI-DSS:6.2.4"],"fix_action":"add_rate_limit","snippet":null}}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000009","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-051_9","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-051","severity":"medium","category":"ratelimit","file":"src/api/transfer.py","line":61,"col":5,"message":"Money POST without an idempotency key","compliance_ref":[],"fix_action":"add_idempotency_key","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/api/payout.py","index":9,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000010","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-050_10","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-050","severity":"medium","category":"ratelimit","file":"src/api/payout.py","line":28,"col":5,"message":"Money-movement endpoint without a rate limit","compliance_ref":["PCI-DSS:6.2.4"],"fix_action":"add_rate_limit","snippet":null}}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000011","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-051_11","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-051","severity":"medium","category":"ratelimit","file":"src/api/payout.py","line":39,"col":5,"message":"Money POST without an idempotency key","compliance_ref":[],"fix_action":"add_idempotency_key","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/api/refund.py","index":10,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000012","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-051_12","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-051","severity":"medium","category":"ratelimit","file":"src/api/refund.py","line":22,"col":5,"message":"Money POST without an idempotency key","compliance_ref":[],"fix_action":"add_idempotency_key","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/util/hash.py","index":11,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000013","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-040_13","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-040","severity":"medium","category":"crypto","file":"src/util/hash.py","line":9,"col":5,"message":"Weak hash algorithm (MD5)","compliance_ref":["PCI-DSS:6.2.4"],"fix_action":"upgrade_crypto","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/util/token.py","index":12,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000014","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-040_14","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-040","severity":"medium","category":"crypto","file":"src/util/token.py","line":15,"col":5,"message":"Static initialization vector","compliance_ref":["PCI-DSS:3.6.1"],"fix_action":"upgrade_crypto","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/api/admin.py","index":13,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000015","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-020_15","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-020","severity":"medium","category":"auth","file":"src/api/admin.py","line":12,"col":5,"message":"Route missing an auth decorator","compliance_ref":["PCI-DSS:8.4.2"],"fix_action":"add_auth_decorator","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"src/api/reports.py","index":14,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000016","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-020_16","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-020","severity":"medium","category":"auth","file":"src/api/reports.py","line":8,"col":5,"message":"Route missing an auth decorator","compliance_ref":["PCI-DSS:8.4.2"],"fix_action":"add_auth_decorator","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"requirements.txt","index":15,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000017","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-060_17","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-060","severity":"low","category":"supplychain","file":"requirements.txt","line":14,"col":5,"message":"Dependency runs an install script","compliance_ref":["PCI-DSS:6.3.2"],"fix_action":"pin_or_remove_dep","snippet":null}}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000018","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-060_18","baseline_state":"new","validity":null,"money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-060","severity":"low","category":"supplychain","file":"requirements.txt","line":21,"col":5,"message":"Dependency pinned to a floating range","compliance_ref":["PCI-DSS:6.3.2"],"fix_action":"pin_or_remove_dep","snippet":null}}
+{"delay_ms":28,"type":"file.scanning","path":"tests/fixtures/sample.json","index":16,"total":128}
+{"delay_ms":90,"type":"finding","finding":{"id":"00000000-0000-4000-8000-000000000019","scan_id":"7f3c1e88-4a2b-4f10-9c55-2b6d0a1e9f44","end_line":null,"fingerprint":"fp_fin-sec-002_19","baseline_state":"new","validity":"unknown","money_at_risk_inr":null,"suppressed":false,"rule_id":"FIN-SEC-002","severity":"low","category":"secrets","file":"tests/fixtures/sample.json","line":3,"col":5,"message":"High-entropy string in test fixture","compliance_ref":["PCI-DSS:8.6.2"],"fix_action":"env_lookup","snippet":null}}
+{"delay_ms":10,"type":"progress","scanned":16,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_0.py","index":17,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_1.py","index":18,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_2.py","index":19,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_3.py","index":20,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_4.py","index":21,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_5.py","index":22,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_6.py","index":23,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_7.py","index":24,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_8.py","index":25,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_9.py","index":26,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_10.py","index":27,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg0/module_11.py","index":28,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_12.py","index":29,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_13.py","index":30,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_14.py","index":31,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_15.py","index":32,"total":128}
+{"delay_ms":10,"type":"progress","scanned":32,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_16.py","index":33,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_17.py","index":34,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_18.py","index":35,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_19.py","index":36,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_20.py","index":37,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_21.py","index":38,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_22.py","index":39,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg1/module_23.py","index":40,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_24.py","index":41,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_25.py","index":42,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_26.py","index":43,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_27.py","index":44,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_28.py","index":45,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_29.py","index":46,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_30.py","index":47,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_31.py","index":48,"total":128}
+{"delay_ms":10,"type":"progress","scanned":48,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_32.py","index":49,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_33.py","index":50,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_34.py","index":51,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg2/module_35.py","index":52,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_36.py","index":53,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_37.py","index":54,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_38.py","index":55,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_39.py","index":56,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_40.py","index":57,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_41.py","index":58,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_42.py","index":59,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_43.py","index":60,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_44.py","index":61,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_45.py","index":62,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_46.py","index":63,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg3/module_47.py","index":64,"total":128}
+{"delay_ms":10,"type":"progress","scanned":64,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_48.py","index":65,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_49.py","index":66,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_50.py","index":67,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_51.py","index":68,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_52.py","index":69,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_53.py","index":70,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_54.py","index":71,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_55.py","index":72,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_56.py","index":73,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_57.py","index":74,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_58.py","index":75,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg4/module_59.py","index":76,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_60.py","index":77,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_61.py","index":78,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_62.py","index":79,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_63.py","index":80,"total":128}
+{"delay_ms":10,"type":"progress","scanned":80,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_64.py","index":81,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_65.py","index":82,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_66.py","index":83,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_67.py","index":84,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_68.py","index":85,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_69.py","index":86,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_70.py","index":87,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg5/module_71.py","index":88,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_72.py","index":89,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_73.py","index":90,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_74.py","index":91,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_75.py","index":92,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_76.py","index":93,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_77.py","index":94,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_78.py","index":95,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_79.py","index":96,"total":128}
+{"delay_ms":10,"type":"progress","scanned":96,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_80.py","index":97,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_81.py","index":98,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_82.py","index":99,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg6/module_83.py","index":100,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_84.py","index":101,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_85.py","index":102,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_86.py","index":103,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_87.py","index":104,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_88.py","index":105,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_89.py","index":106,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_90.py","index":107,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_91.py","index":108,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_92.py","index":109,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_93.py","index":110,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_94.py","index":111,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg7/module_95.py","index":112,"total":128}
+{"delay_ms":10,"type":"progress","scanned":112,"total":128,"findings_so_far":19}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_96.py","index":113,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_97.py","index":114,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_98.py","index":115,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_99.py","index":116,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_100.py","index":117,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_101.py","index":118,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_102.py","index":119,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_103.py","index":120,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_104.py","index":121,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_105.py","index":122,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_106.py","index":123,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg8/module_107.py","index":124,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg9/module_108.py","index":125,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg9/module_109.py","index":126,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg9/module_110.py","index":127,"total":128}
+{"delay_ms":28,"type":"file.scanning","path":"src/pkg9/module_111.py","index":128,"total":128}
+{"delay_ms":10,"type":"progress","scanned":128,"total":128,"findings_so_far":19}
+{"delay_ms":20,"type":"error","code":"FIN_ERR_PARSE","path":"src/vendor/minified.js","detail":"Unsupported syntax; file skipped"}
+{"delay_ms":150,"type":"scan.completed","compliance_score":72.5,"money_at_risk_inr":5120000,"counts":{"critical":2,"high":5,"medium":9,"low":3,"info":0},"exit_code":1}
