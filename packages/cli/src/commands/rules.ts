@@ -8,7 +8,7 @@
  */
 
 import { existsSync, readFileSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 
 import { ApiClient } from '../api/client.js';
 import { CliError } from '../api/errors.js';
@@ -75,12 +75,10 @@ export async function runRules(
     case 'validate':
       return validateRule(target, globals);
     case 'test':
-      throw new CliError('`sirius rules test` is not implemented.', {
-        hint: 'It needs a rule-execution endpoint the API does not expose yet. See docs/decisions.md.',
-      });
+      return testRule(target, flags, globals);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: list, show, validate.',
+        hint: 'Expected one of: list, show, validate, test.',
       });
   }
 }
@@ -284,7 +282,7 @@ async function validateRule(path: string | undefined, globals: GlobalFlags): Pro
     askedServer
       ? `\nChecked: schema, vocabularies and clause numbers here; patterns by the API.\n`
       : `\nChecked: schema, vocabularies and clause numbers. Whether the pattern matches\n` +
-          `what you think it matches is not checked — that needs the rule engine.\n`,
+          `what you think it matches is not checked here — run \`sirius rules test\` for that.\n`,
   );
 
   // Exit 1, not 2. An invalid rule is the answer to the question asked, the same
@@ -302,4 +300,173 @@ function hexToRgb(hex: string): string {
   const value = hex.replace('#', '');
   const int = Number.parseInt(value, 16);
   return `${(int >> 16) & 255};${(int >> 8) & 255};${int & 255}`;
+}
+
+
+// ---- test -------------------------------------------------------------------
+
+/**
+ * Runs a rule against a fixture and checks it fired where it was supposed to.
+ *
+ * Semgrep's convention, because it is a good one and the whole project is built
+ * on copying good ones: the fixture annotates its own expectations. A comment
+ * `sirius-test: <rule-id>` says the *next* line must match, and `sirius-ok:
+ * <rule-id>` says it must not. The fixture is therefore readable on its own,
+ * and reviewing it is reviewing the rule.
+ *
+ * A rule that fires everywhere passes a test that only checks the lines it was
+ * supposed to hit, so unexpected matches fail too.
+ */
+async function testRule(
+  target: string | undefined,
+  flags: { fixture?: string; json?: boolean },
+  globals: GlobalFlags,
+): Promise<void> {
+  void globals;
+
+  if (!target) {
+    throw new CliError('Which rule?', {
+      hint: 'e.g. sirius rules test my-rule.yaml --fixture cases/my-rule.py',
+    });
+  }
+
+  const rulePath = resolve(process.cwd(), target);
+  if (!existsSync(rulePath)) throw new CliError(`No such file: ${target}`);
+  if (statSync(rulePath).isDirectory()) {
+    throw new CliError(`${target} is a directory, and test takes one rule file.`, {
+      hint: 'e.g. sirius rules test rules/my-rule.yaml',
+    });
+  }
+
+  // The fixture defaults to a sibling of the rule, which is where an author
+  // writing both of them would naturally put it.
+  const fixturePath = flags.fixture
+    ? resolve(process.cwd(), flags.fixture)
+    : findFixtureBeside(rulePath);
+
+  if (!fixturePath || !existsSync(fixturePath)) {
+    throw new CliError('No fixture to run the rule against.', {
+      hint: `Pass --fixture <file>, or put one beside the rule named ${basename(rulePath).replace(/\.ya?ml$/, '')}.<ext>`,
+    });
+  }
+
+  const { runRuleDocument } = await import('../engine/rule-interpreter.js');
+  const source = readFileSync(fixturePath, 'utf8');
+  const run = await runRuleDocument(readFileSync(rulePath, 'utf8'), {
+    path: fixturePath,
+    source,
+  });
+
+  const expectations = expectationsIn(source, run.id);
+  const fired = new Set(run.matches.map((match) => match.line));
+
+  const missed = expectations.filter((e) => e.shouldMatch && !fired.has(e.line));
+  const spurious = expectations.filter((e) => !e.shouldMatch && fired.has(e.line));
+  // A line that fired with no annotation either way is not a failure — the
+  // fixture is allowed to be about one rule and contain other code.
+  const passed = expectations.length - missed.length - spurious.length;
+
+  if (flags.json) {
+    process.stdout.write(
+      JSON.stringify(
+        {
+          schema: 'sirius.rules.test/v1',
+          rule: run.id,
+          fixture: relative(process.cwd(), fixturePath),
+          expected: expectations.length,
+          passed,
+          missed,
+          spurious,
+          unsupported: run.unsupported,
+          matches: run.matches,
+        },
+        null,
+        2,
+      ) + '\n',
+    );
+    if (missed.length + spurious.length > 0 || run.unsupported.length > 0) process.exitCode = 1;
+    return;
+  }
+
+  const out: string[] = [''];
+  out.push(`  ${run.id || basename(rulePath)}  against  ${relative(process.cwd(), fixturePath)}`);
+  out.push('');
+
+  if (run.error) {
+    out.push(`  error: ${run.error}`);
+    process.stdout.write(out.join('\n') + '\n\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  if (expectations.length === 0) {
+    out.push('  The fixture makes no claims, so this checked nothing.');
+    out.push('  Annotate it:  # sirius-test: ' + (run.id || 'SIR-SEC-NNN') + '   above a line that must match,');
+    out.push('                # sirius-ok:   ' + (run.id || 'SIR-SEC-NNN') + '   above one that must not.');
+    process.stdout.write(out.join('\n') + '\n\n');
+    process.exitCode = 1;
+    return;
+  }
+
+  for (const expectation of expectations) {
+    const hit = fired.has(expectation.line);
+    const ok = hit === expectation.shouldMatch;
+    const mark = ok ? 'ok  ' : 'FAIL';
+    const wanted = expectation.shouldMatch ? 'should match' : 'should not match';
+    out.push(`  ${mark}  line ${String(expectation.line).padStart(3)}  ${wanted}`);
+    if (!ok) out.push(`          ${expectation.text}`);
+  }
+
+  out.push('');
+  out.push(`  ${passed} of ${expectations.length} as expected.`);
+
+  // Unsupported clauses are reported loudly and fail the run. A pattern nobody
+  // executed cannot be evidence that the rule is right, and reporting a pass
+  // for it is how a rule tester becomes worse than no rule tester.
+  if (run.unsupported.length > 0) {
+    out.push('');
+    out.push('  Not everything in this rule could be executed:');
+    for (const clause of run.unsupported) out.push(`    · ${clause}`);
+    out.push('  The result above covers only the clauses that ran.');
+  }
+
+  process.stdout.write(out.join('\n') + '\n\n');
+  if (missed.length + spurious.length > 0 || run.unsupported.length > 0) process.exitCode = 1;
+}
+
+interface Expectation {
+  line: number;
+  shouldMatch: boolean;
+  text: string;
+}
+
+/** `# sirius-test: <id>` and `# sirius-ok: <id>`, each about the line below it. */
+function expectationsIn(source: string, ruleId: string): Expectation[] {
+  const lines = source.split('\n');
+  const found: Expectation[] = [];
+
+  lines.forEach((line, index) => {
+    const annotation = /(?:#|\/\/)\s*sirius-(test|ok)\s*:\s*([A-Za-z0-9-]+)/.exec(line);
+    if (!annotation) return;
+    // An annotation naming a different rule belongs to that rule's test.
+    if (ruleId && annotation[2] !== ruleId) return;
+
+    const subject = index + 2; // the line below the comment
+    found.push({
+      line: subject,
+      shouldMatch: annotation[1] === 'test',
+      text: (lines[subject - 1] ?? '').trim(),
+    });
+  });
+
+  return found;
+}
+
+/** A fixture named like the rule, sitting beside it. */
+function findFixtureBeside(rulePath: string): string | undefined {
+  const stem = rulePath.replace(/\.ya?ml$/, '');
+  for (const extension of ['.py', '.js', '.ts', '.go', '.txt']) {
+    if (existsSync(stem + extension)) return stem + extension;
+  }
+  return undefined;
 }

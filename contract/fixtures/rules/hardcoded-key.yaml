@@ -1,0 +1,14 @@
+rule:
+  id: SIR-SEC-003
+  category: secrets
+  severity: critical
+  languages: [python]
+  message: "Hardcoded payment-provider secret key."
+  metadata:
+    compliance: { pci_dss: ["8.6.2"], dpdp: ["8"] }
+    remediation_action: env_lookup
+  match:
+    kind: regex
+    regex: '(sk_live_[0-9a-zA-Z]{16,}|rk_live_[0-9a-zA-Z]{16,})'
+  fix: { action: env_lookup, target: api_key }
+  suppress: "# sirius-ignore: SIR-SEC-003"

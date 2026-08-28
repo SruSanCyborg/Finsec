@@ -1,0 +1,15 @@
+rule:
+  id: SIR-SEC-012
+  category: injection
+  severity: critical
+  languages: [python]
+  message: "SQL query built with string formatting; use bound parameters."
+  metadata:
+    compliance: { pci_dss: ["6.2.4"], cwe: ["CWE-89"] }
+    remediation_action: parameterize_query
+  match:
+    kind: ast
+    pattern: |
+      $CUR.execute("..." % $X)
+  fix: { action: parameterize_query, target: query }
+  suppress: "# sirius-ignore: SIR-SEC-012"

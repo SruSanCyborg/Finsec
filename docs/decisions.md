@@ -1093,3 +1093,52 @@ flows drawn out and a column for what each command hands back. Hand-authored,
 so unlike the revenue page it is committed rather than generated.
 
 ---
+## D-034 — `rules test` needed an interpreter, not an endpoint
+
+The last command that still answered "not implemented", and the reason it gave
+had drifted from the truth: *"it needs a rule-execution endpoint the API does
+not expose yet."* No endpoint would have helped. Nothing anywhere could **run**
+a rule document — the engine's thirteen rules are compiled TypeScript matchers,
+and `rules validate` checks a YAML rule's structure while explicitly saying it
+has no opinion on whether the patterns match.
+
+`engine/rule-interpreter.ts` is the missing piece, at a size it can defend:
+
+| clause | support |
+|---|---|
+| `regex` | full, per line |
+| `entropy: { min_bits }` | full — Shannon bits over the string literals on the line, not the line itself, because prose clears 3.5 bits comfortably |
+| `pattern` | a metavariable subset: `$X` matches one node, `"..."` any string literal, everything else must match |
+| `pattern-either` | any alternative |
+| `patterns` | all of them |
+
+**It is not Semgrep, and the `unsupported` list is how it says so.** A clause
+outside the subset is named and *fails the run*. Returning "no findings" for a
+pattern nobody executed is the failure mode that makes a rule tester worse than
+having none: the author reads a green result and ships a rule that fires on
+nothing. Two things are refused outright for the same reason — a pattern of
+nothing but metavariables, which would match every node in any file, and a
+regex that does not compile.
+
+**The fixture annotates its own expectations**, Semgrep-style, because this
+project's whole method is copying good conventions: `# sirius-test: <id>` says
+the next line must match, `# sirius-ok: <id>` says it must not. The fixture
+reads on its own and reviewing it is reviewing the rule — and a rule that fires
+on everything fails, because the `ok` lines fail.
+
+The tokeniser had one bug worth recording: with the identifier alternative
+first, the `f` of an f-string matched as its own token, so `f"…"` arrived as two
+tokens and every f-string came out one token longer than the pattern written to
+catch it. The length check then rejected it before any comparison happened. The
+string alternatives come first now.
+
+`contract/fixtures/rules/` holds two runnable examples in the PRD's own format —
+one regex, one AST — each with its fixture. Both are numbered into free slots
+(`SIR-SEC-003`, `SIR-SEC-012`), because `validate` correctly refuses an id that
+already belongs to a compiled rule, and an example that fails validation is not
+an example.
+
+`rules validate` used to close by saying the semantic check "needs the rule
+engine". It exists now, so it points at `sirius rules test` instead.
+
+---

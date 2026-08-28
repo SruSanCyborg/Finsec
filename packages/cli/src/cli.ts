@@ -114,11 +114,12 @@ export function buildProgram(): Command {
 
   program
     .command('rules')
-    .description('List, show, or validate rules')
-    .argument('[subcommand]', 'list | show | validate', 'list')
-    .argument('[target]', 'rule id for show, file path for validate')
+    .description('List, show, validate, or test rules')
+    .argument('[subcommand]', 'list | show | validate | test', 'list')
+    .argument('[target]', 'rule id for show, file path for validate and test')
     .option('--category <name>', 'filter by category')
     .option('--ruleset <name>', 'filter by ruleset')
+    .option('--fixture <path>', 'the annotated file to run a rule against')
     .option('--json', 'machine-readable output')
     .action(async (sub: string, target: string | undefined, options: Record<string, unknown>, command: Command) => {
       const { runRules } = await import('./commands/rules.js');

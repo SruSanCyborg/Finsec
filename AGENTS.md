@@ -132,7 +132,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
-| `rules list\|show\|validate` | Done, from the compiled catalogue. `validate` checks the schema, the vocabularies and the clause numbers offline; `test` still needs a rule engine |
+| `rules list\|show\|validate\|test` | Done, from the compiled catalogue. `validate` checks schema, vocabularies and clause numbers offline; `test` runs a YAML rule against an annotated fixture |
 | `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
 | `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2 |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
@@ -146,11 +146,15 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`revenue stress`** | Done — six distribution shifts applied to the generator; the money edge holds in 3 of 6, the compliance rule in 6 of 6 |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 636 passing |
+| Tests | 647 passing |
 
-**Where the API is still required:** `rules test` (needs a YAML rule
-interpreter, not just an endpoint) and PDF reports. Everything else runs with no
-backend at all.
+**Where the API is still required:** PDF reports, and nothing else. `rules test`
+was the last holdout and the reason it gave was wrong — it did not need an
+endpoint, it needed something able to *run* a rule document. `engine/rule-
+interpreter.ts` is that, at an honest size: regex and entropy in full, a
+metavariable subset of `pattern` (`$X` matches one node, `"..."` any string),
+and a named `unsupported` list for anything outside the subset, which fails the
+run rather than passing it. See D-034.
 
 **"Implemented" is not "works".** Seven features were listed Done here while
 being unreachable in the configuration everything defaults to — `fix` rejected
