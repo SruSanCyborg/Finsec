@@ -19,6 +19,7 @@ import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
 import type { RecoveryOutcome } from '../revenue/recover.js';
+import type { Delta, SweepSummary } from '../revenue/sweep.js';
 import type { Assessment, Intervention, RiskRecord } from '../revenue/types.js';
 
 const DIM = '\u001b[38;5;244m';
@@ -733,6 +734,145 @@ export function renderExplanation(explanation: RecordExplanation, palette: Palet
     }
     lines.push('');
   }
+
+  return lines.join('\n');
+}
+
+/**
+ * The sweep: one row per batch, then the mean, then the spread.
+ *
+ * The per-seed rows are not decoration. A mean edge of +0.6% built from eight
+ * seeds that all agree is a different claim from the same mean built from four
+ * wins and four losses, and only the rows show which one you have.
+ */
+export function renderSweep(summary: SweepSummary, palette: Palette): string {
+  const lines: string[] = [];
+  const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
+  const signed = (value: number) => `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
+
+  lines.push('');
+  lines.push(palette.hr);
+  lines.push(
+    ` ${palette.bold('SWEEP')}   ${palette.dim(
+      `${summary.seeds.length} independently generated batches · ` +
+        `${summary.size.payments + summary.size.checkouts + summary.size.invoices} records each`,
+    )}`,
+  );
+  lines.push(palette.hr);
+  lines.push('');
+
+  lines.push(
+    `  ${palette.dim('seed'.padEnd(14))}${palette.dim('precision'.padStart(10))}` +
+      `${palette.dim('recall'.padStart(9))}${palette.dim('recall ₹'.padStart(10))}` +
+      `${palette.dim('vs heuristic'.padStart(14))}${palette.dim('of ceiling'.padStart(12))}` +
+      `${palette.dim('touched'.padStart(9))}`,
+  );
+
+  for (const row of summary.rows) {
+    const edge = row.net_paise / Math.max(1, row.best_heuristic_paise) - 1;
+    const ceiling = row.net_paise / Math.max(1, row.ceiling_paise);
+    lines.push(
+      `  ${row.seed.padEnd(14)}${pct(row.precision).padStart(10)}${pct(row.recall).padStart(9)}` +
+        `${pct(row.money_recall).padStart(10)}` +
+        `${(edge >= 0 ? palette.green : palette.amber)(signed(edge).padStart(14))}` +
+        `${pct(ceiling).padStart(12)}` +
+        `${(row.forbidden_touched === 0 ? palette.green : palette.red)(
+          String(row.forbidden_touched).padStart(9),
+        )}`,
+    );
+  }
+
+  lines.push('');
+  lines.push(
+    `  ${palette.bold('mean'.padEnd(14))}${palette.bold(pct(summary.mean.precision).padStart(10))}` +
+      `${palette.bold(pct(summary.mean.recall).padStart(9))}` +
+      `${palette.bold(pct(summary.mean.money_recall).padStart(10))}` +
+      `${palette.bold((summary.mean.edge >= 0 ? palette.green : palette.amber)(signed(summary.mean.edge).padStart(14)))}` +
+      `${palette.bold(pct(summary.mean.share_of_ceiling).padStart(12))}` +
+      `${palette.bold(
+        (summary.forbidden_touched === 0 ? palette.green : palette.red)(
+          String(summary.forbidden_touched).padStart(9),
+        ),
+      )}`,
+  );
+  lines.push('');
+
+  const wins = `${summary.wins} of ${summary.rows.length}`;
+  lines.push(
+    `  ${palette.dim(
+      `beat every capacity-matched heuristic on ${wins} batches · mean calibration gap ${pct(
+        summary.mean.calibration_error,
+      )}`,
+    )}`,
+  );
+  lines.push(
+    `  ${palette.dim(
+      `over the same batches the heuristics touched ${summary.heuristic_forbidden_touched} records nothing may touch; this touched ${summary.forbidden_touched}`,
+    )}`,
+  );
+  lines.push('');
+
+  if (summary.wins < summary.rows.length) {
+    lines.push(
+      palette.dim(
+        `  It does not win every batch, and the rows say which. A mean built from ` +
+          `disagreement\n  is a weaker claim than the same mean built from agreement.\n`,
+      ),
+    );
+  }
+
+  return lines.join('\n');
+}
+
+/** The comparison table: what changed since a saved sweep, including what got worse. */
+export function renderComparison(deltas: readonly Delta[], palette: Palette, note?: string): string {
+  const lines: string[] = [];
+
+  const format = (value: number, kind: Delta['kind']) =>
+    kind === 'share' ? `${(value * 100).toFixed(1)}%` : kind === 'money' ? palette.rupee(value) : String(value);
+
+  lines.push('');
+  lines.push(palette.hr);
+  lines.push(` ${palette.bold('AGAINST THE SAVED RUN')}`);
+  lines.push(palette.hr);
+  lines.push('');
+
+  if (note) {
+    lines.push(`  ${palette.red(palette.glyph('warn'))} ${palette.amber(note)}`);
+    lines.push('');
+  }
+
+  let better = 0;
+  let worse = 0;
+
+  for (const delta of deltas) {
+    const improved = delta.higherIsBetter ? delta.change > 0 : delta.change < 0;
+    const unchanged = Math.abs(delta.change) < 1e-9;
+    if (!unchanged) improved ? (better += 1) : (worse += 1);
+
+    const paint = unchanged ? palette.dim : improved ? palette.green : palette.red;
+    const arrow = unchanged ? palette.glyph('skip') : delta.change > 0 ? '▲' : '▼';
+    const changeText =
+      delta.kind === 'share'
+        ? `${delta.change >= 0 ? '+' : ''}${(delta.change * 100).toFixed(1)}pp`
+        : `${delta.change >= 0 ? '+' : ''}${delta.change}`;
+
+    lines.push(
+      `  ${delta.name.padEnd(22)}${format(delta.before, delta.kind).padStart(9)} ${palette.dim('→')} ` +
+        `${format(delta.after, delta.kind).padStart(9)}   ${paint(`${arrow} ${changeText}`)}` +
+        `${delta.higherIsBetter ? '' : palette.dim('   (lower is better)')}`,
+    );
+  }
+
+  lines.push('');
+  lines.push(
+    `  ${palette.dim(
+      worse === 0 && better === 0
+        ? 'nothing moved.'
+        : `${better} better, ${worse} worse. A change that improves one number and quietly costs another is the one worth catching.`,
+    )}`,
+  );
+  lines.push('');
 
   return lines.join('\n');
 }

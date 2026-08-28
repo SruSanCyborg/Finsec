@@ -53,6 +53,10 @@ interface RevenueFlags {
   verify?: string;
   /** `explain` takes the record id as its argument, so the batch moves to a flag. */
   batch?: string;
+  seeds?: number;
+  capacityShare?: number;
+  save?: string;
+  against?: string;
 }
 
 interface GlobalFlags {
@@ -114,9 +118,11 @@ export async function runRevenue(
       return auditTrail(target, flags);
     case 'explain':
       return explainRecord(target, flags, globals);
+    case 'sweep':
+      return runSweep(flags, globals);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: gen, detect, eval, recover, explain, audit.',
+        hint: 'Expected one of: gen, detect, eval, recover, explain, sweep, audit.',
       });
   }
 }
@@ -419,6 +425,70 @@ async function runRecovery(
 
   // The rules table quotes this run's limits, not the built-in ones.
   await writePaced(renderRecovery(result.outcome, rulesFor(limits), palette, trailPath).split('\n'), pace * 3);
+}
+
+// ---- sweep ------------------------------------------------------------------
+
+/**
+ * `sirius revenue sweep` — is it stable, and did that change help?
+ *
+ * One batch is an anecdote. Every time this model changed, the honest answer
+ * needed several independently generated batches and a comparison against the
+ * previous numbers, and getting them meant a throwaway script. Three of those
+ * were written before this command existed.
+ *
+ * `--save` writes the run; `--against` compares to a saved one and reports the
+ * deltas, including the ones that got worse. Refusing to compare runs that used
+ * different seeds matters more than it looks: subtracting two different
+ * experiments produces a number that reads exactly like a result.
+ */
+async function runSweep(flags: RevenueFlags, globals: GlobalFlags): Promise<void> {
+  const { sweep, compare, comparable } = await import('../revenue/sweep.js');
+  const { costsFrom } = await import('../revenue/policy.js');
+
+  const summary = sweep({
+    seed: flags.seed ?? 'sirius-sweep',
+    count: flags.seeds ?? 8,
+    payments: flags.payments ?? 700,
+    checkouts: flags.checkouts ?? 200,
+    invoices: flags.invoices ?? 120,
+    costs: costsFrom(projectConfig().revenue),
+    ...(flags.capacityShare ? { capacityShare: flags.capacityShare } : {}),
+  });
+
+  if (flags.save) {
+    const path = resolve(process.cwd(), flags.save);
+    writeFileSync(path, JSON.stringify(summary, null, 2) + '\n', 'utf8');
+  }
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(summary, null, 2) + '\n');
+    return;
+  }
+
+  const capabilities = detectCapabilities({ noColor: globals.color === false });
+  const palette = paletteFor({
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: capabilities.width,
+  });
+
+  const { renderSweep, renderComparison } = await import('../render/revenue.js');
+  process.stdout.write(renderSweep(summary, palette));
+
+  if (flags.against) {
+    const path = resolve(process.cwd(), flags.against);
+    if (!existsSync(path)) throw new CliError(`No saved sweep at ${flags.against}.`);
+
+    const before = JSON.parse(readFileSync(path, 'utf8')) as typeof summary;
+    process.stdout.write(renderComparison(compare(before, summary), palette, comparable(before, summary)));
+  }
+
+  if (flags.save) {
+    process.stdout.write(
+      `  ${'Saved to'} ${resolve(process.cwd(), flags.save)} — compare a later run with --against\n\n`,
+    );
+  }
 }
 
 // ---- explain ----------------------------------------------------------------

@@ -246,6 +246,41 @@ anything is unexplained, so a nightly close can gate on it.
 
 ---
 
+## Is it stable, and did that change help?
+
+```bash
+sirius revenue sweep --seeds 8 --save baseline.json
+# ... change the model ...
+sirius revenue sweep --seeds 8 --against baseline.json
+```
+
+One batch is an anecdote. The sweep runs the whole evaluation over
+independently generated batches and prints **the rows, not just the mean** — a
+mean edge of +2.0% built from eight agreeing batches is a different claim from
+the same mean built from five wins and three losses, and only the rows say which
+one you have.
+
+```
+  seed           precision   recall  recall ₹  vs heuristic  of ceiling  touched
+  sirius-sweep-1     53.3%    27.6%     87.7%         -0.3%       90.8%        0
+  sirius-sweep-3     63.3%    32.2%     88.3%         +5.1%       93.5%        0
+  ...
+  mean               47.7%    24.9%     82.0%         +2.0%       86.4%        0
+
+  beat every capacity-matched heuristic on 5 of 6 batches
+  over the same batches the heuristics touched 10 records nothing may touch; this touched 0
+```
+
+`--against` prints the deltas since a saved run, **including the ones that got
+worse** — tightening capacity to 5%, for instance, buys +2.2pp of edge over the
+heuristics and costs 19.7pp of recall, and the table says "1 better, 5 worse"
+rather than leading with the improvement. Measures where lower is better are
+marked as such.
+
+It refuses to call two runs a comparison when they used different seeds or
+different batch sizes. Subtracting two different experiments produces a number
+that reads exactly like a result.
+
 ## Rehearsing it
 
 ```bash

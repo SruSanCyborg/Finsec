@@ -698,6 +698,37 @@ does not get to edit the obligation the threshold answers to.
 
 ---
 
+## D-026 — One batch is an anecdote
+
+`revenue sweep` exists because its absence was felt three times. Every model
+change during development needed the same answer — is it better, and on how many
+batches — and each time that meant writing a throwaway script. A tool whose
+author keeps improvising the same measurement is a tool missing a command.
+
+**The rows are the point, not the mean.** A mean edge of +2.0% built from eight
+agreeing batches is a different claim from the same mean built from five wins
+and three losses. The table prints both, and says so out loud when they
+disagree.
+
+**`--against` reports what got worse.** Tightening capacity to 5% buys +2.2pp of
+edge over the heuristics and costs 19.7pp of recall; the summary line reads "1
+better, 5 worse" rather than leading with the improvement. Measures where lower
+is better — calibration error, forbidden touches — are marked, because a table
+where every arrow means the same thing will eventually be read wrong.
+
+**It refuses to compare two different experiments.** Runs over different seeds
+or different batch sizes still print their deltas, above a warning saying the
+difference is not a comparison. Silently subtracting them would produce a number
+that reads exactly like a result, which is the dangerous kind of wrong.
+
+This is also the answer to a problem this repo hit twice in one session: figures
+in `docs/revenue.md` and in the published artifact were transcribed by hand from
+a terminal and went stale as soon as the model changed. A sweep is
+`--json`-able and reproducible from a seed, so the numbers can be regenerated
+rather than remembered.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch
