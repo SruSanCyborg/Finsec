@@ -11,6 +11,7 @@ import { formatInr } from '../money.js';
 import type { AttackPath, Provenance } from '../engine/threat.js';
 import type { Finding, Severity } from '../domain.js';
 import type { RenderOptions } from './plain.js';
+import { wrapText } from '../wrap.js';
 
 const SEVERITY_ANSI: Record<Severity, string> = {
   critical: '\u001b[38;5;203m',
@@ -26,24 +27,8 @@ const RESET = '\u001b[0m';
 
 const paint = (text: string, color: string, on: boolean) => (on ? `${color}${text}${RESET}` : text);
 
-/** Greedy word wrap. */
-export function wrap(text: string, width: number): string[] {
-  if (width < 12) return [text];
-  const words = text.split(/\s+/).filter(Boolean);
-  const lines: string[] = [];
-  let current = '';
-
-  for (const word of words) {
-    if (current === '') current = word;
-    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
-    else {
-      lines.push(current);
-      current = word;
-    }
-  }
-  if (current) lines.push(current);
-  return lines.length > 0 ? lines : [text];
-}
+/** Re-exported so existing callers and tests keep their import path. */
+export const wrap = wrapText;
 
 export interface ThreatReport {
   paths: AttackPath[];
@@ -177,11 +162,15 @@ export function renderThreatReport(
 
   if (!report.validated && secrets.length > 0 && report.exposure.size === 0) {
     lines.push('');
-    lines.push(
-      ` ${paint('note', DIM, color)}       secrets were not checked against their providers. ` +
-        paint('--validate-secrets', BOLD, color) +
-        paint(' asks, read-only.', DIM, color),
+    // Wrapped: this line names the flag that turns on live verification, and
+    // it was being cut off exactly where the flag appears.
+    const note = wrapText(
+      'secrets were not checked against their providers. --validate-secrets asks, read-only.',
+      Math.max(24, (options.width ?? 80) - 12),
     );
+    for (const [index, chunk] of note.entries()) {
+      lines.push(` ${paint(index === 0 ? 'note' : '    ', DIM, color)}       ${paint(chunk, DIM, color)}`);
+    }
   }
 
   return lines;

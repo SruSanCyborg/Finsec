@@ -7,6 +7,7 @@
  * this is the command that shows it.
  */
 
+import { wrapText } from '../wrap.js';
 import { CliError } from '../api/errors.js';
 import { EXPOSURE_MODEL, estimateExposure, explain } from '../engine/exposure-model.js';
 import { detectCapabilities } from '../ui/theme.js';
@@ -50,7 +51,9 @@ export async function runExplain(
 
     for (const [id, entry] of Object.entries(EXPOSURE_MODEL)) {
       process.stdout.write(`  ${paint(id, BOLD)}  ${paint(formatInr(entry.amount), DIM)}\n`);
-      process.stdout.write(`     ${paint(entry.anchor, DIM)}\n`);
+      for (const chunk of wrapText(entry.anchor, Math.max(24, capabilities.width - 7))) {
+        process.stdout.write(`     ${paint(chunk, DIM)}\n`);
+      }
     }
     process.stdout.write(
       `\n  ${paint('sirius explain SIR-SEC-001', BOLD)}${paint('  for one rule in full', DIM)}\n\n`,
@@ -76,7 +79,7 @@ export async function runExplain(
 
   process.stdout.write('\n');
   process.stdout.write(`  ${paint(id, BOLD)}   ${paint(formatInr(result.amount), BOLD)}\n\n`);
-  for (const raw of explain(input).slice(2)) {
+  for (const raw of explain(input, capabilities.width).slice(2)) {
     process.stdout.write(color ? `${DIM}${raw}${RESET}\n` : `${raw}\n`);
   }
   process.stdout.write('\n');

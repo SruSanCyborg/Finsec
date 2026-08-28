@@ -255,6 +255,56 @@ nothing leaks into the prompt, and `?1002l`/`?1049l` restore on exit.
 
 ---
 
+## D-017 — The local engine is paced, and the verdict comes last
+
+**Found by rehearsing, not by testing.** A full-screen rehearsal of the demo
+showed the scan jumping straight from the spinner to the attack paths. No
+findings, no summary, no gate verdict — the two things the pitch is built on
+were simply not on screen. Every test was green, because every test asserted on
+strings the renderer *returned*, and the renderer was returning them correctly.
+
+**Cause.** The hosted path streams over a WebSocket, so findings arrive spread
+over time and a terminal paints between them. The local engine has no such gap:
+on a three-file fixture it emits every frame in the same millisecond. The shell
+buffers on a 60ms tick, so the whole scan landed in one flush, the viewport
+painted once, and everything above the last screenful was scrolled past without
+ever being drawn. It was all in the transcript, and all invisible.
+
+**Fixes, in order of how much they matter.**
+
+1. **Pace the local engine** (`engine/pace.ts`). ~260ms between findings, ~45ms
+   for progress frames, ~90ms lead. Structural frames are not delayed — dead air
+   that shows nothing new. This is not decoration: it restores the behaviour the
+   streamed path gets for free. Off for `--json`, `--sarif`, pipes, and
+   non-TTYs, so a CI run pays nothing; `SIRIUS_SCAN_PACE` overrides, `0` disables.
+2. **Pace the threat report too.** It is written after the stream ends, so frame
+   pacing does not cover it; a single write of twenty lines scrolled nineteen of
+   them past. Emitted block by block, split on blank lines, because an attack
+   path reads as a unit.
+3. **Move the summary after the threat stage.** It is the conclusion — gate
+   verdict, total at risk, what was actually scanned — and it was being printed
+   before twenty lines of attack paths that pushed it off the top. The last
+   thing on screen should be the thing the reader acts on. This exposed the
+   mirror-image bug in piped output, where the threat report then preceded the
+   findings it names by rule id, so the findings list was split out
+   (`renderFindingList`) and printed first.
+
+**Wrapping, same rehearsal.** `basis`, `anchor`, and the `--validate-secrets`
+note were single unwrapped lines and were being cut with an ellipsis at the
+right edge — losing, respectively, the reasoning behind a rupee figure, its
+public anchor, and the name of the flag being recommended. Those are the lines a
+reader stops on. One shared `wrapText` now lives in `src/wrap.ts`; the three
+private copies that had accumulated are gone. The `Scanned` path is elided from
+the **left**, since `/Applications/Sanjay/personal/…` is the half that carries
+no information.
+
+**The lesson, again.** This is the fifth defect here that a green suite did not
+see, and it has the same shape as the other four: the code was right and the
+experience was broken. `scripts/rehearse.sh` now drives the shell in a real pty
+and prints the transcript, so "run it and look at it" is one command.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.

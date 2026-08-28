@@ -30,6 +30,8 @@
  * actuarial, and `explain()` says so in the output rather than in a footnote.
  */
 
+import { DEFAULT_WIDTH, wrapLabelled, wrapText } from '../wrap.js';
+
 import type { Severity } from '../domain.js';
 
 export interface ExposureBasis {
@@ -235,21 +237,34 @@ export function estimateExposure(input: ExposureInput): ExposureResult {
 }
 
 /** The full derivation, for `--explain` and for anyone who asks on stage. */
-export function explain(input: ExposureInput): string[] {
+export function explain(input: ExposureInput, width = DEFAULT_WIDTH): string[] {
   const result = estimateExposure(input);
-  const lines = [
-    `${input.ruleId}  estimated exposure`,
-    ``,
-    `  basis    ${result.basis}`,
-    `  anchor   ${result.anchor}`,
-  ];
-  if (result.factors.length > 0) lines.push(`  factors  ${result.factors.join(', ')}`);
-  lines.push(
-    ``,
-    `  This is an order-of-magnitude estimate for prioritisation, not an`,
-    `  actuarial figure. It assumes one instance of the flaw and says nothing`,
-    `  about the probability of exploitation.`,
-  );
+
+  // Wrapped, not truncated. The basis and the anchor are the whole point of
+  // this command — they are what makes a rupee figure inspectable instead of
+  // asserted — and both are long enough to run off an 80-column terminal.
+  const GUTTER = 11;
+  const usable = Math.max(24, width - 2);
+
+  const lines = [`${input.ruleId}  estimated exposure`, ``];
+  for (const line of wrapLabelled('  basis', result.basis, usable, GUTTER)) lines.push(line);
+  for (const line of wrapLabelled('  anchor', result.anchor, usable, GUTTER)) lines.push(line);
+  if (result.factors.length > 0) {
+    for (const line of wrapLabelled('  factors', result.factors.join(', '), usable, GUTTER)) {
+      lines.push(line);
+    }
+  }
+
+  lines.push(``);
+  for (const line of wrapText(
+    'This is an order-of-magnitude estimate for prioritisation, not an actuarial ' +
+      'figure. It assumes one instance of the flaw and says nothing about the ' +
+      'probability of exploitation.',
+    usable - 2,
+  )) {
+    lines.push(`  ${line}`);
+  }
+
   return lines;
 }
 

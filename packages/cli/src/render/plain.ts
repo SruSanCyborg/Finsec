@@ -13,6 +13,7 @@
  * shortened; the money and the validity are never dropped.
  */
 
+import { wrapText } from '../wrap.js';
 import { formatScore } from '../gate.js';
 import { formatInr } from '../money.js';
 import { EXPOSURE_MODEL } from '../engine/exposure-model.js';
@@ -144,23 +145,6 @@ export function renderFindingDetail(finding: Finding, options: RenderOptions = {
   }
 
   return lines.concat(unicode ? [''] : ['']);
-}
-
-function wrapText(text: string, width: number): string[] {
-  if (width < 20) return [text];
-  const words = text.split(/\s+/);
-  const out: string[] = [];
-  let current = '';
-  for (const word of words) {
-    if (current === '') current = word;
-    else if (current.length + 1 + word.length <= width) current += ` ${word}`;
-    else {
-      out.push(current);
-      current = word;
-    }
-  }
-  if (current) out.push(current);
-  return out;
 }
 
 export function renderFinding(finding: Finding, options: RenderOptions = {}): string[] {
@@ -316,6 +300,52 @@ export interface PlainReportInput {
   target?: string;
 }
 
+/**
+ * The findings, most severe first, then by file — deterministic regardless of
+ * the order they streamed in.
+ *
+ * Separate from the report because the threat stage reasons about these
+ * findings and has to be printed after them, while the summary is the
+ * conclusion and has to be printed after *that*.
+ */
+export function renderFindingList(
+  findings: readonly Finding[],
+  options: RenderOptions = {},
+): string[] {
+  const sorted = [...findings].sort((a, b) => {
+    const bySeverity = SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity);
+    if (bySeverity !== 0) return bySeverity;
+    return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
+  });
+
+  const lines: string[] = [];
+  for (const finding of sorted) lines.push(...renderFinding(finding, options));
+  return lines;
+}
+
+
+/**
+ * Rewrites a path relative to the working directory, or under `~`.
+ *
+ * `contract/fixtures/chaos-repo` says everything the absolute path does and
+ * fits on a line.
+ */
+function shortenPath(target: string): string {
+  const cwd = process.cwd();
+  if (target === cwd) return '.';
+  if (target.startsWith(cwd + '/')) return target.slice(cwd.length + 1);
+
+  const home = process.env.HOME;
+  if (home && target.startsWith(home + '/')) return `~/${target.slice(home.length + 1)}`;
+  return target;
+}
+
+/** Truncates from the left, keeping the end — for paths, the end is the point. */
+function elideLeft(text: string, width: number): string {
+  if (text.length <= width) return text;
+  return `…${text.slice(text.length - width + 1)}`;
+}
+
 export function renderPlainReport({
   outcome,
   gate,
@@ -332,14 +362,7 @@ export function renderPlainReport({
   const lines: string[] = [];
 
   if (!findingsAlreadyPrinted) {
-    // Most severe first, then by file, so the output is deterministic regardless
-    // of the order findings streamed in.
-    const sorted = [...outcome.findings].sort((a, b) => {
-      const bySeverity = SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity);
-      if (bySeverity !== 0) return bySeverity;
-      return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
-    });
-    for (const finding of sorted) lines.push(...renderFinding(finding, options));
+    lines.push(...renderFindingList(outcome.findings, options));
   }
 
   if (outcome.findings.length > 0 || findingsAlreadyPrinted) lines.push('');
@@ -382,7 +405,12 @@ export function renderPlainReport({
   if (target) {
     const files = outcome.filesScanned;
     const count = typeof files === 'number' && files > 0 ? `${files} file${files === 1 ? '' : 's'} in ` : '';
-    lines.push(` ${paint('Scanned'.padEnd(11), DIM, color)}${paint(`${count}${target}`, DIM, color)}`);
+    // Elided from the left. An absolute path that runs off the right edge keeps
+    // `/Applications/Sanjay/personal/…` and loses the directory that was
+    // actually scanned, which is the only part the reader needs.
+    const room = Math.max(20, (options.width ?? 64) - 13 - count.length);
+    const where = elideLeft(shortenPath(target), room);
+    lines.push(` ${paint('Scanned'.padEnd(11), DIM, color)}${paint(`${count}${where}`, DIM, color)}`);
   }
   if (source) {
     lines.push(` ${paint('Source'.padEnd(11), DIM, color)}${paint(source, DIM, color)}`);

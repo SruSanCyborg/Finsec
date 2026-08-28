@@ -8,6 +8,9 @@
  * views over one model rather than four code paths.
  */
 
+/** Pause between blocks of the threat report, so each one is readable as it lands. */
+const TAIL_PACE_MS = 420;
+
 import { existsSync, mkdirSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import { render } from 'ink';
@@ -20,7 +23,7 @@ import { loadConfig, findProjectRoot } from '../config/load.js';
 import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
-import { renderFinding, renderFindingDetail, renderPlainReport } from '../render/plain.js';
+import { renderFinding, renderFindingDetail, renderFindingList, renderPlainReport } from '../render/plain.js';
 import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
@@ -111,6 +114,9 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   let scanSource = '';
   let scanId: string | null = null;
   let fallbackReason: string | undefined;
+  // Only the local engine paces: a hosted scan is already spaced out by the
+  // network, and a replay carries its own recorded timing.
+  let interactivePacing = false;
 
   // The local engine is the default. It needs no backend, and it is what makes
   // `sirius scan .` an actual scanner rather than a client for one — the Core
@@ -130,7 +136,22 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     scanSource = `replay · ${flags.replay} (recorded, not a live analysis)`;
   } else if (useLocalEngine) {
     const { scanDirectory } = await import('../engine/scanner.js');
-    frames = scanDirectory(target, { ignorePatterns: config.exclude });
+    const { pace, resolvePace } = await import('../engine/pace.js');
+
+    // Paced, because the engine is faster than a terminal can paint. Without
+    // this a small repo emits every frame in one tick, the viewport repaints
+    // once, and the findings and summary are never shown at all — the screen
+    // jumps straight to whatever landed last. Off for machine output and
+    // non-TTYs; see engine/pace.ts.
+    interactivePacing =
+      !machineMode &&
+      !flags.sarif &&
+      (process.env.SIRIUS_STREAM_PLAIN === '1' || Boolean(process.stdout.isTTY));
+
+    frames = pace(
+      scanDirectory(target, { ignorePatterns: config.exclude }),
+      resolvePace(interactivePacing),
+    );
     scanSource = 'local engine · tree-sitter AST analysis';
   } else {
     // Unreachable in practice — a missing project id routes to the local engine
@@ -208,7 +229,24 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       failOn: config.failOn,
     });
     process.stdout.write(JSON.stringify(envelope, null, 2) + '\n');
-  } else if (!capabilities.tty) {
+  }
+
+  // Held back until after the threat stage. The summary is the conclusion —
+  // the gate verdict, the total at risk, what was actually scanned — and it
+  // used to be printed before the attack paths, which meant twenty lines of
+  // threat analysis pushed it off the top of the screen. The last thing on
+  // screen should be the thing the reader is meant to act on.
+  const streamed = process.env.SIRIUS_STREAM_PLAIN === '1';
+
+  // When findings were not streamed line by line, they still have to appear
+  // before the threat stage — that stage reasons about them by rule id, and
+  // reading it first is reading conclusions about evidence not yet shown.
+  if (!flags.json && !capabilities.tty && !streamed && outcome.findings.length > 0) {
+    process.stdout.write(renderFindingList(outcome.findings, lineRenderOptions(capabilities)).join('\n') + '\n');
+  }
+
+  const printSummary = () => {
+    if (flags.json || capabilities.tty) return;
     const counts =
       Object.keys(outcome.counts).length > 0 ? outcome.counts : countBySeverity(outcome.findings);
     // Findings were already streamed line by line in that mode; printing the
@@ -218,13 +256,14 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         outcome,
         gate,
         counts,
-        findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1',
+        // Printed above (streamed, or listed just before the threat stage).
+        findingsAlreadyPrinted: true,
         options: lineRenderOptions(capabilities),
         source: scanSource,
         target,
       }),
     );
-  }
+  };
 
   // ---- Threat stage
   //
@@ -233,6 +272,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   if (!flags.json && outcome.findings.length > 0) {
     const { buildAttackPaths, checkExposure, findIntroduction } = await import('../engine/threat.js');
     const { renderThreatReport } = await import('../render/threat.js');
+    const { writePaced } = await import('../engine/pace.js');
 
     const exposure = new Map<string, { exposure: string; provider?: string; detail?: string }>();
     const provenance = new Map<string, ReturnType<typeof findIntroduction>>();
@@ -275,9 +315,14 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     );
 
     if (threatLines.length > 0 && !capabilities.tty) {
-      process.stdout.write(threatLines.join('\n') + '\n');
+      // Paced for the same reason the frames are: emitted in one write, the
+      // whole block lands between two repaints and the reader sees only
+      // whatever happened to be last.
+      await writePaced(threatLines, interactivePacing ? TAIL_PACE_MS : 0);
     }
   }
+
+  printSummary();
 
   if (fallbackReason && !flags.json) {
     process.stderr.write(`note: live stream unavailable (${fallbackReason}); polled for status instead\n`);

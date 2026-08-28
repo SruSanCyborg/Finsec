@@ -18,7 +18,8 @@
     "cli": "node packages/cli/dist/cli.js",
     "build": "pnpm --filter sirius build",
     "test": "pnpm --filter sirius test",
-    "probe:mouse": "bash scripts/probe-mouse.sh"
+    "probe:mouse": "bash scripts/probe-mouse.sh",
+    "rehearse": "bash scripts/rehearse.sh"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",
