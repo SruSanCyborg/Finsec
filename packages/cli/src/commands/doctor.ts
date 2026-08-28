@@ -320,12 +320,37 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
   const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
   const ready = hosted ? 'Ready to scan against the API.' : 'Ready to scan locally.';
 
+  // "Ready to scan locally." and then nothing is a dead end. It is the answer
+  // to a question nobody asked — what someone runs `doctor` to find out is
+  // whether they can start, and the useful reply to "yes" is the command that
+  // starts. Named in the form that works where they are: inside the shell that
+  // is `/scan .`, from their own prompt it is `sirius scan .`.
+  const inShell = process.env.SIRIUS_IN_SHELL === '1';
+  const next = (command: string): string => (inShell ? `/${command}` : `sirius ${command}`);
+
+  const steps: [string, string][] = [];
+  if (failed === 0) {
+    steps.push(['scan .', 'find money at risk in this code']);
+    // Only worth offering once there is something to act on.
+    if (cache) {
+      steps.push(['triage', 'decide about what it found']);
+      steps.push(['report', 'a signed report of it']);
+    }
+    steps.push(['revenue gen batch', 'the operations side, on synthetic data']);
+  }
+
+  const column = Math.max(...steps.map(([command]) => next(command).length), 0);
+  const suggestions = steps.map(
+    ([command, why]) => `      ${padVisible(next(command), column)}   ${why}`,
+  );
+
   process.stdout.write(
     failed > 0
-      ? `\n  ${plural(failed, 'problem', 'problems')} would stop a scan.\n\n`
+      ? `\n  ${plural(failed, 'problem', 'problems')} would stop a scan.\n` +
+          `  Fix those first, then run ${next('doctor')} again.\n\n`
       : warned > 0
-        ? `\n  ${ready} ${plural(warned, 'thing', 'things')} worth knowing.\n\n`
-        : `\n  ${ready}\n\n`,
+        ? `\n  ${ready} ${plural(warned, 'thing', 'things')} worth knowing.\n\n${suggestions.join('\n')}\n\n`
+        : `\n  ${ready}\n\n${suggestions.join('\n')}\n\n`,
   );
 
   if (failed > 0) process.exitCode = 2;

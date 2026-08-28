@@ -1287,3 +1287,22 @@ accepted, dismissed and suppressed are three claims about a finding, and none of
 them means "I have not looked at this yet".
 
 ---
+## D-039 — "Ready to scan locally." and then nothing
+
+`doctor` ended on a verdict and stopped. That is the answer to a question
+nobody asked: what somebody runs `doctor` to find out is whether they can
+start, and the useful reply to "yes" is the command that starts. Somebody read
+the whole green checklist and asked, reasonably, *how do I scan and what*.
+
+It now ends with the two or three things worth doing next, named in the form
+that works where the reader is — `/scan .` inside the shell, `sirius scan .`
+from their own prompt. The shell marks its children with `SIRIUS_IN_SHELL` so
+advice can tell the difference; suggesting a command in the wrong form is worse
+than suggesting none, because it fails in front of the person who trusted it.
+
+`triage` and `report` are offered only once a scan exists to triage, and the
+failing path gets the same treatment: "1 problem would stop a scan" now adds
+"fix those first, then run doctor again" rather than leaving the reader to
+guess whether to re-run it.
+
+---

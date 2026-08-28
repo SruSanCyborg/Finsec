@@ -715,6 +715,10 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
                 // The child is a pipe and cannot measure the terminal, so hand
                 // it the transcript's usable width. Two columns for the gutter.
                 SIRIUS_WIDTH: String(Math.max(40, capabilities.width - 2)),
+                // So a child telling the user what to run next can name the
+                // form that will actually work where they are: `/scan .` in
+                // here, `sirius scan .` from their own prompt.
+                SIRIUS_IN_SHELL: '1',
                 ...(capabilities.unicode ? { SIRIUS_UNICODE: '1' } : {}),
               },
             },
