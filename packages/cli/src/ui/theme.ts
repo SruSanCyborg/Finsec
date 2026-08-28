@@ -31,7 +31,11 @@ export function detectCapabilities(options: CapabilityOptions = {}): Capabilitie
 
   // NO_COLOR is honored whenever it is set to anything, per no-color.org.
   const noColorEnv = env.NO_COLOR !== undefined && env.NO_COLOR !== '';
-  const color = !options.noColor && !noColorEnv && !options.machineMode && tty;
+  // FORCE_COLOR is the counterpart convention: it lets a parent that is itself a
+  // terminal ask for colour through a pipe. The full-screen shell relies on it,
+  // since it captures child output rather than handing over the terminal.
+  const forceColor = env.FORCE_COLOR !== undefined && env.FORCE_COLOR !== '' && env.FORCE_COLOR !== '0';
+  const color = !options.noColor && !noColorEnv && !options.machineMode && (tty || forceColor);
 
   const asciiForced = env.SIRIUS_ASCII === '1' || env.SIRIUS_ASCII === 'true';
   const utf8 = /UTF-?8/i.test(env.LC_ALL ?? env.LC_CTYPE ?? env.LANG ?? '');

@@ -40,22 +40,31 @@ export interface PlainReportInput {
   outcome: ScanOutcome;
   gate: GateResult;
   counts: Partial<Record<Severity, number>>;
+  /** Set when findings were streamed as they arrived, so only the summary is wanted. */
+  findingsAlreadyPrinted?: boolean;
 }
 
-export function renderPlainReport({ outcome, gate, counts }: PlainReportInput): string {
+export function renderPlainReport({
+  outcome,
+  gate,
+  counts,
+  findingsAlreadyPrinted = false,
+}: PlainReportInput): string {
   const lines: string[] = [];
 
-  // Most severe first, then by file, so the output is deterministic regardless
-  // of the order findings streamed in.
-  const sorted = [...outcome.findings].sort((a, b) => {
-    const bySeverity = SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity);
-    if (bySeverity !== 0) return bySeverity;
-    return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
-  });
+  if (!findingsAlreadyPrinted) {
+    // Most severe first, then by file, so the output is deterministic regardless
+    // of the order findings streamed in.
+    const sorted = [...outcome.findings].sort((a, b) => {
+      const bySeverity = SEVERITY_ORDER.indexOf(b.severity) - SEVERITY_ORDER.indexOf(a.severity);
+      if (bySeverity !== 0) return bySeverity;
+      return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
+    });
 
-  for (const finding of sorted) lines.push(renderFindingLine(finding));
+    for (const finding of sorted) lines.push(renderFindingLine(finding));
+  }
 
-  if (sorted.length > 0) lines.push('');
+  if (outcome.findings.length > 0) lines.push('');
 
   const counted = [...SEVERITY_ORDER]
     .reverse()

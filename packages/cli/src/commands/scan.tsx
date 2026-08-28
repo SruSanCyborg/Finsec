@@ -20,7 +20,7 @@ import { loadConfig, findProjectRoot } from '../config/load.js';
 import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
-import { renderPlainReport } from '../render/plain.js';
+import { renderFindingLine, renderPlainReport } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
 import { ScanView, countBySeverity } from '../ui/ScanView.js';
@@ -163,7 +163,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
   const outcome = capabilities.tty
     ? await renderInteractive({ frames, config, glyphs, capabilities, computeGate, flags })
-    : await collect(frames);
+    : await collect(frames, { stream: process.env.SIRIUS_STREAM_PLAIN === '1' });
 
   const gate = computeGate(outcome);
 
@@ -190,7 +190,11 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   } else if (!capabilities.tty) {
     const counts =
       Object.keys(outcome.counts).length > 0 ? outcome.counts : countBySeverity(outcome.findings);
-    process.stdout.write(renderPlainReport({ outcome, gate, counts }));
+    // Findings were already streamed line by line in that mode; printing the
+    // full report again would duplicate every one of them.
+    process.stdout.write(
+      renderPlainReport({ outcome, gate, counts, findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1' }),
+    );
   }
 
   if (fallbackReason && !flags.json) {
@@ -271,7 +275,7 @@ function renderInteractive(args: {
 }
 
 /** Consume a stream headlessly, for pipes and machine modes. */
-async function collect(frames: AsyncIterable<WsFrame>): Promise<ScanOutcome> {
+async function collect(frames: AsyncIterable<WsFrame>, options: { stream?: boolean } = {}): Promise<ScanOutcome> {
   const outcome: ScanOutcome = {
     findings: [],
     counts: {},
@@ -285,6 +289,10 @@ async function collect(frames: AsyncIterable<WsFrame>): Promise<ScanOutcome> {
     switch (frame.type) {
       case 'finding':
         outcome.findings.push(frame.finding);
+        // The full-screen shell captures this pipe and renders each line into
+        // its transcript as it arrives, so findings still stream in live rather
+        // than appearing all at once when the scan ends.
+        if (options.stream) process.stdout.write(renderFindingLine(frame.finding) + '\n');
         break;
       case 'error':
         outcome.errors.push({ code: frame.code, path: frame.path, detail: frame.detail });
