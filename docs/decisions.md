@@ -1933,3 +1933,54 @@ The manipulation patterns catch the common shapes, not every possible one, and
 the output quotes what matched so a person can judge it.
 
 Everything is simulated. There is no `--execute`.
+
+## D-057 — `brief`: the document for the reader who has none of the context
+
+Half the people assessing this do not get it, which is a fact about the
+explanation rather than about them. A tool that is legible to whoever built it
+and opaque to everyone else has an explanation problem, and everyone else is
+most of the people who will ever look at it.
+
+A feature list does not fix that. What fixes it is stating the gap in a sentence
+the reader already believes — *a transaction can be correctly signed and still be
+the wrong thing to do* — then showing one real attack end to end, then the
+numbers. Anyone who stops after the first page should still have the point.
+
+So `sirius brief` writes that document, as a PDF, and `--plain` prints the same
+argument in the same order to the terminal. Not a summary of the PDF: the same
+thing, so a reader who runs the command and a reader who opens the file have read
+the same document.
+
+**Every figure comes from running the tool.** `collectBriefFacts` evaluates a
+generated feed and scans the fixture; nothing in the prose is typed in, including
+the worked example, which is pulled from whichever planted injection is actually
+in the feed. A deck whose numbers drift from the tool is worse than none: the
+first person to run the commands finds a figure that does not reproduce, and then
+doubts the ones that would have. Same reason `artifact:check` exists (D-039).
+
+The PDF is written by hand, like the compliance report, because a PDF is a text
+format with a byte-offset table at the end and its fourteen base fonts ship with
+every reader (D-035). Six pages, no renderer, no dependency.
+
+### Two bugs it exposed
+
+**Substitution happened after measurement.** `literal()` folded `₹` to `Rs.` when
+writing the content stream, but `wrapToWidth` had already measured the original —
+one character where three would be drawn. Every rupee sign on a line pushed it two
+characters past the right margin. `toWinAnsi` now runs before measurement, so the
+wrap sees the text that will actually appear.
+
+**`guard eval` was not idempotent.** It persisted baselines and loaded them on the
+next run, so evaluating a fixed feed twice folded that feed's own actions in a
+second time: the rate limiter saw every action twice and the second run blocked
+259 of 278. The same command on the same input, a completely different answer —
+and the first thing anyone does with a demo is run it again. Baselines now start
+empty unless `--continue` is passed, which is the case persistence is actually
+for: new actions arriving in front of an agent that has already been running.
+
+### `--narrate`
+
+`guard eval --narrate` explains each verdict the first time it appears. A column
+of ALLOW/VERIFY/BLOCK is self-evident to whoever built it and opaque to everyone
+else, and the demo is mostly watched by everyone else. Once per verdict, not per
+row: a legend repeated on every line stops being read by the third one.

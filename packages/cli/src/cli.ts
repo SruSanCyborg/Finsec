@@ -255,6 +255,18 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('brief')
+    .description('Explain the whole project in one document — PDF, or on screen with --plain')
+    .option('--output <file>', 'where to write the PDF (default: sirius-brief.pdf)')
+    .option('--plain', 'print it to the terminal instead of writing a PDF')
+    .option('--scan <dir>', 'directory to scan for the code figures')
+    .option('--json', 'the facts it was written from, as JSON')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runBrief } = await import('./commands/brief.js');
+      await runBrief(options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('guard')
     .description('Govern an autonomous agent that can move money: authorise, judge, and record every action')
     .argument('[subcommand]', 'gen | eval | explain | agents | score | trail', 'eval')
@@ -265,7 +277,8 @@ export function buildProgram(): Command {
     .option('--all', 'include the routine actions that proceeded untouched')
     .option('--tier <name>', 'show only allow | verify | constrain | block')
     .option('--agent <dir>', 'feed directory, when the argument is an action id')
-    .option('--fresh', 'ignore stored baselines and judge as though every agent were new')
+    .option('--continue', 'carry the stored baselines forward, as a live agent would')
+    .option('--narrate', 'explain each verdict the first time it appears — for showing someone')
     .option('--output <file>', 'where to write the decision trail')
     .option('--verify <file>', 'check a signed decision trail instead of running')
     .option('--key <fingerprint>', 'require this signer — without it, a pass does not say who signed')

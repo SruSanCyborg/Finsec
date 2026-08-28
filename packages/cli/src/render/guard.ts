@@ -135,6 +135,26 @@ export function renderLadder(
   return lines;
 }
 
+/**
+ * What each verdict means, said once, the first time it appears.
+ *
+ * For somebody watching over a shoulder who has not read anything. A column of
+ * ALLOW/VERIFY/BLOCK is self-evident to whoever built it and opaque to everyone
+ * else, and the demo is mostly watched by everyone else. Said once rather than
+ * per row, because a legend repeated on every line stops being read by the
+ * third one.
+ */
+const NARRATION: Record<Tier, string> = {
+  allow: 'proceeds untouched — nobody is asked, nothing is interrupted',
+  verify: 'unusual but plausible — needs a second factor, not a person',
+  constrain: 'over a limit, so it proceeds at the amount that was permitted',
+  block: 'refused — and the rule that refused it is named',
+};
+
+export function narrationFor(tier: Tier, palette: Palette): string {
+  return palette.dim(`     ${LABEL[tier]} means: ${NARRATION[tier]}`);
+}
+
 export interface SummaryInput {
   counts: Record<string, number>;
   money: { allowed_paise: number; stopped_paise: number; trimmed_paise: number };

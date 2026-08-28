@@ -117,6 +117,34 @@ export function wrapToWidth(text: string, width: number, size: number, bold = fa
  * glyph nobody can predict, and in a signed compliance document an unpredictable
  * glyph is worse than a missing one.
  */
+/**
+ * Folds the characters WinAnsi cannot draw into ones it can.
+ *
+ * Separated from `literal` and applied *before* measurement, because these
+ * substitutions change a string's width: `₹` is one character and `Rs.` is
+ * three, so measuring the original and printing the replacement lets a line
+ * run past the right margin by two characters for every rupee sign on it.
+ * Wrapping has to see the text that will actually be drawn.
+ */
+export function toWinAnsi(text: string): string {
+  let out = '';
+  for (const character of text) {
+    const code = character.codePointAt(0) ?? 0;
+    if (code === 0x20b9) out += 'Rs.'; // ₹ — WinAnsi has no rupee sign
+    else if (code === 0x2014 || code === 0x2013) out += '-';
+    else if (code === 0x2018 || code === 0x2019) out += "'";
+    else if (code === 0x201c || code === 0x201d) out += '"';
+    else if (code === 0x00b7 || code === 0x2022) out += '-';
+    else if (code === 0x2026) out += '...';
+    else if (code === 0x2192) out += '->';
+    else if (code === 0x03c3) out += 'sd';
+    else if (code < 32) out += ' ';
+    else if (code > 255) out += '?';
+    else out += character;
+  }
+  return out;
+}
+
 function literal(text: string): string {
   let out = '';
   for (const character of text) {
@@ -172,7 +200,7 @@ export function renderPdf(blocks: readonly Block[], options: PdfOptions): Buffer
     const leading = size * 1.45;
     y -= block.spaceBefore ?? 0;
 
-    for (const line of wrapToWidth(block.text, usable, size, bold)) {
+    for (const line of wrapToWidth(toWinAnsi(block.text), usable, size, bold)) {
       if (y < margin + leading) newPage();
       const x =
         block.align === 'right' ? margin + usable - measure(line, size, bold) : margin;

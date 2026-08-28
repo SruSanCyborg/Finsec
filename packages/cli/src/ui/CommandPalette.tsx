@@ -62,6 +62,16 @@ export const SHELL_COMMANDS: ShellCommand[] = [
     keywords: ['agent', 'autonomy', 'injection', 'policy', 'block'],
   },
   {
+    name: 'brief',
+    summary: 'Explain the whole project in one document — PDF, or on screen',
+    usage: '/brief [--plain]',
+    args: [
+      { name: '--plain', summary: 'read it here instead of writing a PDF', kind: 'flag' },
+      { name: '--output', summary: 'where to write the PDF', kind: 'flag' },
+    ],
+    keywords: ['pdf', 'explain', 'pitch', 'document', 'judges'],
+  },
+  {
     name: 'scan',
     summary: 'Scan a path and stream findings',
     usage: '/scan [path] [--json] [--sarif <file>]',

@@ -179,6 +179,33 @@ describe('the loop', () => {
   });
 });
 
+describe('running it twice', () => {
+  it('gives the same answer on the same feed', () => {
+    // The bug this exists for: `eval` persisted baselines and then loaded them
+    // on the next run, so the feed's own actions were folded in a second time.
+    // The rate limiter saw every action twice and the second run blocked 259 of
+    // 278 — the same command on the same input, a completely different answer.
+    // A demo anyone runs twice has to survive being run twice.
+    const first = evaluateFeed(feed.actions, feed.agents);
+    const second = evaluateFeed(feed.actions, feed.agents);
+
+    expect(tally(second.decisions)).toEqual(tally(first.decisions));
+    expect(second.decisions.map((d) => `${d.action_id}:${d.tier}`)).toEqual(
+      first.decisions.map((d) => `${d.action_id}:${d.tier}`),
+    );
+  });
+
+  it('but folding the same feed into a carried baseline does change it', () => {
+    // Which is why persistence is not the default for a fixed feed. Continuing
+    // is a real mode — new actions in front of an agent that has been running —
+    // and re-judging history against itself is not.
+    const first = evaluateFeed(feed.actions, feed.agents);
+    const continued = evaluateFeed(feed.actions, feed.agents, { baselines: first.baselines });
+
+    expect(tally(continued.decisions)).not.toEqual(tally(first.decisions));
+  });
+});
+
 describe('the baseline', () => {
   const agent = 'a1';
   const action = (amount: number, at: string, cp = 'v1'): ProposedAction => ({

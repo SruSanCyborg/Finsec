@@ -22,7 +22,7 @@ import { GuardTrailLog, verifyGuardTrail } from '../guard/trail.js';
 import { generateFeed } from '../guard/synth.js';
 import { loadBaselines, loadFeed, saveBaselines, writeFeed } from '../guard/store.js';
 import { paletteFor } from '../render/revenue.js';
-import { renderDecision, renderLadder, renderSummary, renderWhereItStopped } from '../render/guard.js';
+import { narrationFor, renderDecision, renderLadder, renderSummary, renderWhereItStopped } from '../render/guard.js';
 import { detectCapabilities } from '../ui/theme.js';
 import { plural } from '../ui/kit.js';
 /** Only the flag this surface reads; the CLI passes the whole object. */
@@ -41,7 +41,8 @@ export interface GuardFlags {
   output?: string;
   verify?: string;
   key?: string;
-  fresh?: boolean;
+  continue?: boolean;
+  narrate?: boolean;
 }
 
 const target = (path: string | undefined, fallback: string): string =>
@@ -102,9 +103,17 @@ async function evaluate(feedArg: string | undefined, flags: GuardFlags, globals:
   const capabilities = detectCapabilities({ noColor: globals.color === false, machineMode: Boolean(flags.json) });
   const palette = paletteFor({ color: capabilities.color, unicode: capabilities.unicode, width: capabilities.width });
 
-  // Baselines persist between runs unless asked otherwise: an agent that starts
-  // new every time has no behaviour to deviate from.
-  const baselines = flags.fresh ? {} : loadBaselines(dir);
+  // Judged from nothing, unless asked to continue.
+  //
+  // Persisting was the wrong default here. Evaluating a fixed feed twice folded
+  // its own actions into the baseline a second time, so the rate limiter saw
+  // every action twice and the second run blocked 259 of 278 — the same command
+  // on the same input giving a completely different answer. A demo anyone runs
+  // twice has to give the same answer both times.
+  //
+  // `--continue` is for the case persistence is actually for: new actions
+  // arriving in front of an agent that has already been running.
+  const baselines = flags.continue ? loadBaselines(dir) : {};
 
   const { decisions, baselines: after } = evaluateFeed(feed.actions, feed.agents, { baselines });
   const byAction = new Map(feed.actions.map((a) => [a.id, a]));
@@ -143,11 +152,17 @@ async function evaluate(feedArg: string | undefined, flags: GuardFlags, globals:
   const wanted = flags.tier ? shown.filter((d) => d.tier === flags.tier) : shown;
   const limit = flags.limit ?? 40;
 
+  // With `--narrate`, each verdict explains itself the first time it appears.
+  const explained = new Set<string>();
   const rows = wanted
     .slice(0, limit)
-    .map((d) => {
+    .flatMap((d) => {
       const action = byAction.get(d.action_id);
-      return action ? renderDecision(d, action, palette) : '';
+      if (!action) return [];
+      const row = renderDecision(d, action, palette);
+      if (!flags.narrate || explained.has(d.tier)) return [row];
+      explained.add(d.tier);
+      return [narrationFor(d.tier, palette), row];
     })
     .filter(Boolean);
 

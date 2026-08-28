@@ -148,10 +148,14 @@ Requires **Node ≥ 22** and `pnpm`.
 pnpm install
 pnpm --filter sirius build
 
+node packages/cli/dist/cli.js brief --plain      # what this is, in two minutes
 node packages/cli/dist/cli.js guard gen feed     # 278 actions, 26 attacks planted
-node packages/cli/dist/cli.js guard eval feed    # judge them
+node packages/cli/dist/cli.js guard eval feed --narrate   # judge them, explained
 node packages/cli/dist/cli.js guard score feed   # against what was actually planted
 ```
+
+`sirius brief` writes the same thing as a six-page PDF. Every figure in it comes
+from that run — none of them are typed in.
 
 ```
   planted case            allow  verify  constrain  block
@@ -502,6 +506,7 @@ flowchart TD
 
 | Command | What it does |
 |---|---|
+| `brief` | Explain the whole project in one document — PDF, or `--plain` on screen |
 | `guard [gen\|eval\|explain\|agents\|score\|trail]` | Govern an agent that can move money |
 | `scan [path]` | Stream findings, price them, gate on them |
 | `fix <rule>` | Apply a verified fix, showing its provenance |
@@ -607,7 +612,7 @@ deliberate delay to look good for nobody.
 ```bash
 pnpm install
 pnpm --filter sirius build       # tsc → packages/cli/dist
-pnpm --filter sirius test        # vitest — 859 tests
+pnpm --filter sirius test        # vitest — 871 tests
 pnpm mock                        # Prism REST :4010 + WS replay :4011
 pnpm contract:lint               # redocly lint
 pnpm rehearse                    # drive the real shell in a real pty
@@ -657,12 +662,13 @@ value.
 | Area | State |
 |---|---|
 | `guard` | Done — six stages, graduated verdicts, per-agent baselines, signed decision trail. 95% autonomy on the fixture with every planted attack stopped |
+| `brief` | Done — a six-page PDF written from a live run, or the same argument on screen with `--plain` |
 | Local engine | Real — tree-sitter AST, 13 rules, taint tracking, money model |
 | `scan` · `fix` · `triage` · `watch` | Done, streaming, paced, with exit codes |
 | `rules` · `baseline` · `suppress` | Done, fully offline |
 | `report` · `ledger` · `badge` | Done — ed25519 signing, RFC 6962 Merkle log |
 | `revenue` · `reconcile` | Done — held-out metrics, bounded recovery, signed trail |
-| Tests | 859 passing |
+| Tests | 871 passing |
 
 **The API is required for nothing.** The CLI began as a pure client of a REST
 contract and still speaks it, but every command works with no backend running.

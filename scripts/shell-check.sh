@@ -69,6 +69,7 @@ echo
     "/revenue sweep --seeds 2 --payments 150 --checkouts 40 --invoices 30" \
     "/revenue stress --seeds 1 --payments 150 --checkouts 40 --invoices 30" \
     "/revenue audit --verify $TRAIL" \
+    "/brief --plain" \
     "/guard agents guardfeed" \
     "/guard eval guardfeed --limit 6" \
     "/guard score guardfeed" \
@@ -139,6 +140,7 @@ check "/revenue recover"         "hash-chained and signed"
 check "/revenue stress"           "touched nothing out of bounds in any of them"
 check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
+check "/brief"                   "Written to PDF with"
 check "/guard agents"            "anything else is escalated"
 check "/guard eval"              "proceeded with nobody asked"
 check "/guard score"             "ordinary actions were intervened on"
