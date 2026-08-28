@@ -20,7 +20,7 @@ import { loadConfig, findProjectRoot } from '../config/load.js';
 import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
-import { renderFindingLine, renderPlainReport } from '../render/plain.js';
+import { renderFinding, renderPlainReport } from '../render/plain.js';
 import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
@@ -305,7 +305,9 @@ async function collect(
         // The full-screen shell captures this pipe and renders each line into
         // its transcript as it arrives, so findings still stream in live rather
         // than appearing all at once when the scan ends.
-        if (options.stream) process.stdout.write(renderFindingLine(frame.finding, options.render) + '\n');
+        if (options.stream) {
+          process.stdout.write(renderFinding(frame.finding, options.render).join('\n') + '\n');
+        }
         break;
       case 'error':
         outcome.errors.push({ code: frame.code, path: frame.path, detail: frame.detail });

@@ -74,6 +74,73 @@ function formatRefs(refs: readonly string[] | undefined, separator: string): str
     .join(separator);
 }
 
+/**
+ * A finding as display lines.
+ *
+ * With no width constraint (a pipe, a file, grep) this is one line, which keeps
+ * the output greppable. With a width it becomes two, because the arithmetic
+ * does not work otherwise: at 80 columns the severity, rule id, path and
+ * annotation alone total 80 characters, leaving the message negative space. The
+ * single-line form was therefore truncating the message to nothing *and* losing
+ * the rupee figure off the end.
+ *
+ *   ✗ CRITICAL  SIR-SEC-001  Hardcoded Stripe secret key
+ *      src/config.py:14 · PCI-DSS 8.6.2 · ⚠ VERIFIED LIVE · ₹42,00,000
+ *
+ * The message gets a whole line, so it is readable; the details get their own,
+ * where compliance refs are dropped first if space runs short.
+ */
+export function renderFinding(finding: Finding, options: RenderOptions = {}): string[] {
+  const color = options.color ?? false;
+  const unicode = options.unicode ?? true;
+  const width = options.width && options.width > 20 ? options.width : 0;
+
+  if (!width) return [renderFindingLine(finding, options)];
+
+  const sep = unicode ? ' · ' : ' | ';
+  const glyph = unicode ? GLYPH[finding.severity] : ' ';
+  const indent = '   ';
+
+  const head = paint(`${glyph} ${finding.severity.toUpperCase()}`.padEnd(11), SEVERITY_ANSI[finding.severity], color);
+  const rule = paint(finding.rule_id.padEnd(12), BOLD, color);
+
+  const headline = `${head} ${rule} ${fit(finding.message, width - 25, unicode)}`;
+
+  const annotations: string[] = [];
+  if (finding.validity === 'verified_live') annotations.push(`${unicode ? '⚠ ' : '! '}VERIFIED LIVE`);
+  else if (finding.validity === 'inactive') annotations.push('inactive');
+  const money = formatInr(finding.money_at_risk_inr);
+  if (money) annotations.push(money);
+
+  const annotation =
+    annotations.length > 0
+      ? paint(
+          annotations.join(sep),
+          finding.validity === 'verified_live' ? SEVERITY_ANSI.critical : SEVERITY_ANSI[finding.severity],
+          color,
+        )
+      : '';
+
+  const place = paint(`${finding.file}:${finding.line}`, DIM, color);
+  const refs = formatRefs(finding.compliance_ref, sep);
+  const refsText = refs ? paint(refs, DIM, color) : '';
+
+  const detail = (withRefs: boolean) =>
+    indent + [place, withRefs ? refsText : '', annotation].filter((p) => p !== '').join(sep);
+
+  // Refs are the first thing a reader can live without; the money never goes.
+  let second = detail(true);
+  if (visibleLength(second) > width) second = detail(false);
+
+  return second.trim() ? [headline, second] : [headline];
+}
+
+/** Truncates to `max` columns, appending an ellipsis when it has to. */
+function fit(text: string, max: number, unicode: boolean): string {
+  if (max < 4 || text.length <= max) return text;
+  return text.slice(0, max - 1) + (unicode ? '…' : '.');
+}
+
 export function renderFindingLine(finding: Finding, options: RenderOptions = {}): string {
   const color = options.color ?? false;
   const unicode = options.unicode ?? true;
@@ -193,7 +260,7 @@ export function renderPlainReport({
       if (bySeverity !== 0) return bySeverity;
       return `${a.file}:${a.line}`.localeCompare(`${b.file}:${b.line}`);
     });
-    for (const finding of sorted) lines.push(renderFindingLine(finding, options));
+    for (const finding of sorted) lines.push(...renderFinding(finding, options));
   }
 
   if (outcome.findings.length > 0 || findingsAlreadyPrinted) lines.push('');

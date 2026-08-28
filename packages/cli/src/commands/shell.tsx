@@ -23,7 +23,7 @@ import { createInterface } from 'node:readline';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Box, Text, render, useApp, useInput } from 'ink';
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CliError } from '../api/errors.js';
 import { CommandPalette, SHELL_COMMANDS, filterCommands } from '../ui/CommandPalette.js';
@@ -41,6 +41,10 @@ const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), '..', 'cli.js');
 
 /** Commands that own the terminal and cannot be captured into a transcript. */
 const NEEDS_REAL_TERMINAL = new Set(['triage', 'watch', 'shell']);
+
+/** Batching window for captured output, and the transcript's memory ceiling. */
+const FLUSH_MS = 60;
+const MAX_TRANSCRIPT = 2000;
 
 interface GlobalFlags {
   apiUrl?: string;
@@ -153,14 +157,27 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
   try {
     await new Promise<void>((resolvePromise) => {
       let nextId = 0;
+      // Read once. This touches the filesystem, and it used to be called from
+      // inside render for the header prop — so every appended line re-read the
+      // config from disk, which is a large part of why output felt laggy.
+      const context = sessionContext(glyphs, globals);
       const banner = renderWordmark(
-        { version: VERSION, tagline: TAGLINE, context: sessionContext(glyphs, globals), author: AUTHOR },
+        { version: VERSION, tagline: TAGLINE, context, author: AUTHOR },
         { unicode: capabilities.unicode, color: capabilities.color, width: capabilities.width },
       );
 
-      const initial: TranscriptLine[] = banner
-        .split('\n')
-        .map((text) => ({ id: nextId++, text, kind: 'output' as const }));
+      // Trim the banner's leading and trailing blank lines. They give it room
+      // when printed to a fresh terminal, but inside a scrollback they are just
+      // empty rows the user has to scroll past to reach anything.
+      const bannerLines = banner.split('\n');
+      while (bannerLines.length > 0 && bannerLines[0]?.trim() === '') bannerLines.shift();
+      while (bannerLines.length > 0 && bannerLines.at(-1)?.trim() === '') bannerLines.pop();
+
+      const initial: TranscriptLine[] = bannerLines.map((text) => ({
+        id: nextId++,
+        text,
+        kind: 'output' as const,
+      }));
       initial.push({ id: nextId++, text: 'Type / for commands. /help lists them, /exit leaves.', kind: 'note' });
 
       function App() {
@@ -171,8 +188,33 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         const [busyLabel, setBusyLabel] = useState<string | undefined>(undefined);
         const [child, setChild] = useState<ReturnType<typeof spawn> | null>(null);
 
-        const append = (text: string, kind: TranscriptLine['kind'] = 'output') =>
-          setLines((all) => [...all, { id: nextId++, text, kind }]);
+        // Output arrives a line at a time and a scan emits dozens in a second.
+        // Committing React state per line re-reconciles the whole transcript
+        // each time, which is what made it lag. Buffer and flush on a tick.
+        const pending = useRef<TranscriptLine[]>([]);
+        const flushTimer = useRef<NodeJS.Timeout | null>(null);
+
+        const flush = () => {
+          flushTimer.current = null;
+          if (pending.current.length === 0) return;
+          const batch = pending.current;
+          pending.current = [];
+          setLines((all) => {
+            const next = [...all, ...batch];
+            // Keep memory flat in a long session: the viewport shows a screenful
+            // and nobody scrolls back thousands of lines in a terminal.
+            return next.length > MAX_TRANSCRIPT ? next.slice(next.length - MAX_TRANSCRIPT) : next;
+          });
+        };
+
+        const append = (text: string, kind: TranscriptLine['kind'] = 'output') => {
+          pending.current.push({ id: nextId++, text, kind });
+          if (!flushTimer.current) flushTimer.current = setTimeout(flush, FLUSH_MS);
+        };
+
+        useEffect(() => () => {
+          if (flushTimer.current) clearTimeout(flushTimer.current);
+        }, []);
 
         const finish = () => {
           exit();
@@ -255,7 +297,7 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           <FullScreenShell
             glyphs={glyphs}
             capabilities={capabilities}
-            header={`sirius v${VERSION}  ${sessionContext(glyphs, globals)}`}
+            header={`sirius v${VERSION}  ${context}`}
             lines={lines}
             busy={busy}
             busyLabel={busyLabel}
