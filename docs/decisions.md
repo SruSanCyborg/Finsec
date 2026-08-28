@@ -568,6 +568,65 @@ broken code before it was written passing against the fix.
 
 ---
 
+## D-023 — A second surface: money at risk in operations, not only in code
+
+The scanner reads code. This reads what the code did — failed payments,
+abandoned checkouts, ageing receivables, and three sets of books that disagree.
+Same CLI, same vocabulary, no backend. Design and findings in
+[`docs/revenue.md`](revenue.md); the decisions worth recording here are the ones
+that were tempting to get wrong.
+
+**The target is uplift, not recovery.** `recoverable AND NOT self_heals`. A
+payment the customer would have retried tomorrow is not revenue anybody
+recovered, and a model trained on recovery learns to chase precisely those
+because they are the easiest positives in the data. Everything downstream
+follows: the counterfactual is computed up front on the same records, and
+"would have arrived anyway" is subtracted from the headline rather than
+mentioned in a footnote.
+
+**Labels live in a separate file.** `records.jsonl` for the detector,
+`truth.jsonl` for the scorer. Leakage is structurally impossible rather than a
+matter of discipline, which is the only version that still holds a month later.
+
+**Capacity, not cost, sets the operating point.** With an SMS at ₹0.18 and a
+recovery worth ₹2,000, expected value says chase everything — arithmetically
+correct, operationally impossible, and the behaviour that gets a merchant's
+retry privileges revoked. Records are chosen by expected value under a cap.
+
+**The comparison is capacity-matched, and the model does not win it.** Across
+eight seeds, expected-value ranking runs level with sorting by amount: +0.3% at
+20% capacity. When amounts span a hundredfold and probabilities span threefold,
+size is already most of the answer. The report says so. What the policies do not
+share is the forbidden-touches column — the heuristics retry fraud rings and
+message customers with open disputes; the agent touches none. That column was
+added because the evaluation caught the *agent* retrying a `risk_block`: a low
+probability is not a prohibition.
+
+**Naive Bayes, and told so.** Chosen because every step prints as a sentence
+somebody can disagree with. It is overconfident, so a two-parameter Platt shrink
+is fitted on train and the calibration table reports what is left.
+
+**Refusing is a first-class action.** Executed, blocked and skipped all produce
+audit entries. The trail is hash-chained and the head is ed25519-signed with the
+same key as compliance reports; alteration, deletion, reordering and appending
+are each caught and named. It says the run was simulated, and there is no
+`--execute` — an agent that can spend real money needs more than a flag.
+
+**Stopping rules are data, with their basis attached**, at framework level
+(NPCI, TRAI, DPDP §6) and never invented clause numbers. They are configured
+policy, not legal advice, and the numbers are a compliance team's to change.
+
+**Reconciliation reports three numbers, never one.** Match rate, value-weighted
+match rate, and — where the true links exist — how many pairings were *correct*.
+A match rate alone rewards pairing things off boldly. Real books have no answer
+key and the report says so instead of inventing the one figure nobody can check.
+
+**Institutions are fictional; rails are not.** UPI, NACH and their failure modes
+are real infrastructure. Generating outage records against a real gateway's name
+would produce a document that reads as a claim about that company.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch

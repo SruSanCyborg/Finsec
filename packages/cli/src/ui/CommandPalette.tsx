@@ -29,6 +29,16 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'doctor', summary: 'Check config, connectivity, and terminal' },
   { name: 'explain', summary: 'Show how a money-at-risk figure was derived', usage: '/explain SIR-SEC-001' },
   { name: 'rules', summary: 'List, show, or validate rules', usage: '/rules [list|show|validate] [target]' },
+  {
+    name: 'revenue',
+    summary: 'Find, price and recover revenue at risk',
+    usage: '/revenue [detect|eval|recover|gen] [batch]',
+  },
+  {
+    name: 'reconcile',
+    summary: 'Match the ledger against settlements and the bank',
+    usage: '/reconcile [books] [--exceptions]',
+  },
   { name: 'report', summary: 'Download a signed compliance report', usage: '/report [scan-id] [--format json]' },
   { name: 'suppress', summary: 'Suppress a rule, with a reason', usage: '/suppress <rule> --reason "…"' },
   { name: 'baseline', summary: 'Set or show the baseline', usage: '/baseline [set|show]' },

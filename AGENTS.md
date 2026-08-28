@@ -5,7 +5,7 @@ A security & compliance linter **for money-handling code**. It scans API specs a
 Built for a hackathon demo. The credibility strategy is deliberate: copy proven conventions wholesale — Semgrep (YAML rules, `--baseline-commit`, SARIF, inline suppression), Snyk (`--severity-threshold`, `--fail-on`, 0/1/2/3 exit codes, expiring ignores), TruffleHog (live secret validation), Simon Willison's dual-LLM pattern.
 
 **Canonical spec:** [`docs/original-prd.md`](docs/original-prd.md) (588 lines — the full PRD, architecture, API spec, and per-surface design report).
-Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md) · [`docs/handoff-to-auto.md`](docs/handoff-to-auto.md)
+Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md) · [`docs/handoff-to-auto.md`](docs/handoff-to-auto.md) · [`docs/revenue.md`](docs/revenue.md)
 
 ---
 
@@ -126,7 +126,10 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `doctor` | Done — reports against the mode the scan will actually run in, and self-tests the engine |
 | `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
 | `watch`, `explain` | Done |
-| Tests | 394 passing |
+| **`revenue detect\|eval`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost |
+| **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
+| **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
+| Tests | 477 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -153,6 +156,33 @@ sirius fix SIR-SEC-001
 ```
 
 ---
+
+## The revenue surface
+
+`scan` prices money at risk in **code**. `revenue` and `reconcile` price it in
+**operations**, with no backend and no network: failed payments, abandoned
+checkouts, ageing receivables, and three sets of books that disagree.
+
+```bash
+sirius revenue gen batch && sirius revenue detect batch
+sirius revenue eval batch          # held-out metrics, incl. what being wrong cost
+sirius revenue recover batch       # bounded workflow + signed audit trail
+sirius reconcile books --gen && sirius reconcile books
+```
+
+Full design and the honest findings: [`docs/revenue.md`](docs/revenue.md).
+Three rules this surface does not bend:
+
+- **The target is uplift, not recovery.** Money that would have arrived anyway
+  is subtracted, everywhere, including from the headline.
+- **Capacity, not cost, is the constraint.** Records are chosen by expected
+  value under a cap, because retry ratios, NACH limits and TRAI contact rules
+  are real and an SMS costing ₹0.18 is not.
+- **Refusing is a first-class action.** Holds, blocked actions and skipped
+  records all produce audit entries; "considered and left alone" must be
+  distinguishable from "never looked".
+
+Everything is simulated and says so. There is no `--execute`.
 
 ## Demo obligations
 
