@@ -14,7 +14,7 @@
  */
 
 import { formatInr, formatInrCompact } from '../money.js';
-import type { Evaluation } from '../revenue/evaluate.js';
+import type { CapacityPoint, Evaluation } from '../revenue/evaluate.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
@@ -196,7 +196,12 @@ export function renderIncidents(context: BatchContext, palette: Palette): string
 }
 
 /** The evaluation panel: the numbers, including the ones that hurt. */
-export function renderEvaluation(evaluation: Evaluation, model: Model, palette: Palette): string {
+export function renderEvaluation(
+  evaluation: Evaluation,
+  model: Model,
+  palette: Palette,
+  capacity: readonly CapacityPoint[] = [],
+): string {
   const { matrix, cost } = evaluation;
   const lines: string[] = [];
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -286,7 +291,7 @@ export function renderEvaluation(evaluation: Evaluation, model: Model, palette: 
 
   const best = Math.max(
     cost.net_paise,
-    ...evaluation.baselines.filter((b) => !b.over_capacity).map((b) => b.cost.net_paise),
+    ...evaluation.baselines.filter((b) => b.feasible).map((b) => b.cost.net_paise),
   );
 
   const row = (
@@ -294,7 +299,7 @@ export function renderEvaluation(evaluation: Evaluation, model: Model, palette: 
     net: number,
     flagged: number,
     note: string,
-    options: { self?: boolean; over?: boolean; harm?: number } = {},
+    options: { self?: boolean; over?: boolean; harm?: number; because?: string } = {},
   ) => {
     const paint = options.self
       ? palette.green
@@ -304,25 +309,47 @@ export function renderEvaluation(evaluation: Evaluation, model: Model, palette: 
           ? palette.amber
           : palette.dim;
     const marker = options.self ? palette.violet(palette.glyph('arrow')) : ' ';
-    const count = options.over ? `${flagged} acted on — over capacity` : `${flagged} acted on`;
     const harm =
       options.harm === undefined
         ? ''
         : options.harm === 0
           ? palette.green(`  ${palette.glyph('check')} touched none it must not`)
           : palette.red(`  ${palette.glyph('cross')} touched ${options.harm} it must not`);
+
+    // A policy that does not fit has no net worth comparing. Its rupee figure
+    // describes a batch with no gateway limit and no contact rule, and printed
+    // in the money column it is simply the largest number on the screen — which
+    // reads as the winner however much grey it is painted. The verdict goes in
+    // the column instead, and the money follows on the next line, in brackets,
+    // as the counterfactual it is.
+    if (options.over) {
+      return (
+        `   ${marker} ${name.padEnd(19)}${palette.dim(palette.bold('INFEASIBLE'.padStart(13)))}${harm}  ` +
+        palette.dim(`${options.because ?? 'over capacity'} · ${note}`)
+      );
+    }
+
     return `   ${marker} ${name.padEnd(19)}${paint(palette.bold(palette.rupee(net).padStart(13)))}${harm}  ${palette.dim(
-      `${count} · ${note}`,
+      `${flagged} acted on · ${note}`,
     )}`;
   };
 
   for (const baseline of evaluation.baselines) {
     lines.push(
       row(baseline.name, baseline.cost.net_paise, baseline.flagged, baseline.note, {
-        over: baseline.over_capacity,
+        over: !baseline.feasible,
         harm: baseline.harmful_touches,
+        ...(baseline.infeasible_because ? { because: baseline.infeasible_because } : {}),
       }),
     );
+    if (!baseline.feasible) {
+      lines.push(
+        palette.dim(
+          `     ${' '.repeat(19)}${`(${palette.rupee(baseline.cost.net_paise)})`.padStart(13)}   ` +
+            `what it would net if those limits did not exist`,
+        ),
+      );
+    }
     if (baseline.name === 'newest first') {
       lines.push(
         row(
@@ -344,6 +371,47 @@ export function renderEvaluation(evaluation: Evaluation, model: Model, palette: 
     ),
   );
   lines.push('');
+
+  // ---- how the edge moves with capacity
+  if (capacity.length > 0) {
+    lines.push(
+      `  ${palette.bold('AND HOW MUCH ROOM THERE IS TO ACT')}   ${palette.dim(
+        'the same detector, the same batch, against the best heuristic a team could run',
+      )}`,
+    );
+    for (const point of capacity) {
+      const edge = `${point.edge >= 0 ? '+' : ''}${(point.edge * 100).toFixed(1)}%`;
+      const paint = point.edge >= 0.05 ? palette.green : point.edge > 0 ? palette.amber : palette.red;
+      const violations =
+        point.heuristic_forbidden_touched > 0
+          ? palette.red(
+              `  ${palette.glyph('cross')} ${point.heuristic_forbidden_touched} forbidden touch${
+                point.heuristic_forbidden_touched === 1 ? '' : 'es'
+              } by ${point.best_runnable}`,
+            )
+          : palette.dim('  — neither touched anything out of bounds');
+      lines.push(
+        `     ${`${Math.round(point.share * 100)}% capacity`.padEnd(16)}` +
+          `${palette.dim(`${String(point.acted_on).padStart(3)}/${String(point.max_actions).padEnd(3)} used`)}   ` +
+          `${paint(palette.bold(edge.padStart(7)))} ${palette.dim('vs ' + point.best_runnable)}${violations}`,
+      );
+    }
+    lines.push('');
+    lines.push(
+      palette.dim(
+        '    With room to work a fifth of the batch you can afford to be roughly right —\n' +
+          '    sorting by amount collects most of the money by accident. The tighter capacity\n' +
+          '    gets, the more every one of the few actions has to be the right one, and that is\n' +
+          '    what the model is for. Capacity is the constraint a finance team actually has.\n' +
+          '\n' +
+          '    This is one batch, so read it as an anecdote: on a single seed the edge is often\n' +
+          '    zero, because at tight capacity the highest expected value and the largest amount\n' +
+          '    are frequently the same records. Across eight seeds the mean is +20.4% at 3% and\n' +
+          '    +1.1% at 20%.  sirius revenue sweep --capacity-share 0.03  is that measurement.',
+      ),
+    );
+    lines.push('');
+  }
 
   // ---- calibration
   lines.push(

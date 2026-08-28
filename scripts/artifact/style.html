@@ -228,6 +228,18 @@
   tr.self td.name { color: var(--violet-lit); }
   tr.ceiling td { color: var(--muted); }
 
+  /* A policy that cannot be run. Muted, and its money column carries a verdict
+     rather than a figure — printed as rupees it is the largest number in the
+     table and reads as the winner however it is painted. */
+  tr.infeasible td { color: var(--dim); }
+  td.money.verdict {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.13em;
+    color: var(--dim);
+  }
+
   .mark {
     display: inline-block;
     width: 1.1em;

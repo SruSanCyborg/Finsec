@@ -20,7 +20,9 @@
 
 import { estimatedCost, DEFAULT_COSTS } from './cost.js';
 import type { CostModel } from './cost.js';
-import { isUplift } from './model.js';
+import { assessBatch, isUplift } from './model.js';
+import type { Model } from './model.js';
+import type { BatchContext } from './features.js';
 import { splitOf } from './synth.js';
 import type { Assessment, GroundTruth, RiskRecord, Split } from './types.js';
 
@@ -119,6 +121,26 @@ export interface Baseline {
   over_capacity: boolean;
   /** Records it would have touched that nothing is allowed to touch. */
   harmful_touches: number;
+  /**
+   * Whether a team could actually run this.
+   *
+   * Capacity is the line. You cannot perform more interventions than you have
+   * room for, so a policy over capacity is not a worse choice — it is not a
+   * choice, and its rupee figure describes a world with no gateway limits, no
+   * NACH caps and no TRAI contact rules. Printing that figure beside the
+   * others invites the one comparison this whole surface exists to refuse.
+   *
+   * Forbidden touches are deliberately *not* part of this. A policy that
+   * contacts a disputed record can be run — it is a compliance failure, not an
+   * impossibility — and folding the two together would let us mark the
+   * spreadsheet heuristic infeasible over a single touch, which is the
+   * self-serving version of the same trick.
+   */
+  feasible: boolean;
+  /** Why not, when it is not. */
+  infeasible_because?: string;
+  /** An upper bound rather than a policy anyone could follow. */
+  bound?: boolean;
 }
 
 export interface EvaluateInput {
@@ -250,14 +272,21 @@ function baselinesFor(rows: readonly Row[], capacity: number, costs: CostModel):
     note: string,
     acts: (row: Row) => boolean,
     flagged: number,
-    overCapacity = false,
+    options: { overCapacity?: boolean; bound?: boolean } = {},
   ): Baseline => ({
     name,
     note,
     flagged,
     cost: costOf(rows, acts, costs),
-    over_capacity: overCapacity,
+    over_capacity: options.overCapacity ?? false,
     harmful_touches: harm(acts),
+    feasible: !options.overCapacity,
+    ...(options.overCapacity
+      ? {
+          infeasible_because: `${(flagged / Math.max(1, capacity)).toFixed(1)}× the ${capacity} interventions available`,
+        }
+      : {}),
+    ...(options.bound ? { bound: true } : {}),
   });
 
   const k = Math.min(capacity, rows.length);
@@ -268,7 +297,7 @@ function baselinesFor(rows: readonly Row[], capacity: number, costs: CostModel):
       'no model at all — and far past what any gateway or contact rule allows',
       () => true,
       rows.length,
-      rows.length > capacity,
+      { overCapacity: rows.length > capacity },
     ),
     policy('chase nothing', 'what the money does when left alone', () => false, 0),
     policy(
@@ -288,6 +317,7 @@ function baselinesFor(rows: readonly Row[], capacity: number, costs: CostModel):
       'the ceiling — the best possible choice of the same number of records',
       (row) => oracle.has(row.record.id),
       k,
+      { bound: true },
     ),
   ];
 }
@@ -389,6 +419,97 @@ function calibrationError(bins: readonly CalibrationBin[]): number {
   return round(
     bins.reduce((sum, bin) => sum + (bin.count / total) * Math.abs(bin.predicted - bin.actual), 0),
   );
+}
+
+/**
+ * How the detector's edge over the best runnable heuristic moves with capacity.
+ *
+ * Reported at several capacities rather than one, because a single number
+ * invites "so your model is worth 1%", and the honest answer is "at the capacity
+ * you happened to measure, yes — here is the rest of the curve." Across eight
+ * seeds the mean edge is +20.4% at 3% capacity and +1.1% at 20%: with room to
+ * work a fifth of the batch, sorting by amount collects most of the money by
+ * accident, and the model earns its keep only when actions are scarce.
+ *
+ * On any *single* batch the edge is frequently zero, because at tight capacity
+ * the highest expected value and the largest amount are often the same records.
+ * That is not a bug and it is not hidden — `revenue sweep` exists because one
+ * batch is an anecdote (D-026), and this curve is the anecdote.
+ */
+export interface CapacityPoint {
+  share: number;
+  max_actions: number;
+  /** How many the detector actually worked. It may use fewer than it has. */
+  acted_on: number;
+  detector_net_paise: number;
+  best_runnable_net_paise: number;
+  best_runnable: string;
+  edge: number;
+  forbidden_touched: number;
+  heuristic_forbidden_touched: number;
+}
+
+export function capacityCurve(args: {
+  /** The records in the split being evaluated — the same ones `evaluate` sees. */
+  records: readonly RiskRecord[];
+  model: Model;
+  context: BatchContext;
+  truth: ReadonlyMap<string, GroundTruth>;
+  threshold: number;
+  split?: Split | 'all';
+  costs?: CostModel;
+  shares?: readonly number[];
+}): CapacityPoint[] {
+  const shares = args.shares ?? [0.03, 0.05, 0.1, 0.2, 0.4];
+  const points: CapacityPoint[] = [];
+
+  for (const share of shares) {
+    const max = Math.max(1, Math.round(args.records.length * share));
+    const capacity = { max_actions: max, rule: `${Math.round(share * 100)}% of the batch` };
+
+    // Re-assessed, not re-sliced. `select()` decides which records get worked
+    // *given the room available*, so an assessment made at one capacity is a
+    // different decision from one made at another. Reusing a single set of
+    // assessments across the curve compared a detector acting on twenty-two
+    // records against a heuristic held to three, and reported the difference as
+    // a seventy-one percent edge. It was the same twenty-two records every time.
+    const { assessments } = assessBatch(args.records, args.model, {
+      context: args.context,
+      ...(args.costs ? { costs: args.costs } : {}),
+      capacity,
+    });
+
+    const at = evaluate({
+      records: args.records,
+      assessments,
+      truth: args.truth,
+      threshold: args.threshold,
+      ...(args.split ? { split: args.split } : {}),
+      ...(args.costs ? { costs: args.costs } : {}),
+      capacity,
+    });
+
+    // Against what a team could actually have run instead — never a policy that
+    // does not fit, and never the ceiling, which nobody can follow.
+    const runnable = at.baselines.filter((b) => b.feasible && !b.bound && b.flagged > 0);
+    const best = runnable.reduce(
+      (winner, b) => (b.cost.net_paise > winner.cost.net_paise ? b : winner),
+      runnable[0] as Baseline,
+    );
+
+    points.push({
+      share,
+      max_actions: max,
+      acted_on: at.matrix.true_positive + at.matrix.false_positive,
+      detector_net_paise: at.cost.net_paise,
+      best_runnable_net_paise: best?.cost.net_paise ?? 0,
+      best_runnable: best?.name ?? 'none',
+      edge: best && best.cost.net_paise > 0 ? at.cost.net_paise / best.cost.net_paise - 1 : 0,
+      forbidden_touched: at.forbidden.touched,
+      heuristic_forbidden_touched: best?.harmful_touches ?? 0,
+    });
+  }
+  return points;
 }
 
 function curveOf(rows: readonly Row[], costs: CostModel): Evaluation['curve'] {

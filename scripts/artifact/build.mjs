@@ -48,9 +48,17 @@ function policyRow(name, net, touched, acted, note, options = {}) {
       ? `<div class="dots" aria-label="touched none of ${forbidden}">${cleanDots(forbidden)}</div>`
       : `<div class="dots" aria-label="touched ${touched} of ${forbidden}">${dots(touched, forbidden)}</div>`;
 
-  return `              <tr${options.self ? ' class="self"' : options.ceiling ? ' class="ceiling"' : ''}>
+  const rowClass = options.self
+    ? ' class="self"'
+    : options.infeasible
+      ? ' class="infeasible"'
+      : options.ceiling
+        ? ' class="ceiling"'
+        : '';
+
+  return `              <tr${rowClass}>
                 <td class="name">${marker}${escape(name)}</td>
-                <td class="money${options.self ? ' gain' : ''}">${escape(net)}</td>
+                <td class="money${options.self ? ' gain' : ''}${options.infeasible ? ' verdict' : ''}">${escape(net)}</td>
                 <td>${cells}</td>
                 <td class="note">${escape(acted)} — ${escape(note)}</td>
               </tr>`;
@@ -60,11 +68,20 @@ const baselineRows = () => {
   const rows = [];
   for (const baseline of m.eval.baselines) {
     if (baseline.name === 'chase nothing') continue;
-    const acted = baseline.over_capacity
-      ? `${baseline.flagged} acted on, over capacity`
+    // A policy that does not fit has no net worth comparing: its rupee figure
+    // describes a batch with no gateway limit and no contact rule, and in the
+    // money column it is simply the largest number in the table, which reads as
+    // the winner whatever the note says. The verdict goes in the column and the
+    // money follows as the counterfactual it is.
+    const infeasible = baseline.feasible === false;
+    const acted = infeasible
+      ? (baseline.infeasible_because ?? 'over capacity')
       : `${baseline.flagged} acted on`;
-    rows.push(policyRow(baseline.name, baseline.net, baseline.harmful_touches, acted, baseline.note, {
+    const money = infeasible ? 'INFEASIBLE' : baseline.net;
+    const note = infeasible ? `${baseline.note} — would net ${baseline.net} if those limits did not exist` : baseline.note;
+    rows.push(policyRow(baseline.name, money, baseline.harmful_touches, acted, note, {
       ceiling: baseline.name === 'perfect foresight',
+      infeasible,
     }));
 
     if (baseline.name === 'newest first') {

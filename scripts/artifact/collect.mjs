@@ -177,6 +177,9 @@ try {
         flagged: baseline.flagged,
         harmful_touches: baseline.harmful_touches,
         over_capacity: baseline.over_capacity,
+        feasible: baseline.feasible,
+        infeasible_because: baseline.infeasible_because ?? null,
+        bound: baseline.bound ?? false,
         note: baseline.note,
       })),
       detector: {

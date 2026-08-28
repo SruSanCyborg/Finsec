@@ -12,7 +12,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { DEFAULT_COSTS } from '../src/revenue/cost.js';
-import { evaluate, CALIBRATION_MIN_BIN } from '../src/revenue/evaluate.js';
+import { capacityCurve, evaluate, CALIBRATION_MIN_BIN } from '../src/revenue/evaluate.js';
 import { analyzeBatch } from '../src/revenue/features.js';
 import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift, shareFor } from '../src/revenue/model.js';
 import { Rng } from '../src/revenue/random.js';
@@ -446,5 +446,85 @@ describe('calibration reporting', () => {
       0,
     );
     expect(contribution).toBeLessThan(0.02);
+  });
+});
+
+describe('the capacity curve', () => {
+  const generated = generateBatch({ seed: 'curve-test', payments: 220, checkouts: 60, invoices: 40 });
+  const model = fitModel(generated.records, generated.truth, DEFAULT_COSTS);
+  const context = analyzeBatch(generated.records);
+  const heldOut = generated.records.filter((record) => splitOf(record.id) === 'test');
+
+  const curve = capacityCurve({
+    records: heldOut,
+    model,
+    context,
+    truth: generated.truth,
+    threshold: model.threshold,
+    costs: DEFAULT_COSTS,
+  });
+
+  it('never acts more times than the capacity it is being measured at', () => {
+    // The bug this exists for: the curve varied capacity for the *baselines*
+    // and reused one set of assessments for the detector, so the detector acted
+    // on the same twenty-two records at every point. Compared against a
+    // heuristic held to three, that reported a seventy-one percent edge — a
+    // fabricated number, in our own favour, on the slide that argues the thesis.
+    for (const point of curve) {
+      expect(point.acted_on, `${Math.round(point.share * 100)}% capacity`).toBeLessThanOrEqual(
+        point.max_actions,
+      );
+    }
+  });
+
+  it('makes a different decision at a different capacity', () => {
+    // If every point acts on the same number of records, the curve is measuring
+    // nothing and the edge it reports is an artifact of the comparison.
+    const acted = new Set(curve.map((point) => point.acted_on));
+    expect(acted.size).toBeGreaterThan(1);
+  });
+
+  it('compares against something a team could actually have run', () => {
+    // Never the ceiling, and never a policy that does not fit — either would
+    // make the edge meaningless in opposite directions.
+    for (const point of curve) {
+      expect(point.best_runnable).not.toBe('perfect foresight');
+      expect(point.best_runnable).not.toBe('chase everything');
+    }
+  });
+
+  it('touches nothing out of bounds at any capacity', () => {
+    for (const point of curve) expect(point.forbidden_touched).toBe(0);
+  });
+});
+
+describe('a policy that does not fit', () => {
+  it('is marked infeasible rather than shown as the largest number on screen', () => {
+    const generated = generateBatch({ seed: 'feasible-test', payments: 200, checkouts: 50, invoices: 30 });
+    const model = fitModel(generated.records, generated.truth, DEFAULT_COSTS);
+    const context = analyzeBatch(generated.records);
+    const heldOut = generated.records.filter((record) => splitOf(record.id) === 'test');
+    const { assessments, capacity } = assessBatch(heldOut, model, { context });
+
+    const result = evaluate({
+      records: generated.records,
+      assessments,
+      truth: generated.truth,
+      threshold: model.threshold,
+      capacity,
+    });
+
+    const everything = result.baselines.find((b) => b.name === 'chase everything');
+    expect(everything?.feasible).toBe(false);
+    expect(everything?.infeasible_because).toMatch(/× the \d+ interventions available/);
+
+    // It still nets the most money, and that is exactly why it must not be
+    // presented as a competitor: it describes a batch with no gateway limit.
+    expect(everything!.cost.net_paise).toBeGreaterThan(result.cost.net_paise);
+
+    // Forbidden touches are deliberately not a feasibility test — otherwise a
+    // single touch would let us disqualify the heuristic that beats us.
+    const biggest = result.baselines.find((b) => b.name === 'biggest first');
+    expect(biggest?.feasible).toBe(true);
   });
 });

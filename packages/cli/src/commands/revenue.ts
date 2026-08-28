@@ -332,7 +332,7 @@ async function evaluateBatch(
   }
 
   const split = parseSplit(flags.split);
-  const { batch, model, assessments, capacity } = await scoreBatch(target, flags, split);
+  const { batch, model, assessments, capacity, context, inSplit } = await scoreBatch(target, flags, split);
   const truth = loadTruth(dir);
 
   // The project's cost model, not the built-in one. `recover` and `sweep` both
@@ -341,7 +341,7 @@ async function evaluateBatch(
   // from somebody else's assumptions.
   const { costsFrom } = await import('../revenue/policy.js');
 
-  const evaluation = evaluate({
+  const input = {
     records: batch.records,
     assessments,
     truth,
@@ -349,11 +349,31 @@ async function evaluateBatch(
     split,
     costs: costsFrom(projectConfig().revenue),
     capacity,
+  };
+  const evaluation = evaluate(input);
+
+  // The edge against the best runnable heuristic is a function of how much room
+  // there is to act, and reporting it at one capacity invited "so your model is
+  // worth one percent". It is worth one percent at the capacity this batch
+  // happened to be measured at. The curve is the answer.
+  const { capacityCurve } = await import('../revenue/evaluate.js');
+  const curve = capacityCurve({
+    records: inSplit,
+    model,
+    context,
+    truth,
+    threshold: model.threshold,
+    split,
+    costs: costsFrom(projectConfig().revenue),
   });
 
   if (flags.json) {
     process.stdout.write(
-      JSON.stringify({ schema: 'sirius.revenue.eval/v1', model, evaluation }, null, 2) + '\n',
+      JSON.stringify(
+        { schema: 'sirius.revenue.eval/v1', model, evaluation, capacity_curve: curve },
+        null,
+        2,
+      ) + '\n',
     );
     return;
   }
@@ -365,7 +385,7 @@ async function evaluateBatch(
     width: capabilities.width,
   });
 
-  process.stdout.write(renderEvaluation(evaluation, model, palette));
+  process.stdout.write(renderEvaluation(evaluation, model, palette, curve));
 }
 
 // ---- recover ----------------------------------------------------------------
