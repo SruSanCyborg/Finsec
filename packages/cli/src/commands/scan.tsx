@@ -148,10 +148,17 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       !flags.sarif &&
       (process.env.SIRIUS_STREAM_PLAIN === '1' || Boolean(process.stdout.isTTY));
 
-    frames = pace(
-      scanDirectory(target, { ignorePatterns: config.exclude }),
-      resolvePace(interactivePacing),
-    );
+    let source: AsyncIterable<WsFrame> = scanDirectory(target, { ignorePatterns: config.exclude });
+
+    // Probing happens before the finding is rendered, so a live credential is
+    // announced on its own line rather than in a footnote after every finding
+    // has already scrolled past.
+    if (config.validateSecrets) {
+      const { validateFrames } = await import('../engine/threat.js');
+      source = validateFrames(source, target);
+    }
+
+    frames = pace(source, resolvePace(interactivePacing));
     scanSource = 'local engine · tree-sitter AST analysis';
   } else {
     // Unreachable in practice — a missing project id routes to the local engine
@@ -270,7 +277,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // Runs after detection because it reasons *about* findings: which are
   // reachable, which are live, and how long they have been exposed.
   if (!flags.json && outcome.findings.length > 0) {
-    const { buildAttackPaths, checkExposure, findIntroduction } = await import('../engine/threat.js');
+    const { buildAttackPaths, checkExposureAt, findIntroduction } = await import('../engine/threat.js');
     const { renderThreatReport } = await import('../render/threat.js');
     const { writePaced } = await import('../engine/pace.js');
 
@@ -285,8 +292,18 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
     for (const finding of secrets) {
       // Opt-in only: probing uses someone else's credential against their API.
-      if (config.validateSecrets && finding.snippet) {
-        exposure.set(finding.id, await checkExposure(finding.snippet));
+      // Already probed while streaming when the engine ran, so reuse the verdict
+      // rather than asking the provider a second time about the same key.
+      if (config.validateSecrets) {
+        exposure.set(
+          finding.id,
+          finding.validity && finding.validity !== 'unknown'
+            ? {
+                exposure: finding.validity,
+                detail: 'asked the provider during this scan',
+              }
+            : await checkExposureAt(resolve(target, finding.file), finding.line),
+        );
       }
       // git needs a path it can resolve from the repo, not one relative to the
       // scan target, which may be several directories inside it.

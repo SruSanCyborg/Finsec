@@ -68,8 +68,10 @@ export function renderThreatReport(
     const label = live
       ? `${unicode ? '⚠ ' : '! '}LIVE — accepted by ${verdict.provider} right now`
       : verdict.exposure === 'inactive'
-        ? `revoked — ${verdict.detail ?? 'provider rejected it'}`
-        : `unverified — ${verdict.detail ?? 'no verdict'}`;
+        ? // Not "revoked": a refusal cannot distinguish a key that was
+          // withdrawn from one that never worked.
+          `not accepted — ${verdict.detail ?? 'the provider refused it'}`
+        : `unverified — ${verdict.detail ?? 'the provider gave no usable answer'}`;
 
     lines.push(
       ` ${paint('exposure', DIM, color)}   ${finding.rule_id}  ` +

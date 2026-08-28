@@ -179,6 +179,12 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
   const capabilities = detectCapabilities({ noColor: globals.color === false });
   const glyphs = glyphsFor(capabilities);
 
+  // Discovered once: every template that must match the project's vocabulary
+  // reads from this rather than guessing a name.
+  const { findAuthConvention } = await import('../engine/conventions.js');
+  const auth = local ? findAuthConvention(root) : undefined;
+  const fixContext: import('../engine/fix.js').FixContext = auth ? { auth } : {};
+
   let applied = 0;
   let acceptAll = Boolean(flags.apply);
 
@@ -190,13 +196,19 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
     // was unreachable in the default configuration — the Response stage existed
     // only against a backend nobody has running.
     const suggestion = local
-      ? await localSuggestion(finding, filePath)
+      ? await localSuggestion(finding, filePath, fixContext)
       : await client.requestFix(cache.scan_id, finding.id);
 
     if (!suggestion) {
-      process.stderr.write(
-        `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).\n`,
-      );
+      // Say *why* nothing was offered. "No template" and "this project has no
+      // authentication decorator to copy" are different problems, and only one
+      // of them is something the user can act on.
+      const reason =
+        finding.fix_action === 'add_auth_decorator' && !fixContext.auth
+          ? `${finding.file} has no authenticated route to copy, so there is no ` +
+            `decorator to apply. Adding authentication here is a design decision.`
+          : `no local fix template for ${finding.rule_id} (${finding.fix_action ?? 'no action'}).`;
+      process.stderr.write(`${reason}\n`);
       continue;
     }
 
@@ -236,7 +248,29 @@ export async function runFix(identifier: string | undefined, flags: FixFlags, gl
         process.stderr.write(`skipped ${finding.rule_id}: ${finding.file} no longer exists\n`);
         continue;
       }
-      const { backup } = applyDiffToFile(filePath, finding.line, suggestion.diff);
+      const verified = suggestion as FixSuggestion & {
+        verified_source?: string;
+        verified_from?: string;
+      };
+
+      // Write exactly what was verified, when we have it. Replaying the diff
+      // instead drops anything outside the hunk — the added `import os`, the
+      // decorator's import — and produces a file the verifier never saw.
+      let backup: string;
+      if (verified.verified_source !== undefined && verified.verified_from !== undefined) {
+        const current = readFileSync(filePath, 'utf8');
+        if (current !== verified.verified_from) {
+          process.stderr.write(
+            `skipped ${finding.rule_id}: ${finding.file} changed since the scan. Re-run the scan.\n`,
+          );
+          continue;
+        }
+        backup = `${filePath}.sirius-backup`;
+        copyFileSync(filePath, backup);
+        writeFileSync(filePath, verified.verified_source, 'utf8');
+      } else {
+        ({ backup } = applyDiffToFile(filePath, finding.line, suggestion.diff));
+      }
       applied += 1;
       process.stdout.write(`applied ${finding.rule_id} to ${finding.file} (backup: ${backup})\n`);
 
@@ -344,6 +378,7 @@ function presentFix(args: {
 async function localSuggestion(
   finding: CachedFinding,
   filePath: string,
+  context: import('../engine/fix.js').FixContext,
 ): Promise<FixSuggestion | undefined> {
   if (!finding.fix_action || !existsSync(filePath)) return undefined;
 
@@ -354,6 +389,7 @@ async function localSuggestion(
     line: finding.line,
     ruleId: finding.rule_id,
     action: finding.fix_action,
+    context,
   });
   if (!built) return undefined;
 
@@ -371,5 +407,16 @@ async function localSuggestion(
     // ran when none did.
     stages: built.stages,
     verifier_detail: built.verifierDetail,
-  } as FixSuggestion & { stages: typeof built.stages; verifier_detail: string };
+    // The exact text the verifier re-ran the rule against. Applying anything
+    // else would mean the ✓ PASS was earned by code that never reached disk —
+    // which is what happened while only the diff was replayed and the imports
+    // the patch depends on were silently dropped.
+    verified_source: built.patched,
+    verified_from: readFileSync(filePath, 'utf8'),
+  } as FixSuggestion & {
+    stages: typeof built.stages;
+    verifier_detail: string;
+    verified_source: string;
+    verified_from: string;
+  };
 }

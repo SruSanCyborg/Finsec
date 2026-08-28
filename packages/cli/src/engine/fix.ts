@@ -52,7 +52,16 @@ interface Replacement {
   next: string;
   target?: string;
   sideEffects?: { file: string; content: string }[];
+  /** An import the patched file needs and may not already have. */
+  requiresImport?: string;
+  /** Inclusive 0-based line range to replace, when it is not the finding's line. */
+  span?: [number, number];
   confidence: number;
+}
+
+/** What the surrounding project already does, for templates that must match it. */
+export interface FixContext {
+  auth?: { name: string; importLine?: string };
 }
 
 /** `STRIPE_KEY` → `STRIPE_API_KEY`; a name someone would plausibly have set. */
@@ -119,6 +128,8 @@ function buildReplacement(
   action: string,
   line: string,
   language: string,
+  context: FixContext,
+  file?: { lines: string[]; index: number },
 ): Replacement | undefined {
   const indent = INDENT.exec(line)?.[1] ?? '';
 
@@ -239,13 +250,43 @@ function buildReplacement(
     }
 
     case 'add_auth_decorator': {
-      // Inserted above the route, so the replacement is two lines.
       if (!/^\s*(?:@|def |async def |function |export )/.test(line)) return undefined;
+
+      // Only ever the decorator this project already uses. Inventing one gives
+      // the reader code that fails at import and a finding that does not clear
+      // — the verifier caught exactly that, and it should never have been
+      // offered in the first place. Adding authentication where a project has
+      // none is a design decision, not a lint fix.
+      const auth = context.auth;
+      if (!auth) return undefined;
+      if (!file) return undefined;
+
+      // Placement is not cosmetic. Decorators apply bottom-up, so
+      //
+      //   @login_required
+      //   @bp.route("/refund")
+      //   def refund(): ...
+      //
+      // registers the *undecorated* function with the router and the auth
+      // wrapper is never reached — a fix that silently disables the protection
+      // it claims to add. The decorator therefore goes immediately above the
+      // definition, inside every routing decorator, which is also how the
+      // project's own authenticated routes are written.
+      const defIndex = findDefinitionLine(file.lines, file.index);
+      if (defIndex === undefined) return undefined;
+
+      const defLine = file.lines[defIndex]!;
+      const defIndent = INDENT.exec(defLine)?.[1] ?? '';
+
       return {
         line: 0,
-        next: `${indent}@require_auth\n${line}`,
-        target: 'require_auth',
-        confidence: 0.68,
+        span: [defIndex, defIndex],
+        next: `${defIndent}@${auth.name}\n${defLine}`,
+        target: auth.name,
+        ...(auth.importLine ? { requiresImport: auth.importLine } : {}),
+        // Lower than the others: ordering among several decorators is a
+        // judgement this template makes only one rule about.
+        confidence: 0.62,
       };
     }
 
@@ -254,11 +295,27 @@ function buildReplacement(
   }
 }
 
+/**
+ * The line a decorator belongs immediately above: the first `def`/`function` at
+ * or after `from`. Bounded, because a decorator far from any definition means
+ * the shape was not what the template assumed.
+ */
+function findDefinitionLine(lines: string[], from: number): number | undefined {
+  for (let i = from; i < Math.min(lines.length, from + 12); i += 1) {
+    if (/^\s*(?:async\s+)?(?:def|function)\b/.test(lines[i] ?? '')) return i;
+  }
+  return undefined;
+}
+
 /** A one-hunk unified diff, for display. */
 function unifiedDiff(file: string, lineNumber: number, before: string, after: string): string {
+  const removedCount = before.split('\n').length;
   const addedCount = after.split('\n').length;
-  const header = `@@ -${lineNumber},1 +${lineNumber},${addedCount} @@`;
-  const minus = `-${before}`;
+  const header = `@@ -${lineNumber},${removedCount} +${lineNumber},${addedCount} @@`;
+  const minus = before
+    .split('\n')
+    .map((l) => `-${l}`)
+    .join('\n');
   const plus = after
     .split('\n')
     .map((l) => `+${l}`)
@@ -273,6 +330,8 @@ export interface BuildFixInput {
   line: number;
   ruleId: string;
   action: string;
+  /** Conventions discovered in the project; see engine/conventions.ts. */
+  context?: FixContext;
 }
 
 /**
@@ -289,17 +348,28 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
   if (original === undefined) return undefined;
 
   const language = filePath.endsWith('.py') ? 'python' : 'javascript';
-  const replacement = buildReplacement(action, original, language);
+  const replacement = buildReplacement(action, original, language, input.context ?? {}, {
+    lines,
+    index: line - 1,
+  });
   if (!replacement) return undefined;
 
+  const [from, to] = replacement.span ?? [line - 1, line - 1];
   const patchedLines = [...lines];
-  patchedLines[line - 1] = replacement.next;
+  patchedLines.splice(from, to - from + 1, replacement.next);
   const patched = patchedLines.join('\n');
 
-  // `os.environ` needs the import to exist, or the "fix" breaks the file.
+  // An added symbol needs its import, or the "fix" breaks the file it fixed.
   const needsOsImport =
     action === 'env_lookup' && language === 'python' && !/^\s*import\s+os\b/m.test(source);
-  const finalSource = needsOsImport ? `import os\n${patched}` : patched;
+
+  const extraImport =
+    replacement.requiresImport && !source.includes(replacement.requiresImport)
+      ? replacement.requiresImport
+      : undefined;
+
+  const prelude = [needsOsImport ? 'import os' : undefined, extraImport].filter(Boolean).join('\n');
+  const finalSource = prelude ? `${prelude}\n${patched}` : patched;
 
   const verdict = await verify({ filePath, source: finalSource, ruleId, line });
 
@@ -312,7 +382,7 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
     },
     {
       name: 'diff builder',
-      detail: `template: ${action}${needsOsImport ? ' (+ import os)' : ''}`,
+      detail: `template: ${action}${prelude ? ` (+ ${prelude.split('\n').length} import)` : ''}`,
       real: true,
     },
     {
@@ -325,7 +395,7 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
   return {
     action,
     ...(replacement.target ? { target: replacement.target } : {}),
-    diff: unifiedDiff(filePath, line, original, replacement.next),
+    diff: unifiedDiff(filePath, from + 1, lines.slice(from, to + 1).join('\n'), replacement.next),
     patched: finalSource,
     sideEffects: replacement.sideEffects ?? [],
     verifierStatus: verdict.status,

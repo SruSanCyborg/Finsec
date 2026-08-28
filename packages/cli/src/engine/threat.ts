@@ -18,8 +18,10 @@
  */
 
 import { execFileSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
-import type { Finding, Severity } from '../domain.js';
+import type { Finding, Severity, WsFrame } from '../domain.js';
 
 // ---------------------------------------------------------------- exposure
 
@@ -91,7 +93,14 @@ export async function checkExposure(
     });
 
     if (response.status === 401 || response.status === 403) {
-      return { exposure: 'inactive', provider: found.probe.name, detail: `revoked (HTTP ${response.status})` };
+      // "not accepted" rather than "revoked": a 401 cannot tell a key that was
+      // withdrawn from one that never worked, and only one of those means
+      // somebody already noticed.
+      return {
+        exposure: 'inactive',
+        provider: found.probe.name,
+        detail: `${found.probe.name} did not accept it (HTTP ${response.status})`,
+      };
     }
     if (response.ok) {
       return { exposure: 'verified_live', provider: found.probe.name, detail: 'credential accepted' };
@@ -103,6 +112,82 @@ export async function checkExposure(
       provider: found.probe.name,
       detail: error instanceof Error ? error.message : 'probe failed',
     };
+  }
+}
+
+/**
+ * Validates the credential as it exists in the file, not as it was displayed.
+ *
+ * Findings carry a *redacted* snippet — `sk_live_51H8…` — because a finding is
+ * rendered, logged, and written to SARIF, and a full secret must not travel
+ * through any of those. Validation is the one operation that needs the real
+ * value, and it was being handed the redacted one: every probe saw a truncated
+ * literal and returned `unknown`, so `--validate-secrets` could never verify
+ * anything at all.
+ *
+ * The real value is read here, used once against the provider's own endpoint,
+ * and never returned to the caller.
+ */
+export async function checkExposureAt(
+  filePath: string,
+  line: number,
+  options: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): Promise<{ exposure: Exposure; provider?: string; detail?: string }> {
+  let source: string;
+  try {
+    source = readFileSync(filePath, 'utf8');
+  } catch {
+    return { exposure: 'unknown', detail: 'file could not be read for validation' };
+  }
+
+  const text = source.split('\n')[line - 1];
+  if (text === undefined) {
+    return { exposure: 'unknown', detail: 'line no longer exists' };
+  }
+
+  return checkExposure(text, options);
+}
+
+/**
+ * Validates secrets as they stream past, so the verdict reaches the finding.
+ *
+ * Validation used to run in the threat stage, after every finding had already
+ * been printed — so `⚠ VERIFIED LIVE` could only ever appear in a summary line
+ * further down, never on the finding it describes. A live credential is the
+ * single most urgent thing this tool can tell someone; it belongs on the line
+ * that names the file.
+ *
+ * Only `secrets` findings are probed, and only when the user asked.
+ */
+export async function* validateFrames(
+  frames: AsyncIterable<WsFrame>,
+  root: string,
+  options: { timeoutMs?: number; fetchImpl?: typeof fetch } = {},
+): AsyncGenerator<WsFrame> {
+  for await (const frame of frames) {
+    if (frame.type === 'finding' && frame.finding?.category === 'secrets') {
+      const finding = frame.finding;
+      const verdict = await checkExposureAt(resolve(root, finding.file), finding.line, options);
+
+      if (verdict.exposure === 'verified_live') finding.validity = 'verified_live';
+      else if (verdict.exposure === 'inactive') finding.validity = 'inactive';
+      else finding.validity = 'unknown';
+
+      // The figure was estimated before anyone asked the provider. Now that
+      // there is an answer, it should say what the answer implies rather than
+      // keep quoting a ceiling for a credential that has just been refused.
+      if (verdict.exposure !== 'unknown' && finding.money_at_risk_inr) {
+        const { estimateExposure } = await import('./exposure-model.js');
+        const revised = estimateExposure({
+          ruleId: finding.rule_id,
+          severity: finding.severity,
+          ...(verdict.exposure === 'verified_live' ? { verifiedLive: true } : { confirmedInactive: true }),
+        });
+        finding.money_at_risk_inr = revised.amount;
+      }
+    }
+
+    yield frame;
   }
 }
 

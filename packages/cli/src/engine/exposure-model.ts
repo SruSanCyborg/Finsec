@@ -181,6 +181,8 @@ export interface ExposureInput {
   reachability?: Reachability;
   /** A confirmed-live credential is a present loss, not a potential one. */
   verifiedLive?: boolean;
+  /** The provider was asked and refused the credential. */
+  confirmedInactive?: boolean;
   /** Days the flaw has been in version control, if known. */
   ageDays?: number;
 }
@@ -216,6 +218,15 @@ export function estimateExposure(input: ExposureInput): ExposureResult {
   if (input.verifiedLive) {
     multiplier *= 2;
     factors.push('credential confirmed live (×2)');
+  }
+
+  // Asked the provider, and the provider refused it. The transaction exposure
+  // is gone; what remains is disclosure and rotation — the key was published,
+  // is in the history, and its presence says something about the process that
+  // put it there. Reduced, never zeroed.
+  if (input.confirmedInactive && !input.verifiedLive) {
+    multiplier *= 0.15;
+    factors.push('provider refused the credential (×0.15 — disclosure and rotation only)');
   }
 
   // Long exposure means more clones, more logs, more chances taken. Capped at

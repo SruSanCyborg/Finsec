@@ -289,7 +289,16 @@ const commandInjection: Rule = {
 // ---------------------------------------------------------------- auth
 
 const WEB_DECORATORS = /(route|get|post|put|delete|patch|api|app)/i;
-const AUTH_DECORATORS = /(login_required|requires_auth|authenticated|jwt_required|permission|authorize|protected)/i;
+/**
+ * Decorators that make a route authenticated.
+ *
+ * Exported because the fix engine has to agree with it exactly: a fix that
+ * inserts a decorator this pattern does not recognise cannot clear the finding,
+ * however sensible the decorator looks. That mismatch is precisely what the
+ * `add_auth_decorator` template got wrong — it inserted `require_auth` against
+ * a pattern that only matches `requires_auth`.
+ */
+export const AUTH_DECORATORS = /(login_required|requires_auth|authenticated|jwt_required|permission|authorize|protected)/i;
 
 const missingAuth: Rule = {
   id: 'SIR-SEC-020',

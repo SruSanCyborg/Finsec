@@ -356,6 +356,67 @@ templates mean the second run rebuilds the identical patch.
 
 ---
 
+## D-019 — Fixes speak the project's vocabulary; validation reads the file
+
+Two loose ends from D-018, both of which turned out to be worse than "weak".
+
+### `add_auth_decorator` was three bugs, not one
+
+It inserted `@require_auth` unconditionally. In increasing order of severity:
+
+1. A project without `require_auth` gets a file that fails at import.
+2. The rule's own pattern matches `requires_auth`, **not** `require_auth`, so
+   the fix could not clear the finding it claimed to fix. The verifier caught
+   this and reported `fail` — which is the guardrail working, but a fix that can
+   never pass should not be offered at all.
+3. It placed the decorator **above** the routing decorator. Decorators apply
+   bottom-up, so `@login_required` above `@bp.route` means the router registers
+   the *undecorated* function and the authentication never runs. A security fix
+   that silently disables the protection it advertises is the worst thing in
+   this codebase to date.
+
+Now: `engine/conventions.ts` finds the decorator the project already uses and
+the import that provides it; the fix declines outright when there is none,
+saying so ("adding authentication here is a design decision"); and the decorator
+goes immediately above the definition, inside every routing decorator, which is
+also how the project's own authenticated routes are written.
+
+**A fourth bug fell out of fixing those.** The verifier validated the patched
+source *including* the added imports, but only the diff hunk was written to
+disk — so the `✓ PASS` was earned by code that never reached the file. The local
+path now writes the exact text that was verified, after checking the file has
+not changed since. Applied and verified are the same bytes or nothing happens.
+
+### `--validate-secrets` could never verify anything
+
+It probed `finding.snippet`, which is **redacted** — `sk_live_51H8…` — because a
+finding is rendered, logged, and written to SARIF, and a full credential must
+not travel through any of those. Every probe therefore saw a truncated literal
+and returned `unknown`, reported as "no verdict", which reads like the
+provider's fault rather than ours.
+
+Validation now reads the credential from the file at the finding's line, uses it
+once against the provider's own read-only endpoint, and never returns it. It
+also runs **while findings stream** rather than in the threat stage afterwards,
+because `⚠ VERIFIED LIVE` belongs on the line naming the file, not in a footnote
+twenty lines below it.
+
+**And the figure now follows the verdict.** A credential the provider has just
+refused is not worth its transaction ceiling: ×0.15, leaving disclosure and
+rotation, never zero — the key was still published and is still in the history.
+On the demo fixture this reads honestly as ₹42,00,000 unchecked → ₹6,30,000
+once Stripe refuses it, and that drop is a better story than a staged green tick.
+
+**On demoing `VERIFIED LIVE`.** The fixture key is fake, so the honest output is
+`not accepted`. A real Stripe **test** key (`sk_test_…`) matches the same probe
+and returns a genuine `verified_live` against `/v1/balance`; supply one at demo
+time if that beat is wanted. Nothing in the repo fakes it, and the tests inject
+the provider at the fetch boundary rather than carrying a credential — a test
+suite that shipped a real key to make itself pass would have recreated the exact
+problem this tool exists to find.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.
