@@ -32,7 +32,9 @@ const fid = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const FINDINGS = [
   {
     rule_id: 'FIN-SEC-001', severity: 'critical', category: 'secrets',
-    file: 'src/config.py', line: 14, col: 18,
+    // col 14 is the opening quote of the literal, so the `╰──` elbow lands
+    // under the secret rather than partway through it.
+    file: 'src/config.py', line: 14, col: 14,
     message: 'Hardcoded Stripe secret key',
     compliance_ref: ['PCI-DSS:8.6.2', 'DPDP:8'],
     snippet: 'STRIPE_KEY = "sk_live_51H8xR2eZv…"',

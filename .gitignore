@@ -10,6 +10,7 @@ dist/
 # CLI runtime state
 .finsec/
 *.sarif
+*.finsec-backup
 finsec-report.*
 
 # Local config / secrets

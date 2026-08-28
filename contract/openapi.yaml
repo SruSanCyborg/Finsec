@@ -645,7 +645,18 @@ components:
         confidence: { type: number, minimum: 0, maximum: 1, examples: [0.92] }
         diff:
           type: string
-          description: Unified diff against the finding's **snippet**, not the whole file.
+          description: |
+            Unified diff against the finding's **snippet**, not the whole file.
+            Clients must re-locate the hunk by content rather than trusting the
+            line number, since the file may have changed since the scan.
+
+            The example is the FIN-SEC-001 fix from the demo fixture, and matches
+            contract/fixtures/chaos-repo/src/config.py line for line so that
+            `finsec fix` works end to end against the mock.
+          example: |-
+            @@ -14 +14 @@
+            -STRIPE_KEY = "sk_live_51H8xR2eZvNOTAREALKE"
+            +STRIPE_KEY = os.environ["STRIPE_API_KEY"]
         side_effects:
           type: array
           description: Template side-effects, e.g. an .env.example entry.
