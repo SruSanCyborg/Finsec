@@ -13,6 +13,7 @@
  * where the frames must arrive as fast as they are produced.
  */
 
+import { asciiRequested, toAscii } from '../ui/kit.js';
 import type { WsFrame } from '../domain.js';
 
 /** Milliseconds between findings when pacing is on. */
@@ -117,7 +118,11 @@ export async function* pace(
  * jobs are different: a report reads in paragraphs, a timeline reads a line at
  * a time.
  */
-export async function writeLinesPaced(lines: readonly string[], perLineMs: number): Promise<void> {
+export async function writeLinesPaced(input: readonly string[], perLineMs: number): Promise<void> {
+  // Same reason as `writePaced`: the last point before the terminal, and so the
+  // one place the ASCII fallback can be applied for every caller.
+  const lines = asciiRequested() ? input.map(toAscii) : input;
+
   if (perLineMs <= 0) {
     if (lines.length > 0) process.stdout.write(lines.join('\n') + '\n');
     return;
@@ -137,7 +142,13 @@ export async function writeLinesPaced(lines: readonly string[], perLineMs: numbe
  * unseen. Grouped by blank line, because an attack path reads as a unit and
  * pausing inside one just looks like stutter.
  */
-export async function writePaced(lines: readonly string[], perBlockMs: number): Promise<void> {
+export async function writePaced(input: readonly string[], perBlockMs: number): Promise<void> {
+  // The last point every paced surface passes through, and so the one place
+  // the ASCII fallback can be applied without threading a capability into
+  // thirty call sites. Prose punctuation — `—`, `…`, `§`, `≥` — never went
+  // through the glyph table, so `SIRIUS_ASCII=1` left it on screen.
+  const lines = asciiRequested() ? input.map(toAscii) : input;
+
   if (perBlockMs <= 0) {
     process.stdout.write(lines.join('\n') + '\n');
     return;

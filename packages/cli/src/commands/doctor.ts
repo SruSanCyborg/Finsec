@@ -27,7 +27,7 @@ import { loadConfig, configTomlPath, findProjectRoot, loadIgnorePatterns } from 
 import { maskKey } from '../config/write.js';
 import { loadLastScan } from '../session.js';
 import { detectCapabilities, glyphsFor } from '../ui/theme.js';
-import { note, padVisible, visibleWidth } from '../ui/kit.js';
+import { asciiRequested, note, padVisible, toAscii, visibleWidth } from '../ui/kit.js';
 import { nativeSelectionKey } from '../ui/screen.js';
 
 interface GlobalFlags {
@@ -203,7 +203,7 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
     detail: `${capabilities.width} cols · ${capabilities.color ? 'color' : 'no color'} · ${glyphMode}`,
     ...(capabilities.unicode
       ? {}
-      : { hint: 'Box drawing and ₹ will use ASCII fallbacks. Check LANG is a UTF-8 locale.' }),
+      : { hint: 'Box drawing and the rupee sign will use ASCII fallbacks. Check LANG is a UTF-8 locale.' }),
   });
 
   // Mouse capture used to be the sharpest friction point: while the shell holds
@@ -344,7 +344,14 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
     ([command, why]) => `      ${padVisible(next(command), column)}   ${why}`,
   );
 
-  process.stdout.write(
+  // The closing block bypasses the paced writer, so it applies the fallback
+  // itself. A diagnostic that vouches for ASCII output while emitting `·` and
+  // `—` is exactly the kind of self-contradiction `doctor` exists to catch.
+  const write = (text: string): void => {
+    process.stdout.write(asciiRequested() ? toAscii(text) : text);
+  };
+
+  write(
     failed > 0
       ? `\n  ${plural(failed, 'problem', 'problems')} would stop a scan.\n` +
           `  Fix those first, then run ${next('doctor')} again.\n\n`

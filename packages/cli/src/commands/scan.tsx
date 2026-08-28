@@ -28,6 +28,7 @@ import { renderFinding, renderFindingDetail, renderFindingList, renderPlainRepor
 import type { RenderOptions } from '../render/plain.js';
 import { buildSarif } from '../render/sarif.js';
 import { saveLastScan, toCached } from '../session.js';
+import { asciiRequested, toAscii } from '../ui/kit.js';
 import { ScanView, countBySeverity } from '../ui/ScanView.js';
 import { detectCapabilities, glyphsFor } from '../ui/theme.js';
 import type { ScanOutcome } from '../ui/ScanView.js';
@@ -75,6 +76,18 @@ function assertTarget(path: string): string {
   if (stats.isFile()) return dirname(target);
 
   return target;
+}
+
+/**
+ * Writes plain output, transliterated when `SIRIUS_ASCII=1` asked for it.
+ *
+ * The glyph table covers drawing characters, but prose punctuation never went
+ * near it, so the projector fallback left `—`, `…`, `§` and `≥` on screen. The
+ * threat stage and every paced surface get this through `writePaced`; these two
+ * writes are the ones that bypass it.
+ */
+function writePlain(text: string): void {
+  process.stdout.write(asciiRequested() ? toAscii(text) : text);
 }
 
 export async function runScan(path: string, flags: ScanFlags, globals: GlobalFlags): Promise<void> {
@@ -319,7 +332,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // before the threat stage — that stage reasons about them by rule id, and
   // reading it first is reading conclusions about evidence not yet shown.
   if (!flags.json && !capabilities.tty && !streamed && outcome.findings.length > 0) {
-    process.stdout.write(renderFindingList(outcome.findings, lineRenderOptions(capabilities)).join('\n') + '\n');
+    writePlain(renderFindingList(outcome.findings, lineRenderOptions(capabilities)).join('\n') + '\n');
   }
 
   const printSummary = () => {
@@ -328,7 +341,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       Object.keys(outcome.counts).length > 0 ? outcome.counts : countBySeverity(outcome.findings);
     // Findings were already streamed line by line in that mode; printing the
     // full report again would duplicate every one of them.
-    process.stdout.write(
+    writePlain(
       renderPlainReport({
         outcome,
         gate,

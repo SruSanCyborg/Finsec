@@ -243,3 +243,43 @@ export function hyperlink(text: string, path: string, line?: number): string {
   const close = '\u001B]8;;\u001B\\';
   return `${open}${text}${close}`;
 }
+
+/**
+ * Everything `SIRIUS_ASCII=1` promises, and did not deliver.
+ *
+ * The flag is documented as the projector safety net: a presentation machine
+ * whose font lacks `₹`, box drawing or a braille spinner still has to produce a
+ * readable screen. The glyph table handled the drawing characters, but prose
+ * punctuation went straight through — a scan under `SIRIUS_ASCII=1` still
+ * emitted `—`, `…`, `·`, `§` and `≥`.
+ *
+ * Substitutions are chosen so a line keeps its meaning at the same width or
+ * shorter, never longer: a replacement that grows the string would push a
+ * carefully fitted table over the edge on exactly the narrow terminal that
+ * asked for ASCII in the first place. `§` becomes `S.` rather than `Sec.` for
+ * that reason.
+ */
+const ASCII_SUBSTITUTIONS: ReadonlyArray<readonly [RegExp, string]> = [
+  [/[\u2014\u2013]/g, '--'], // em and en dash
+  [/\u2026/g, '...'],
+  [/\u00b7/g, '-'],
+  [/\u00a7/g, 'S.'],
+  [/\u2265/g, '>='],
+  [/\u2264/g, '<='],
+  [/\u2192/g, '->'],
+  [/[\u2018\u2019]/g, "'"],
+  [/[\u201c\u201d]/g, '"'],
+  [/\u20b9/g, 'Rs.'],
+];
+
+/** Rewrites a line into ASCII. Identity unless the caller asks for it. */
+export function toAscii(text: string): string {
+  let out = text;
+  for (const [pattern, replacement] of ASCII_SUBSTITUTIONS) out = out.replace(pattern, replacement);
+  return out;
+}
+
+/** Whether the environment asked for ASCII output. */
+export function asciiRequested(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.SIRIUS_ASCII === '1' || env.SIRIUS_ASCII === 'true';
+}

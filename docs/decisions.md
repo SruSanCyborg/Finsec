@@ -1657,3 +1657,40 @@ The gallery's per-rule counts are now scoped per language. A single total across
 a bilingual fixture would need editing every time either half grew, and a number
 edited without being re-derived is the failure mode the gallery exists to
 prevent.
+
+## D-049 — The ASCII fallback covers the character it was created for
+
+AGENTS.md names `SIRIUS_ASCII=1` the projector safety net and lists `₹` first
+among the characters it protects. It did not protect `₹`. `money.ts` hardcoded
+the symbol and knew nothing about the terminal, so a scan under the flag still
+emitted nine of them, along with `—`, `…`, `·`, `§` and `≥` — prose punctuation
+that never went near the glyph table.
+
+Only the revenue renderer honoured the flag, through `palette.rupee`. So one
+environment variable meant two different things in the two demo beats, and the
+beat it did not cover was the opening one.
+
+What made it survive: `doctor`'s glyph self-test rendered `Rs.42,00,000` through
+a *third* code path and passed, so the diagnostic vouched for a fallback the
+command it was vouching for did not have. A check that does not exercise the
+thing it certifies certifies nothing — the same shape as `rules test` passing
+against a rule the engine could not run.
+
+`formatInr` now resolves the symbol from the environment rather than taking a
+`Capabilities` argument. Money is formatted from about thirty places, most
+nowhere near a capability object, and a fallback correct only where somebody
+remembered to pass an argument is precisely the situation being replaced.
+`NO_COLOR` works this way for the same reason. Machine output is untouched:
+`--json` and SARIF carry money as a number and never pass through here.
+
+For the punctuation, `toAscii` applies at the two paced writers and the two
+plain writes that bypass them — the last point before the terminal, and so the
+only place a fallback can be complete rather than remembered. Substitutions
+never lengthen a line: a replacement that grew the string would push a fitted
+table over the edge on exactly the narrow terminal that asked for ASCII, which
+is why `§` becomes `S.` and not `Sec.`.
+
+The test asserts both directions. Under the flag, no non-ASCII byte survives a
+scan or a `doctor` run; without it, `₹` is still there. Asserting only the first
+would be passed by a fallback that applied always, quietly costing the Indian
+grouping the figures exist to demonstrate.
