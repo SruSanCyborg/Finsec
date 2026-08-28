@@ -1,8 +1,7 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AttackPath, AttackPathNode } from '@sirius/types';
-import { AttackPathNodeView } from './AttackPathNodeView';
+import { AttackPathNodeView, CARD_WIDTH } from './AttackPathNodeView';
 import { ZoomIn, ZoomOut, Maximize2, Eye } from 'lucide-react';
-
 
 export interface AttackPathGraphViewProps {
   attackPath: AttackPath | null;
@@ -11,6 +10,11 @@ export interface AttackPathGraphViewProps {
   isFocusedMode?: boolean;
   onToggleFocusMode?: () => void;
 }
+
+const GAP_X = 90;
+const MARGIN_X = 70;
+const ROW_Y = 110;
+const VIEWBOX_HEIGHT = 220;
 
 export const AttackPathGraphView: React.FC<AttackPathGraphViewProps> = ({
   attackPath,
@@ -21,6 +25,24 @@ export const AttackPathGraphView: React.FC<AttackPathGraphViewProps> = ({
 }) => {
   const [zoomLevel, setZoomLevel] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
+
+  // The daemon never assigns pixel coordinates — a step chain has no
+  // coordinates to assign, only an order — so this is the one place a
+  // position exists at all: a plain left-to-right lane, one card per step,
+  // in the order the daemon reported them. `node.x`/`node.y` (still on the
+  // type, for a future non-linear graph) are deliberately not read here.
+  const positions = useMemo(() => {
+    if (!attackPath) return new Map<string, { x: number; y: number }>();
+    const map = new Map<string, { x: number; y: number }>();
+    attackPath.nodes.forEach((node, i) => {
+      map.set(node.id, { x: MARGIN_X + CARD_WIDTH / 2 + i * (CARD_WIDTH + GAP_X), y: ROW_Y });
+    });
+    return map;
+  }, [attackPath]);
+
+  const viewBoxWidth = attackPath
+    ? MARGIN_X * 2 + attackPath.nodes.length * CARD_WIDTH + Math.max(0, attackPath.nodes.length - 1) * GAP_X
+    : 800;
 
   if (!attackPath) {
     return (
@@ -43,7 +65,7 @@ export const AttackPathGraphView: React.FC<AttackPathGraphViewProps> = ({
   }
 
   const handleZoomIn = () => setZoomLevel((prev) => Math.min(prev + 0.2, 2.0));
-  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.2, 0.6));
+  const handleZoomOut = () => setZoomLevel((prev) => Math.max(prev - 0.2, 0.5));
   const handleResetZoom = () => {
     setZoomLevel(1);
     setPanOffset({ x: 0, y: 0 });
@@ -63,7 +85,9 @@ export const AttackPathGraphView: React.FC<AttackPathGraphViewProps> = ({
         flexDirection: 'column',
       }}
     >
-      {/* Viewport Control Bar */}
+      {/* Viewport Control Bar — an overlay on the non-scrolling wrapper, so it
+          stays pinned to the visible corner regardless of how far the chain
+          below has been scrolled. */}
       <div
         style={{
           position: 'absolute',
@@ -119,93 +143,71 @@ export const AttackPathGraphView: React.FC<AttackPathGraphViewProps> = ({
         </button>
       </div>
 
-      {/* SVG Canvas */}
-      <svg
-        width="100%"
-        height="100%"
-        viewBox="0 0 1000 450"
-        style={{ flex: 1, userSelect: 'none' }}
-      >
-        <defs>
-          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255, 255, 255, 0.03)" strokeWidth="1" />
-          </pattern>
+      {/* Scrolls horizontally when the chain is wider than the panel; the
+          control bar above is outside this, so it never scrolls with it. */}
+      <div style={{ flex: 1, overflow: 'auto', display: 'flex', alignItems: 'center' }}>
+        <svg
+          width={viewBoxWidth * zoomLevel}
+          height={VIEWBOX_HEIGHT}
+          viewBox={`0 0 ${viewBoxWidth} ${VIEWBOX_HEIGHT}`}
+          style={{ userSelect: 'none', flex: 'none', margin: '0 auto' }}
+        >
+          <defs>
+            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255, 255, 255, 0.03)" strokeWidth="1" />
+            </pattern>
 
-          <marker
-            id="arrow"
-            viewBox="0 0 10 10"
-            refX="8"
-            refY="5"
-            markerWidth="6"
-            markerHeight="6"
-            orient="auto-start-reverse"
-          >
-            <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-cyan)" opacity="0.8" />
-          </marker>
-        </defs>
+            <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="var(--color-cyan)" opacity="0.9" />
+            </marker>
+          </defs>
 
-        {/* Background Grid */}
-        <rect width="100%" height="100%" fill="url(#grid)" />
+          <rect width="100%" height="100%" fill="url(#grid)" />
 
-        <g transform={`translate(${panOffset.x}, ${panOffset.y}) scale(${zoomLevel})`}>
-          {/* Edges */}
-          {attackPath.edges.map((edge) => {
-            const sourceNode = attackPath.nodes.find((n) => n.id === edge.sourceNodeId);
-            const targetNode = attackPath.nodes.find((n) => n.id === edge.targetNodeId);
+          <g transform={`translate(${panOffset.x}, ${panOffset.y})`}>
+            {/* Edges — drawn from card edge to card edge, not centre to centre,
+                so the line and arrowhead sit in the gap instead of running
+                behind the boxes. */}
+            {attackPath.edges.map((edge) => {
+              const from = positions.get(edge.sourceNodeId);
+              const to = positions.get(edge.targetNodeId);
+              if (!from || !to) return null;
 
-            if (!sourceNode || !targetNode) return null;
+              const x1 = from.x + CARD_WIDTH / 2;
+              const x2 = to.x - CARD_WIDTH / 2 - 8;
 
-            const x1 = sourceNode.x || 100;
-            const y1 = sourceNode.y || 100;
-            const x2 = targetNode.x || 300;
-            const y2 = targetNode.y || 100;
-
-            return (
-              <g key={edge.id}>
-                {/* Edge Line */}
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
+              return (
+                <path
+                  key={edge.id}
+                  d={`M ${x1} ${from.y} C ${x1 + GAP_X / 2} ${from.y}, ${x2 - GAP_X / 2} ${to.y}, ${x2} ${to.y}`}
+                  fill="none"
                   stroke="var(--color-cyan)"
-                  strokeWidth="2.5"
-                  strokeDasharray="6 3"
+                  strokeWidth="2"
                   markerEnd="url(#arrow)"
-                  style={{ opacity: isFocusedMode ? 0.9 : 0.4 }}
+                  style={{ opacity: isFocusedMode ? 0.9 : 0.45 }}
                 />
+              );
+            })}
 
-                {/* Edge Relationship Label */}
-                {edge.relationship && (
-                  <text
-                    x={(x1 + x2) / 2}
-                    y={(y1 + y2) / 2 - 8}
-                    textAnchor="middle"
-                    fill="var(--color-cyan)"
-                    fontSize="10"
-                    fontFamily="var(--font-code)"
-                    fontWeight="600"
-                    opacity="0.85"
-                  >
-                    {edge.relationship}
-                  </text>
-                )}
-              </g>
-            );
-          })}
-
-          {/* Nodes */}
-          {attackPath.nodes.map((node) => (
-            <AttackPathNodeView
-              key={node.id}
-              node={node}
-              isSelected={selectedNodeId === node.id}
-              isFocusedPath={isFocusedMode}
-              onClick={() => onSelectNode && onSelectNode(node)}
-            />
-          ))}
-        </g>
-      </svg>
+            {/* Nodes */}
+            {attackPath.nodes.map((node) => {
+              const pos = positions.get(node.id);
+              if (!pos) return null;
+              return (
+                <AttackPathNodeView
+                  key={node.id}
+                  node={node}
+                  x={pos.x}
+                  y={pos.y}
+                  isSelected={selectedNodeId === node.id}
+                  isFocusedPath={isFocusedMode}
+                  onClick={() => onSelectNode && onSelectNode(node)}
+                />
+              );
+            })}
+          </g>
+        </svg>
+      </div>
     </div>
   );
 };

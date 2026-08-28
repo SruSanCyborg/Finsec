@@ -1,7 +1,7 @@
 import React from 'react';
 import { AttackPath } from '@sirius/types';
-import { SeverityChip, Badge } from '@sirius/ui';
-import { GitCommit, DollarSign } from 'lucide-react';
+import { SeverityChip, Badge, MoneyTicker } from '@sirius/ui';
+import { GitCommit } from 'lucide-react';
 
 export interface AttackPathListProps {
   paths: AttackPath[];
@@ -64,8 +64,8 @@ export const AttackPathList: React.FC<AttackPathListProps> = ({
               <Badge variant="neutral" size="sm">
                 {path.nodeCount} nodes
               </Badge>
-              <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-primary)', fontFamily: 'var(--font-code)', display: 'flex', alignItems: 'center', gap: '2px' }}>
-                <DollarSign size={11} /> ${(path.financialExposureUSD / 1000000).toFixed(2)}M
+              <div style={{ fontSize: '11px', fontWeight: 600, fontFamily: 'var(--font-code)' }}>
+                <MoneyTicker amountUSD={path.financialExposureUSD} durationMs={0} variant="compact" />
               </div>
             </div>
           </div>

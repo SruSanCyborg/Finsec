@@ -6,13 +6,13 @@ import {
   FindingSeverity,
   FindingStatus,
   ComplianceFramework,
+  ComplianceControl,
+  ComplianceSummary,
   MoneyAtRisk,
   AttackPath,
-  FixResult,
+  FixProposal,
   Report,
   Rule,
-  Integration,
-  Notification,
   Suppression,
   Baseline,
 } from '@sirius/types';
@@ -33,6 +33,11 @@ export interface FindingFilterOptions {
   cursor?: string;
 }
 
+export interface AskHistoryTurn {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
 export interface CreateScanParams {
   target?: string;
   ruleset?: string;
@@ -43,10 +48,46 @@ export interface CreateScanParams {
   branch?: string;
 }
 
-export class SiriusApiClient {
-  constructor(private http: HttpClient) {}
+/**
+ * A thin client over `sirius serve`'s `/api/v1`.
+ *
+ * Every method here talks to the daemon and adapts its response with the
+ * functions in `apps/desktop/src/api/adapters.ts` — passed in rather than
+ * imported, so this package stays free of a dependency on the app that
+ * consumes it. There is no mock fallback anywhere in this file: a request that
+ * fails throws, and the caller decides what an empty state looks like. A
+ * client that quietly substitutes invented data for a failed request is how a
+ * demo shows numbers nobody can reproduce.
+ */
+/**
+ * Deliberately typed with `any` on the wire side: the JSON crossing an HTTP
+ * boundary is unknown until an adapter validates its shape, and each adapter
+ * in `apps/desktop/src/api/adapters.ts` is typed against its own specific wire
+ * interface — a `w: unknown` parameter here would make every call site cast,
+ * which just moves the same escape hatch one file over.
+ */
+export interface ApiAdapters {
+  toProject: (w: any) => Project;
+  toScan: (w: any) => Scan;
+  toFinding: (w: any) => Finding;
+  toMoneyAtRisk: (w: any) => MoneyAtRisk;
+  toRule: (w: any) => Rule;
+  toComplianceFramework: (w: any) => ComplianceFramework;
+  toComplianceSummary: (frameworks: any[], projectId: string) => ComplianceSummary;
+  toComplianceControls: (frameworks: any[]) => ComplianceControl[];
+  toAttackPath: (w: any, projectId: string) => AttackPath;
+  toFixProposal: (w: any, finding: Finding) => FixProposal;
+  toReport: (w: any, projectId: string) => Report;
+  toSuppression: (w: any, projectId: string, index: number) => Suppression;
+}
 
-  // --- Health Check ---
+export class SiriusApiClient {
+  constructor(
+    private http: HttpClient,
+    private adapt: ApiAdapters,
+  ) {}
+
+  // --- Health ---
   public async getHealth(options?: HttpRequestOptions): Promise<{ status?: string; version?: string }> {
     const res = await this.http.get<{ status?: string; version?: string }>('/healthz', options);
     return res.data;
@@ -54,231 +95,357 @@ export class SiriusApiClient {
 
   // --- Projects ---
   public async getProjects(options?: HttpRequestOptions): Promise<Project[]> {
-    try {
-      const res = await this.http.get<Project[]>('/projects', options);
-      return res.data;
-    } catch {
-      return [];
-    }
+    const res = await this.http.get<unknown[]>('/projects', options);
+    return res.data.map(this.adapt.toProject);
   }
 
   public async getProjectById(id: string, options?: HttpRequestOptions): Promise<Project> {
-    const res = await this.http.get<Project>(`/projects/${id}`, options);
-    return res.data;
+    const res = await this.http.get<unknown>(`/projects/${encodeURIComponent(id)}`, options);
+    return this.adapt.toProject(res.data);
   }
 
-  public async createProject(data: Partial<Project>, options?: HttpRequestOptions): Promise<Project> {
-    const res = await this.http.post<Project>('/projects', data, options);
-    return res.data;
+  /** Registers a local directory as a project the daemon will serve. */
+  public async createProject(path: string, options?: HttpRequestOptions): Promise<Project> {
+    const res = await this.http.post<unknown>('/projects', { path }, options);
+    return this.adapt.toProject(res.data);
   }
 
-  // --- Scans (Finsec OpenAPI Endpoint: POST /scans, GET /scans/{id}, DELETE /scans/{id}) ---
+  // --- Scans ---
   public async getScans(filters?: ScanFilterOptions, options?: HttpRequestOptions): Promise<Scan[]> {
-    try {
-      if (filters?.projectId) {
-        const res = await this.http.get<Scan[]>(`/projects/${encodeURIComponent(filters.projectId)}/history`, options);
-        return res.data;
-      }
-      const res = await this.http.get<Scan[]>('/scans', { ...options, params: filters as Record<string, string | number> });
-      return res.data;
-    } catch {
-      return [];
+    if (filters?.projectId) {
+      const res = await this.http.get<unknown[]>(
+        `/projects/${encodeURIComponent(filters.projectId)}/history`,
+        { ...options, params: { limit: filters.limit } },
+      );
+      return res.data.map(this.adapt.toScan);
     }
+    const res = await this.http.get<unknown[]>('/scans', {
+      ...options,
+      params: { status: filters?.status, limit: filters?.limit },
+    });
+    return res.data.map(this.adapt.toScan);
   }
 
-  public async getScanById(id: string, options?: HttpRequestOptions): Promise<Scan> {
-    const res = await this.http.get<Scan>(`/scans/${encodeURIComponent(id)}`, options);
-    return res.data;
-  }
-
-  public async startScan(params: CreateScanParams | string, _branch?: string, options?: HttpRequestOptions): Promise<Scan> {
-    const body = typeof params === 'string'
-      ? { target: '.', ruleset: 'p/fintech-core', severity_threshold: 'medium', fail_on: 'all' }
-      : {
-          target: params.target || '.',
-          ruleset: params.ruleset || 'p/fintech-core',
-          baseline_commit: params.baselineCommit,
-          severity_threshold: params.severityThreshold || 'medium',
-          fail_on: params.failOn || 'all',
-        };
-
-    const res = await this.http.post<Scan>('/scans', body, options);
-    return res.data;
-  }
-
-  public async cancelScan(id: string, options?: HttpRequestOptions): Promise<{ success: boolean }> {
-    await this.http.delete<void>(`/scans/${encodeURIComponent(id)}`, options);
-    return { success: true };
-  }
-
-  // --- Findings (Finsec OpenAPI Endpoint: GET /scans/{id}/results, PATCH /scans/{id}/findings/{fid}) ---
-  public async getFindings(filters?: FindingFilterOptions, options?: HttpRequestOptions): Promise<Finding[]> {
-    if (filters?.scanId) {
-      try {
-        const res = await this.http.get<{ items: Finding[]; next_cursor?: string }>(
-          `/scans/${encodeURIComponent(filters.scanId)}/results`,
-          { ...options, params: { cursor: filters.cursor, severity: filters.severity } }
-        );
-        return res.data.items || [];
-      } catch {
-        return [];
-      }
-    }
-    try {
-      const res = await this.http.get<Finding[]>('/findings', { ...options, params: filters as Record<string, string | number> });
-      return res.data;
-    } catch {
-      return [];
-    }
-  }
-
-  public async getFindingById(id: string, scanId?: string, options?: HttpRequestOptions): Promise<Finding> {
-    if (scanId) {
-      const findings = await this.getFindings({ scanId }, options);
-      const found = findings.find((f) => f.id === id);
-      if (found) return found;
-    }
-    const res = await this.http.get<Finding>(`/findings/${encodeURIComponent(id)}`, options);
-    return res.data;
-  }
-
-  public async updateFindingStatus(
-    findingId: string,
-    status: FindingStatus,
-    comment?: string,
-    scanId?: string,
-    reason?: string,
-    options?: HttpRequestOptions
-  ): Promise<Finding> {
-    const targetScanId = scanId || 'scan-01';
-    const body = {
-      status,
-      comment: comment || undefined,
-      reason: reason || 'Triage decision from GUI',
-    };
-    const res = await this.http.patch<Finding>(
-      `/scans/${encodeURIComponent(targetScanId)}/findings/${encodeURIComponent(findingId)}`,
-      body,
-      options
-    );
-    return res.data;
-  }
-
-  public async validateSecret(scanId: string, findingId: string, options?: HttpRequestOptions): Promise<{ validity: string; checked_at?: string }> {
-    const res = await this.http.post<{ validity: string; checked_at?: string }>(
-      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/validate-secret`,
-      undefined,
-      options
-    );
-    return res.data;
-  }
-
-  // --- Money At Risk & Compliance ---
-  public async getMoneyAtRisk(projectId?: string, options?: HttpRequestOptions): Promise<MoneyAtRisk> {
-    const res = await this.http.get<MoneyAtRisk>('/analytics/money-at-risk', {
+  public async getScanById(id: string, projectId?: string, options?: HttpRequestOptions): Promise<Scan> {
+    const res = await this.http.get<unknown>(`/scans/${encodeURIComponent(id)}`, {
       ...options,
       params: { projectId },
     });
+    return this.adapt.toScan(res.data);
+  }
+
+  public async startScan(params: CreateScanParams, options?: HttpRequestOptions): Promise<Scan> {
+    const res = await this.http.post<unknown>(
+      '/scans',
+      {
+        project_id: params.projectId,
+        target: params.target ?? '.',
+        ruleset: params.ruleset,
+        baseline_commit: params.baselineCommit,
+        severity_threshold: params.severityThreshold ?? 'high',
+        fail_on: params.failOn ?? 'all',
+      },
+      options,
+    );
+    return this.adapt.toScan(res.data);
+  }
+
+  public async cancelScan(id: string, projectId?: string, options?: HttpRequestOptions): Promise<{ success: boolean }> {
+    await this.http.delete<void>(`/scans/${encodeURIComponent(id)}`, { ...options, params: { projectId } });
+    return { success: true };
+  }
+
+  /** The per-scan stream URL. `client.ts` opens a `WebSocket` against this directly. */
+  public streamUrl(wsBaseUrl: string, scanId: string, token: string): string {
+    const base = wsBaseUrl.replace(/\/$/, '');
+    return `${base}/scans/${encodeURIComponent(scanId)}/stream?token=${encodeURIComponent(token)}`;
+  }
+
+  // --- Findings ---
+  public async getFindings(filters?: FindingFilterOptions, options?: HttpRequestOptions): Promise<Finding[]> {
+    if (filters?.scanId) {
+      const res = await this.http.get<{ items: unknown[] }>(
+        `/scans/${encodeURIComponent(filters.scanId)}/results`,
+        { ...options, params: { projectId: filters.projectId, cursor: filters.cursor, severity: filters.severity } },
+      );
+      return res.data.items.map(this.adapt.toFinding);
+    }
+    const res = await this.http.get<unknown[]>('/findings', {
+      ...options,
+      params: { projectId: filters?.projectId, scanId: filters?.scanId, severity: filters?.severity, search: filters?.search },
+    });
+    return res.data.map(this.adapt.toFinding);
+  }
+
+  public async getFindingById(id: string, projectId?: string, options?: HttpRequestOptions): Promise<Finding> {
+    const res = await this.http.get<unknown>(`/findings/${encodeURIComponent(id)}`, { ...options, params: { projectId } });
+    return this.adapt.toFinding(res.data);
+  }
+
+  public async updateFindingStatus(
+    scanId: string,
+    findingId: string,
+    status: FindingStatus,
+    reason?: string,
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<Finding> {
+    const res = await this.http.patch<unknown>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}`,
+      { status, reason },
+      { ...options, params: { projectId } },
+    );
+    return this.adapt.toFinding(res.data);
+  }
+
+  public async validateSecret(
+    scanId: string,
+    findingId: string,
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<{ validity: string; checked_at?: string; provider?: string; detail?: string }> {
+    const res = await this.http.post<{ validity: string; checked_at?: string; provider?: string; detail?: string }>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/validate-secret`,
+      undefined,
+      { ...options, params: { projectId } },
+    );
+    return res.data;
+  }
+
+  // --- Money & compliance ---
+  public async getMoneyAtRisk(projectId?: string, options?: HttpRequestOptions): Promise<MoneyAtRisk> {
+    const res = await this.http.get<unknown>('/analytics/money-at-risk', { ...options, params: { projectId } });
+    return this.adapt.toMoneyAtRisk(res.data);
+  }
+
+  private async frameworks(projectId?: string, options?: HttpRequestOptions): Promise<unknown[]> {
+    const res = await this.http.get<unknown[]>('/compliance/frameworks', { ...options, params: { projectId } });
     return res.data;
   }
 
   public async getComplianceFrameworks(projectId?: string, options?: HttpRequestOptions): Promise<ComplianceFramework[]> {
-    const res = await this.http.get<ComplianceFramework[]>('/compliance/frameworks', {
-      ...options,
-      params: { projectId },
-    });
-    return res.data;
+    return (await this.frameworks(projectId, options)).map(this.adapt.toComplianceFramework);
   }
 
-  // --- Attack Paths ---
+  public async getComplianceSummary(projectId?: string, options?: HttpRequestOptions): Promise<ComplianceSummary> {
+    return this.adapt.toComplianceSummary(await this.frameworks(projectId, options), projectId ?? '');
+  }
+
+  public async getComplianceControls(projectId?: string, options?: HttpRequestOptions): Promise<ComplianceControl[]> {
+    return this.adapt.toComplianceControls(await this.frameworks(projectId, options));
+  }
+
+  public async getComplianceControlById(
+    controlId: string,
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<ComplianceControl | undefined> {
+    const controls = await this.getComplianceControls(projectId, options);
+    return controls.find((c) => c.id === controlId);
+  }
+
+  // --- Attack paths ---
   public async getAttackPaths(projectId?: string, options?: HttpRequestOptions): Promise<AttackPath[]> {
-    const res = await this.http.get<AttackPath[]>('/attack-paths', { ...options, params: { projectId } });
-    return res.data;
+    const res = await this.http.get<unknown[]>('/attack-paths', { ...options, params: { projectId } });
+    return res.data.map((w) => this.adapt.toAttackPath(w, projectId ?? ''));
   }
 
-  // --- Cerebus Fix (Finsec OpenAPI Endpoint: POST /scans/{id}/findings/{fid}/fix) ---
-  public async triggerCerebusFix(findingId: string, scanId?: string, options?: HttpRequestOptions): Promise<{ pipelineId: string; suggestion?: FixResult }> {
-    const targetScanId = scanId || 'scan-01';
-    const res = await this.http.post<FixResult>(
-      `/scans/${encodeURIComponent(targetScanId)}/findings/${encodeURIComponent(findingId)}/fix`,
-      undefined,
-      options
+  public async getAttackPathById(id: string, projectId?: string, options?: HttpRequestOptions): Promise<AttackPath | undefined> {
+    const paths = await this.getAttackPaths(projectId, options);
+    return paths.find((p) => p.id === id);
+  }
+
+  /**
+   * A real Gemini-written walkthrough of one attack chain — see
+   * `engine/explain-attack-path.ts`. A generative call routinely runs past
+   * the client's normal 15s default (the model spends real time "thinking"
+   * before it writes anything, even with that turned down) — 45s here isn't
+   * padding, it's the actual shape of this specific request.
+   */
+  public async explainAttackPath(path: AttackPath, options?: HttpRequestOptions): Promise<string> {
+    const res = await this.http.post<{ explanation: string }>(
+      '/attack-paths/explain',
+      {
+        title: path.title,
+        narrative: path.description,
+        moneyAtRiskInr: path.financialExposureUSD,
+        steps: path.nodes.map((n) => ({
+          role: (n.metadata?.role as string | undefined) ?? n.type,
+          ruleId: (n.metadata?.ruleId as string | undefined) ?? n.label,
+          file: (n.metadata?.file as string | undefined) ?? 'unknown',
+          severity: n.severity ?? 'medium',
+        })),
+      },
+      { timeoutMs: 45000, ...options },
     );
-    return {
-      pipelineId: `pipe-${findingId}`,
-      suggestion: res.data,
-    };
+    return res.data.explanation;
   }
 
-  public async getFixResult(findingId: string, options?: HttpRequestOptions): Promise<FixResult> {
-    const res = await this.http.get<FixResult>(`/cerebus/fix-result/${encodeURIComponent(findingId)}`, options);
-    return res.data;
+  // --- Cerebus fix ---
+  public async getFixProposal(
+    scanId: string,
+    findingId: string,
+    finding: Finding,
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<FixProposal> {
+    const res = await this.http.post<unknown>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/fix`,
+      undefined,
+      { ...options, params: { projectId } },
+    );
+    return this.adapt.toFixProposal(res.data, finding);
   }
 
-  // --- Reports (Finsec OpenAPI Endpoint: GET /scans/{id}/report) ---
-  public async getReport(scanId: string, format: 'pdf' | 'json' | 'sarif', options?: HttpRequestOptions): Promise<unknown> {
-    const res = await this.http.get<unknown>(`/scans/${encodeURIComponent(scanId)}/report`, {
-      ...options,
-      params: { format },
-    });
-    return res.data;
+  /**
+   * A real model answer. `history` is the conversation so far — prior turns
+   * in this open session, threaded through so a follow-up question resolves
+   * against what was actually said. See `engine/ask.ts`.
+   */
+  public async askCerebus(
+    scanId: string,
+    findingId: string,
+    question: string,
+    history: AskHistoryTurn[],
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<string> {
+    const res = await this.http.post<{ answer: string }>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/ask`,
+      { question, history },
+      { ...options, params: { projectId } },
+    );
+    return res.data.answer;
   }
 
-  public async getReports(projectId?: string, options?: HttpRequestOptions): Promise<Report[]> {
-    const res = await this.http.get<Report[]>('/reports', { ...options, params: { projectId } });
-    return res.data;
+  /** The same chat with no finding selected — grounded in the project's most recent scan instead. */
+  public async askCerebusGeneral(
+    question: string,
+    history: AskHistoryTurn[],
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<string> {
+    const res = await this.http.post<{ answer: string }>(
+      '/cerebus/ask',
+      { question, history },
+      { ...options, params: { projectId } },
+    );
+    return res.data.answer;
   }
 
-  // --- Governance & Rules (Finsec OpenAPI Endpoints: GET /rules, GET /suppressions, GET /baselines) ---
-  public async getRules(options?: HttpRequestOptions): Promise<Rule[]> {
-    const res = await this.http.get<Rule[]>('/rules', options);
-    return res.data;
+  /** Writes the fix to disk. Only succeeds for a machine-applicable template — see `server/routes.ts`. */
+  public async applyFix(
+    scanId: string,
+    findingId: string,
+    finding: Finding,
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<FixProposal> {
+    const res = await this.http.post<unknown>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/fix/apply`,
+      undefined,
+      { ...options, params: { projectId } },
+    );
+    return this.adapt.toFixProposal(res.data, finding);
+  }
+
+  // --- Rules ---
+  public async getRules(category?: string, options?: HttpRequestOptions): Promise<Rule[]> {
+    const res = await this.http.get<unknown[]>('/rules', { ...options, params: { category } });
+    return res.data.map(this.adapt.toRule);
   }
 
   public async validateRule(yamlBody: string, options?: HttpRequestOptions): Promise<{ valid: boolean; errors?: Array<{ path?: string; message?: string }> }> {
     const res = await this.http.post<{ valid: boolean; errors?: Array<{ path?: string; message?: string }> }>(
       '/rules/validate',
       { yaml_body: yamlBody },
-      options
+      options,
     );
     return res.data;
   }
 
+  // --- Governance ---
   public async getSuppressions(projectId?: string, options?: HttpRequestOptions): Promise<Suppression[]> {
-    const res = await this.http.get<Suppression[]>('/suppressions', {
+    const res = await this.http.get<unknown[]>('/suppressions', { ...options, params: { projectId } });
+    return res.data.map((w, i) => this.adapt.toSuppression(w, projectId ?? '', i));
+  }
+
+  public async createSuppression(
+    body: { rule_id?: string; path_glob?: string; fingerprint?: string; reason: string; expires_at?: string | null },
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<void> {
+    await this.http.post('/suppressions', body, { ...options, params: { projectId } });
+  }
+
+  public async revokeSuppression(ruleId: string, projectId?: string, options?: HttpRequestOptions): Promise<void> {
+    await this.http.delete(`/suppressions/${encodeURIComponent(ruleId)}`, { ...options, params: { projectId } });
+  }
+
+    public async getBaselines(projectId?: string, options?: HttpRequestOptions): Promise<Baseline[]> {
+    const res = await this.http.get<Array<{ commit_sha: string | null; created_at: string; fingerprints: string[] }>>(
+      '/baselines',
+      { ...options, params: { projectId } },
+    );
+    return res.data.map((b, i) => ({
+      id: `baseline-${i}`,
+      projectId: projectId ?? '',
+      scanId: '',
+      branch: 'local',
+      createdAt: b.created_at,
+      createdBy: 'sirius CLI',
+      findingCount: b.fingerprints.length,
+      newCount: 0,
+      unchangedCount: b.fingerprints.length,
+      absentCount: 0,
+      status: 'active' as const,
+    }));
+  }
+
+  public async createBaseline(scanId: string, projectId?: string, options?: HttpRequestOptions): Promise<void> {
+    await this.http.post('/baselines', { scan_id: scanId }, { ...options, params: { projectId } });
+  }
+
+  // --- Reports ---
+  public async getReports(projectId?: string, options?: HttpRequestOptions): Promise<Report[]> {
+    const res = await this.http.get<unknown[]>('/reports', { ...options, params: { projectId } });
+    return res.data.map((w) => this.adapt.toReport(w, projectId ?? ''));
+  }
+
+  /**
+   * A signed report or a SARIF document, straight from the response — the
+   * caller decides whether to render it or hand it to `downloadBlob`.
+   */
+  // --- Config (read-only reflection of sirius.yaml) ---
+  public async getConfig(projectId?: string, options?: HttpRequestOptions): Promise<{
+    rulesets: string[];
+    severity_threshold: string;
+    fail_on: string;
+    diff_aware: boolean;
+    validate_secrets: boolean;
+    project_id: string | null;
+  }> {
+    const res = await this.http.get<{
+      rulesets: string[];
+      severity_threshold: string;
+      fail_on: string;
+      diff_aware: boolean;
+      validate_secrets: boolean;
+      project_id: string | null;
+    }>('/config', { ...options, params: { projectId } });
+    return res.data;
+  }
+
+  public async getReport(
+    scanId: string,
+    format: 'pdf' | 'json' | 'sarif',
+    projectId?: string,
+    options?: HttpRequestOptions,
+  ): Promise<unknown> {
+    const res = await this.http.get<unknown>(`/scans/${encodeURIComponent(scanId)}/report`, {
       ...options,
-      params: { project_id: projectId },
+      params: { format, projectId },
     });
-    return res.data;
-  }
-
-  public async createSuppression(body: Record<string, unknown>, options?: HttpRequestOptions): Promise<Suppression> {
-    const res = await this.http.post<Suppression>('/suppressions', body, options);
-    return res.data;
-  }
-
-  public async getBaselines(projectId?: string, options?: HttpRequestOptions): Promise<Baseline[]> {
-    const res = await this.http.get<Baseline[]>('/baselines', {
-      ...options,
-      params: { project_id: projectId },
-    });
-    return res.data;
-  }
-
-  public async createBaseline(body: Record<string, unknown>, options?: HttpRequestOptions): Promise<Baseline> {
-    const res = await this.http.post<Baseline>('/baselines', body, options);
-    return res.data;
-  }
-
-  // --- Settings & Integrations ---
-  public async getIntegrations(options?: HttpRequestOptions): Promise<Integration[]> {
-    const res = await this.http.get<Integration[]>('/settings/integrations', options);
-    return res.data;
-  }
-
-  public async getNotifications(options?: HttpRequestOptions): Promise<Notification[]> {
-    const res = await this.http.get<Notification[]>('/notifications', options);
     return res.data;
   }
 }
-

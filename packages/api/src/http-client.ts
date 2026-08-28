@@ -142,6 +142,31 @@ export class HttpClient {
     }
   }
 
+  /**
+   * A binary download — a PDF or a SARIF file offered as an attachment.
+   *
+   * `request()` always calls `response.json()`, which is the wrong read for a
+   * `Content-Type: application/pdf` body: it either throws on the bytes or
+   * silently returns something that is not the file. This is the one method
+   * that reads a response as a `Blob` instead.
+   */
+  public async getBlob(path: string, options: HttpRequestOptions = {}): Promise<Blob> {
+    const url = this.buildUrl(path, options.params);
+    const headers = this.buildHeaders(options.headers);
+    delete headers['Content-Type']; // GET carries no body; the header only asks for the wrong Accept.
+
+    const response = await fetch(url, { method: 'GET', headers, signal: options.signal });
+
+    if (!response.ok) {
+      if (response.status === 401 || response.status === 403) {
+        throw new AuthError(`Authentication failed: ${response.statusText}`, {});
+      }
+      throw new ApiError(`Download failed with status ${response.status}`, response.status, {});
+    }
+
+    return response.blob();
+  }
+
   public get<T>(path: string, options?: HttpRequestOptions): Promise<ApiResponse<T>> {
     return this.request<T>('GET', path, undefined, options);
   }
