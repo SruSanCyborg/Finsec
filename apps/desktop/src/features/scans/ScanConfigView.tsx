@@ -25,9 +25,10 @@ export const ScanConfigView: React.FC = () => {
 
   const handleLaunchScan = async () => {
     try {
+      // The daemon scans the project directory itself — there is no branch
+      // concept for a local target, only whatever is on disk right now.
       const scan = await createScanMutation.mutateAsync({
         projectId: selectedProjectId,
-        branch: selectedProject?.branch || 'main',
         severityThreshold,
         failOn,
       });

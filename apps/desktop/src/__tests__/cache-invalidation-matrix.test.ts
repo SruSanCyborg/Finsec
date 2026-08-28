@@ -24,9 +24,8 @@ describe('Cache Invalidation Matrix Suite', () => {
 
     await result.current.mutateAsync({
       projectId: 'prj-finsec-core-01',
-      ruleId: 'SEC-JWT-004',
+      rule_id: 'SIR-SEC-004',
       reason: 'accepted_risk',
-      scope: 'rule',
     });
 
 
@@ -42,7 +41,12 @@ describe('Cache Invalidation Matrix Suite', () => {
 
     const { result } = renderHook(() => useApplyFixMutation(), { wrapper });
 
-    await result.current.mutateAsync('fnd-88219');
+    await result.current.mutateAsync({
+      scanId: 'scan-01',
+      findingId: 'fnd-88219',
+      projectId: 'prj-finsec-core-01',
+      finding: { id: 'fnd-88219', scanId: 'scan-01', projectId: 'prj-finsec-core-01' } as never,
+    });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['findings'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['fix-proposal'] });
@@ -55,7 +59,7 @@ describe('Cache Invalidation Matrix Suite', () => {
 
     const { result } = renderHook(() => useCreateScanMutation(), { wrapper });
 
-    await result.current.mutateAsync({ projectId: 'prj-finsec-core-01', branch: 'main' });
+    await result.current.mutateAsync({ projectId: 'prj-finsec-core-01' });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['scans'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['projects'] });

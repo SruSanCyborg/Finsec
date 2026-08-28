@@ -42,10 +42,10 @@ export const ScanDetailView: React.FC = () => {
   const isCompleted = currentScan?.status === 'completed';
   const isFailed = currentScan?.status === 'failed';
 
-  const percentComplete = currentScan?.progress?.percentComplete || (isCompleted ? 100 : 68);
-  const filesScanned = currentScan?.progress?.filesScanned || (isCompleted ? 1420 : 965);
-  const totalFiles = currentScan?.progress?.totalFiles || 1420;
-  const totalFindings = currentScan?.progress?.findingsFound || liveFindings.length || (isCompleted ? 27 : 14);
+  const totalFiles = currentScan?.progress?.totalFiles ?? 0;
+  const percentComplete = currentScan?.progress?.percentComplete ?? (isCompleted ? 100 : 0);
+  const filesScanned = currentScan?.progress?.filesScanned ?? (isCompleted ? totalFiles : 0);
+  const totalFindings = currentScan?.progress?.findingsFound ?? liveFindings.length;
 
   const displayGateResult = gateResult || currentScan?.summary?.gateResult || (totalFindings > 0 ? 'blocked' : 'passed');
 
@@ -204,7 +204,7 @@ export const ScanDetailView: React.FC = () => {
               <Button variant="secondary" leftIcon={<ShieldAlert size={15} color="var(--color-primary)" />} onClick={() => navigate('/findings')}>
                 View Findings Inventory
               </Button>
-              <Button variant="primary" leftIcon={<Cpu size={15} />} onClick={() => navigate('/findings')}>
+              <Button variant="primary" leftIcon={<Cpu size={15} />} onClick={() => navigate('/cerebus')}>
                 Analyze with Cerebus
               </Button>
             </div>

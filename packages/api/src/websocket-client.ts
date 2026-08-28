@@ -12,6 +12,11 @@ export interface ScanStreamEvent {
   finding?: Finding;
   consoleEvent?: ScanConsoleEvent;
   gateResult?: 'passed' | 'blocked';
+  summary?: {
+    counts: { critical?: number; high?: number; medium?: number; low?: number; info?: number };
+    moneyAtRiskInr: number;
+    complianceScore: number | null;
+  };
   error?: string;
 }
 
@@ -111,19 +116,22 @@ function normalizeWireEvent(raw: Record<string, unknown>): ScanStreamEvent | nul
   }
 
   if (type === 'scan.completed' || type === 'scan_completed') {
+    const counts = (raw.counts as Record<string, number>) || {};
     return {
       type: 'scan_completed',
       scanId,
       timestamp,
       status: 'completed',
       gateResult: raw.exit_code === 0 ? 'passed' : 'blocked',
-      progress: {
-        phase: 'completed',
-        percentComplete: 100,
-        filesScanned: Number(raw.total_files || 128),
-        totalFiles: Number(raw.total_files || 128),
-        findingsFound: Number(raw.total_findings || 0),
-        elapsedTimeMs: Number(raw.duration_ms || 1200),
+      // No `progress` here — this frame carries no file counts (see the
+      // frozen WsScanCompleted schema). The store falls back to whatever
+      // `scan.started` / `file.scanning` already established and just
+      // overlays completion, rather than this guessing at file totals from
+      // finding counts, which are a different axis entirely.
+      summary: {
+        counts,
+        moneyAtRiskInr: Number(raw.money_at_risk_inr ?? 0),
+        complianceScore: raw.compliance_score !== undefined ? Number(raw.compliance_score) : null,
       },
     };
   }

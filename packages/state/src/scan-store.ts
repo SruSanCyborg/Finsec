@@ -64,7 +64,7 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
         break;
 
       case 'scan_progress':
-        if (activeScan && activeScan.id === event.scanId && event.progress) {
+        if (activeScan && event.progress) {
           let stage = 'Analyze';
           if (event.progress.percentComplete <= 15) stage = 'Prepare';
           else if (event.progress.percentComplete <= 35) stage = 'Index';
@@ -78,12 +78,17 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
               progress: event.progress,
             },
             pipelineStage: stage,
+            // `file.scanning` frames carry their console line bundled into
+            // this same event rather than a separate `console_event` type —
+            // the adapter never actually emits that type on its own, so
+            // reading it only here is what makes the console fill in at all.
+            ...(event.consoleEvent ? { consoleEvents: [...consoleEvents, event.consoleEvent] } : {}),
           });
         }
         break;
 
       case 'console_event':
-        if (event.consoleEvent && (!activeScan || activeScan.id === event.scanId)) {
+        if (event.consoleEvent) {
           set({
             consoleEvents: [...consoleEvents, event.consoleEvent],
           });
@@ -91,7 +96,7 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
         break;
 
       case 'finding_discovered':
-        if (event.finding && (!activeScan || activeScan.id === event.scanId)) {
+        if (event.finding) {
           const exists = liveFindings.some((f) => f.id === event.finding?.id);
           if (!exists) {
             const updatedFindings = [event.finding, ...liveFindings];
@@ -112,12 +117,13 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
         break;
 
       case 'scan_completed':
-        if (activeScan && activeScan.id === event.scanId) {
+        if (activeScan) {
           const finalProgress: ScanProgress = event.progress || {
             ...activeScan.progress,
             phase: 'completed',
             percentComplete: 100,
           };
+          const counts = event.summary?.counts;
           set({
             activeScan: {
               ...activeScan,
@@ -125,14 +131,16 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
               completedAt: event.timestamp,
               progress: finalProgress,
               summary: {
-                totalFindings: liveFindings.length || 2,
-                critical: liveFindings.filter((f) => f.severity === 'critical').length || 1,
-                high: liveFindings.filter((f) => f.severity === 'high').length || 1,
-                medium: 0,
-                low: 0,
-                info: 0,
-                moneyAtRiskUSD: 1450000,
-                complianceScore: 94,
+                totalFindings: counts
+                  ? Object.values(counts).reduce((sum: number, n) => sum + (n ?? 0), 0)
+                  : liveFindings.length,
+                critical: counts?.critical ?? liveFindings.filter((f) => f.severity === 'critical').length,
+                high: counts?.high ?? liveFindings.filter((f) => f.severity === 'high').length,
+                medium: counts?.medium ?? liveFindings.filter((f) => f.severity === 'medium').length,
+                low: counts?.low ?? liveFindings.filter((f) => f.severity === 'low').length,
+                info: counts?.info ?? liveFindings.filter((f) => f.severity === 'info').length,
+                moneyAtRiskUSD: event.summary?.moneyAtRiskInr ?? 0,
+                complianceScore: event.summary?.complianceScore ?? 0,
                 gateResult: event.gateResult || 'blocked',
               },
             },
@@ -143,7 +151,7 @@ export const useScanStore = create<LiveScanState>((set, get) => ({
         break;
 
       case 'scan_failed':
-        if (activeScan && activeScan.id === event.scanId) {
+        if (activeScan) {
           set({
             activeScan: {
               ...activeScan,
