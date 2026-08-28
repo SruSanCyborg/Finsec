@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Finding } from '@sirius/types';
-import { Card, SeverityChip, Badge } from '@sirius/ui';
+import { Card, SeverityChip, Badge, MoneyTicker } from '@sirius/ui';
 import { ShieldAlert, FileCode, ArrowRight } from 'lucide-react';
 
 export interface RecentFindingsPanelProps {
@@ -67,9 +67,9 @@ export const RecentFindingsPanel: React.FC<RecentFindingsPanelProps> = ({ findin
               </div>
 
               {fnd.moneyAtRiskUSD ? (
-                <Badge variant="emerald" size="sm" style={{ fontFamily: 'var(--font-code)' }}>
-                  ${(fnd.moneyAtRiskUSD / 1000000).toFixed(2)}M
-                </Badge>
+                <div style={{ fontSize: '12px', fontFamily: 'var(--font-code)' }}>
+                  <MoneyTicker amountUSD={fnd.moneyAtRiskUSD} durationMs={0} variant="compact" />
+                </div>
               ) : null}
             </div>
           ))

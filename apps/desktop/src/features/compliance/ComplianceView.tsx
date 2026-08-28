@@ -193,7 +193,7 @@ export const ComplianceView: React.FC = () => {
         <ComplianceControlInspector
           control={selectedControl}
           onNavigateToFinding={(id) => navigate(`/findings?selected=${id}`)}
-          onNavigateToCerebus={(_cId, fId) => navigate(`/cerebus?finding=${fId || 'fnd-88219'}`)}
+          onNavigateToCerebus={(_cId, fId) => navigate(fId ? `/cerebus?finding=${fId}` : '/cerebus')}
           onNavigateToRemediation={(id) => navigate(`/findings/${id}/remediation`)}
         />
 

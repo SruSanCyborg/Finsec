@@ -2,10 +2,18 @@ import React, { useEffect, useState } from 'react';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 
 export interface MoneyTickerProps {
+  /**
+   * Named for the dollar figures this component was built to show; every
+   * caller in this app now passes real rupees through it (see
+   * `apps/desktop/src/api/adapters.ts`). Renaming the prop is a sweep through
+   * every call site this component has — out of scope for wiring the daemon
+   * in — so the default below and the compact-unit breakpoints are what
+   * actually make the number on screen correct.
+   */
   amountUSD: number;
   currencySymbol?: string;
   variant?: 'compact' | 'large';
-  delta?: number; // USD change amount
+  delta?: number;
   sparkline?: React.ReactNode;
   durationMs?: number;
   style?: React.CSSProperties;
@@ -13,7 +21,7 @@ export interface MoneyTickerProps {
 
 export const MoneyTicker: React.FC<MoneyTickerProps> = ({
   amountUSD,
-  currencySymbol = '$',
+  currencySymbol = '₹',
   variant = 'compact',
   delta,
   sparkline,
@@ -42,13 +50,19 @@ export const MoneyTicker: React.FC<MoneyTickerProps> = ({
     return () => clearInterval(timer);
   }, [amountUSD, durationMs]);
 
+  // Lakh/crore compact units when the symbol is ₹ — sirius's money is always
+  // rupees, so this is the branch every caller in this app actually takes.
+  // M/K stays for the one caller (if any) that passes a genuinely different
+  // currency in.
   const formatAmount = (val: number) => {
-    if (val >= 1000000) {
-      return `${currencySymbol}${(val / 1000000).toFixed(2)}M`;
+    if (currencySymbol === '₹') {
+      const abs = Math.abs(val);
+      if (abs >= 1_00_00_000) return `${currencySymbol}${(val / 1_00_00_000).toFixed(2)} Cr`;
+      if (abs >= 1_00_000) return `${currencySymbol}${(val / 1_00_000).toFixed(1)} L`;
+      return `${currencySymbol}${val.toLocaleString('en-IN')}`;
     }
-    if (val >= 1000) {
-      return `${currencySymbol}${(val / 1000).toFixed(1)}K`;
-    }
+    if (Math.abs(val) >= 1_000_000) return `${currencySymbol}${(val / 1_000_000).toFixed(2)}M`;
+    if (Math.abs(val) >= 1_000) return `${currencySymbol}${(val / 1_000).toFixed(1)}K`;
     return `${currencySymbol}${val.toLocaleString()}`;
   };
 

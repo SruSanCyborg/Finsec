@@ -122,10 +122,10 @@ export const DashboardView: React.FC = () => {
       {/* 2. Top Compact 4-Column KPI Grid */}
       <motion.div variants={itemVariants}>
         <TopKpiRow
-          score={activeProject?.complianceScore || 94}
-          moneyAtRiskUSD={activeProject?.moneyAtRiskUSD || moneyAtRisk?.totalUSD || 1450000}
+          score={activeProject?.complianceScore ?? 0}
+          moneyAtRiskUSD={activeProject?.moneyAtRiskUSD ?? moneyAtRisk?.totalUSD ?? 0}
           openFindingsCount={activeProject?.openFindingsCount}
-          compliancePassRate={activeProject?.complianceScore || 94}
+          compliancePassRate={activeProject?.complianceScore ?? 0}
         />
       </motion.div>
 
@@ -143,14 +143,14 @@ export const DashboardView: React.FC = () => {
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', height: '100%' }}>
           <SecurityPostureChart />
           <CerebusActionWidget
-            criticalCount={activeProject?.openFindingsCount?.critical || 1}
-            highCount={activeProject?.openFindingsCount?.high || 2}
+            criticalCount={activeProject?.openFindingsCount?.critical ?? 0}
+            highCount={activeProject?.openFindingsCount?.high ?? 0}
           />
         </div>
 
         {/* Right Column (1/3 width): Compliance Posture Gauge (Always Visible) */}
         <div style={{ height: '100%' }}>
-          <SecurityGaugeCard score={activeProject?.complianceScore || 94} />
+          <SecurityGaugeCard score={activeProject?.complianceScore ?? 0} />
         </div>
       </motion.div>
 

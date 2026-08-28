@@ -1,6 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowUpRight, TrendingUp, TrendingDown, ShieldCheck, DollarSign, ShieldAlert, CheckCircle2 } from 'lucide-react';
+import { MoneyTicker } from '@sirius/ui';
+import { ArrowUpRight, ShieldCheck, DollarSign, ShieldAlert, CheckCircle2 } from 'lucide-react';
 
 export interface TopKpiRowProps {
   score: number;
@@ -9,11 +10,13 @@ export interface TopKpiRowProps {
   compliancePassRate?: number;
 }
 
+const EMPTY_COUNTS = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+
 export const TopKpiRow: React.FC<TopKpiRowProps> = ({
-  score = 94,
-  moneyAtRiskUSD = 1450000,
-  openFindingsCount = { critical: 1, high: 2, medium: 4, low: 8, info: 12 },
-  compliancePassRate = 94,
+  score,
+  moneyAtRiskUSD,
+  openFindingsCount = EMPTY_COUNTS,
+  compliancePassRate = 0,
 }) => {
   const navigate = useNavigate();
   const totalFindings =
@@ -22,12 +25,6 @@ export const TopKpiRow: React.FC<TopKpiRowProps> = ({
     openFindingsCount.medium +
     openFindingsCount.low +
     openFindingsCount.info;
-
-  const formatMoney = (val: number) => {
-    if (val >= 1000000) return `$${(val / 1000000).toFixed(2)}M`;
-    if (val >= 1000) return `$${(val / 1000).toFixed(1)}K`;
-    return `$${val.toLocaleString()}`;
-  };
 
   return (
     <div
@@ -82,12 +79,6 @@ export const TopKpiRow: React.FC<TopKpiRowProps> = ({
           </span>
           <span style={{ fontSize: '14px', opacity: 0.8, fontWeight: 600 }}>/ 100</span>
         </div>
-
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 600, opacity: 0.9 }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', backgroundColor: 'rgba(255, 255, 255, 0.2)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
-            <TrendingUp size={12} /> +2.4 vs last scan
-          </span>
-        </div>
       </div>
 
       {/* KPI Card 2: Money at Risk */}
@@ -128,14 +119,8 @@ export const TopKpiRow: React.FC<TopKpiRowProps> = ({
           </div>
         </div>
 
-        <div className="sirius-numeral-tabular" style={{ fontSize: '32px', fontWeight: 800, color: 'var(--color-text-primary)', margin: '8px 0 6px 0', lineHeight: 1 }}>
-          {formatMoney(moneyAtRiskUSD)}
-        </div>
-
-        <div style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-primary)' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '3px', backgroundColor: 'var(--color-primary-soft)', padding: '2px 7px', borderRadius: 'var(--radius-pill)' }}>
-            <TrendingDown size={12} /> -$150K exposure reduced
-          </span>
+        <div style={{ fontSize: '32px', fontWeight: 800, margin: '8px 0 6px 0', lineHeight: 1 }}>
+          <MoneyTicker amountUSD={moneyAtRiskUSD} durationMs={0} variant="compact" />
         </div>
       </div>
 

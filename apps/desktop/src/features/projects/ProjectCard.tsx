@@ -1,8 +1,8 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Project } from '@sirius/types';
-import { Card, StatusChip, Badge } from '@sirius/ui';
-import { FolderGit2, GitBranch, Clock, ExternalLink, ArrowRight, DollarSign, ShieldAlert } from 'lucide-react';
+import { Card, StatusChip, Badge, MoneyTicker } from '@sirius/ui';
+import { FolderGit2, GitBranch, Clock, ExternalLink, ArrowRight, ShieldAlert } from 'lucide-react';
 
 export interface ProjectCardProps {
   project: Project;
@@ -11,9 +11,9 @@ export interface ProjectCardProps {
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
   const navigate = useNavigate();
 
-  const isAtRisk = (project.openFindingsCount?.critical || 0) > 0 || (project.complianceScore || 100) < 90;
-  const criticalCount = project.openFindingsCount?.critical || 0;
-  const highCount = project.openFindingsCount?.high || 0;
+  const isAtRisk = (project.openFindingsCount?.critical ?? 0) > 0 || (project.complianceScore ?? 100) < 90;
+  const criticalCount = project.openFindingsCount?.critical ?? 0;
+  const highCount = project.openFindingsCount?.high ?? 0;
 
   return (
     <Card
@@ -75,8 +75,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
             <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '2px' }}>
               SECURITY SCORE
             </div>
-            <div className="sirius-numeral-tabular" style={{ fontSize: '20px', fontWeight: 800, color: (project.complianceScore || 100) >= 90 ? 'var(--color-primary)' : 'var(--color-red)' }}>
-              {project.complianceScore || 100}<span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>/100</span>
+            <div className="sirius-numeral-tabular" style={{ fontSize: '20px', fontWeight: 800, color: (project.complianceScore ?? 100) >= 90 ? 'var(--color-primary)' : 'var(--color-red)' }}>
+              {project.complianceScore ?? 100}<span style={{ fontSize: '12px', fontWeight: 500, color: 'var(--color-text-muted)' }}>/100</span>
             </div>
           </div>
 
@@ -84,9 +84,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project }) => {
             <div style={{ fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-muted)', marginBottom: '2px' }}>
               MONEY AT RISK
             </div>
-            <div className="sirius-numeral-tabular" style={{ fontSize: '20px', fontWeight: 800, color: 'var(--color-text-primary)', display: 'flex', alignItems: 'center', gap: '2px' }}>
-              <DollarSign size={15} style={{ opacity: 0.8 }} />
-              {((project.moneyAtRiskUSD || 0) / 1000000).toFixed(2)}M
+            <div style={{ fontSize: '20px', fontWeight: 800 }}>
+              <MoneyTicker amountUSD={project.moneyAtRiskUSD ?? 0} durationMs={0} variant="compact" />
             </div>
           </div>
         </div>

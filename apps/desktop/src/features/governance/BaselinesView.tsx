@@ -4,6 +4,7 @@ import {
   useBaselinesQuery,
   useCreateBaselineMutation,
   useProjectsQuery,
+  useScansQuery,
 } from '../../api/queries';
 import { Baseline } from '@sirius/types';
 import { GlassCard, Badge, Button, LoadingState, ErrorState } from '@sirius/ui';
@@ -19,6 +20,8 @@ export const BaselinesView: React.FC = () => {
   const activeProject = projects[0];
 
   const { data: baselines = [], isLoading, isError, refetch } = useBaselinesQuery(activeProject?.id);
+  const { data: scans = [] } = useScansQuery(activeProject?.id);
+  const latestCompletedScan = scans.find((scan) => scan.status === 'completed');
   const createBaselineMutation = useCreateBaselineMutation();
 
   const [selectedBaselineId, setSelectedBaselineId] = useState<string | null>(paramId || null);
@@ -259,6 +262,9 @@ export const BaselinesView: React.FC = () => {
       <CreateBaselineDialog
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
+        scanId={latestCompletedScan?.id}
+        projectId={activeProject?.id}
+        findingCount={latestCompletedScan?.summary?.totalFindings}
         onSubmit={async (params) => {
           await createBaselineMutation.mutateAsync(params);
         }}

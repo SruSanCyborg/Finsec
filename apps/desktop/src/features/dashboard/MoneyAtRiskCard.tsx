@@ -45,7 +45,7 @@ export const MoneyAtRiskCard: React.FC<MoneyAtRiskCardProps> = ({
       </div>
 
       <div style={{ padding: '12px 0', textAlign: 'center' }}>
-        <MoneyTicker amountUSD={amountUSD} currencySymbol="$" variant="large" delta={deltaUSD} />
+        <MoneyTicker amountUSD={amountUSD} variant="large" delta={deltaUSD} />
       </div>
 
       <div className="sirius-caption" style={{ textAlign: 'center', marginTop: '12px', color: 'var(--color-text-secondary)' }}>

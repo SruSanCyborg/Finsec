@@ -2,16 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate, useParams } from 'react-router-dom';
 import {
   useReportsQuery,
-  useGenerateReportMutation,
+  useReportQuery,
   useDownloadReportPdfMutation,
   useDownloadReportSarifMutation,
   useProjectsQuery,
+  useScansQuery,
 } from '../../api/queries';
 import { Report, ReportType } from '@sirius/types';
 import { Input, Button, LoadingState, ErrorState } from '@sirius/ui';
 import { GenerateReportDialog } from './GenerateReportDialog';
 import { ReportList } from './ReportList';
-import { ReportPreview } from './ReportPreview';
+import { ReportPreview, SignedReportDocument } from './ReportPreview';
 import { ReportSidebarInspector } from './ReportSidebarInspector';
 import { FileText, Search, Plus } from 'lucide-react';
 
@@ -23,15 +24,15 @@ export const ReportsView: React.FC = () => {
 
   const paramId = searchParams.get('id') || routeReportId;
   const paramType = (searchParams.get('type') as ReportType) || 'technical';
-  const paramScan = searchParams.get('scan') || 'scan-109283';
   const paramFramework = searchParams.get('framework') || 'pci-dss-4.0';
 
   const { data: projects = [] } = useProjectsQuery();
   const activeProject = projects[0];
 
   const { data: reports = [], isLoading, isError, refetch } = useReportsQuery(activeProject?.id);
+  const { data: scans = [] } = useScansQuery(activeProject?.id);
+  const completedScans = scans.filter((scan) => scan.status === 'completed');
 
-  const generateReportMutation = useGenerateReportMutation();
   const downloadPdfMutation = useDownloadReportPdfMutation();
   const downloadSarifMutation = useDownloadReportSarifMutation();
 
@@ -69,6 +70,14 @@ export const ReportsView: React.FC = () => {
   });
 
   const selectedReport = filteredReports.find((r) => r.id === selectedReportId) || filteredReports[0] || null;
+
+  // The listing (`useReportsQuery`) only carries the score and money figure —
+  // per-finding evidence and the compliance clauses it maps to come from the
+  // same signed document `sirius report --verify` checks, fetched here so the
+  // preview can show what the report actually says instead of a stand-in.
+  const { data: reportDocument } = useReportQuery(selectedReport?.scanId, activeProject?.id) as {
+    data: SignedReportDocument | undefined;
+  };
 
   const handleSelectReport = (report: Report) => {
     setSelectedReportId(report.id);
@@ -128,22 +137,22 @@ export const ReportsView: React.FC = () => {
         reports={filteredReports}
         selectedReportId={selectedReport?.id}
         onSelectReport={handleSelectReport}
-        onDownloadPdf={(id) => downloadPdfMutation.mutateAsync(id)}
-        onDownloadSarif={(id) => downloadSarifMutation.mutateAsync(id)}
+        onDownloadPdf={(id) => downloadPdfMutation.mutateAsync({ scanId: id, projectId: activeProject?.id })}
+        onDownloadSarif={(id) => downloadSarifMutation.mutateAsync({ scanId: id, projectId: activeProject?.id })}
       />
 
       {/* Document Detail Preview Workspace */}
       <div style={{ display: 'flex', gap: '20px', alignItems: 'flex-start', height: '620px' }}>
         {/* Document Preview Surface */}
         <div style={{ flex: 1, minWidth: 0, height: '100%' }}>
-          <ReportPreview report={selectedReport} />
+          <ReportPreview report={selectedReport} signedDoc={reportDocument} />
         </div>
 
         {/* Right Inspector & Download Panel */}
         <ReportSidebarInspector
           report={selectedReport}
-          onDownloadPdf={(id) => downloadPdfMutation.mutateAsync(id)}
-          onDownloadSarif={(id) => downloadSarifMutation.mutateAsync(id)}
+          onDownloadPdf={(id) => downloadPdfMutation.mutateAsync({ scanId: id, projectId: activeProject?.id })}
+          onDownloadSarif={(id) => downloadSarifMutation.mutateAsync({ scanId: id, projectId: activeProject?.id })}
         />
       </div>
 
@@ -151,14 +160,18 @@ export const ReportsView: React.FC = () => {
       <GenerateReportDialog
         isOpen={isGenerateOpen}
         onClose={() => setIsGenerateOpen(false)}
+        scans={completedScans}
+        projectId={activeProject?.id}
+        projectName={activeProject?.name}
         initialType={paramType}
-        initialScanId={paramScan}
-        initialProjectId={activeProject?.id || 'prj-finsec-core-01'}
         initialFrameworkId={paramFramework}
         onSubmit={async (params) => {
-          const generated = await generateReportMutation.mutateAsync(params);
-          setSelectedReportId(generated.id);
-          navigate(`/reports/${generated.id}`);
+          // Every completed scan already has a report — `sirius report` and
+          // `GET /scans/:id/report` build and sign it from the same scan
+          // record on request. There is nothing separate to generate; picking
+          // a scan in the dialog *is* picking the report.
+          setSelectedReportId(params.scanId);
+          navigate(`/reports/${params.scanId}`);
         }}
       />
     </div>

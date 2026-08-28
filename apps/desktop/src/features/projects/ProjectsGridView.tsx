@@ -43,7 +43,7 @@ export const ProjectsGridView: React.FC = () => {
       prj.name.toLowerCase().includes(search.toLowerCase()) ||
       prj.repositoryUrl.toLowerCase().includes(search.toLowerCase());
 
-    const isAtRisk = (prj.openFindingsCount?.critical || 0) > 0 || (prj.complianceScore || 100) < 90;
+    const isAtRisk = (prj.openFindingsCount?.critical ?? 0) > 0 || (prj.complianceScore ?? 100) < 90;
 
     if (!matchesSearch) return false;
     if (activeTab === 'healthy') return !isAtRisk;

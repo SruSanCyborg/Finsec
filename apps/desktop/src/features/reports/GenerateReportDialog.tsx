@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GlassModal, Button } from '@sirius/ui';
 import { FileText, Layers } from 'lucide-react';
 
-import { ReportType } from '@sirius/types';
+import { Scan, ReportType } from '@sirius/types';
 
 export interface GenerateReportDialogProps {
   isOpen: boolean;
@@ -13,9 +13,11 @@ export interface GenerateReportDialogProps {
     type: ReportType;
     frameworkId?: string;
   }) => Promise<void>;
+  /** Completed scans for the active project — the only ones a report can be built from. */
+  scans: Scan[];
+  projectId?: string;
+  projectName?: string;
   initialType?: ReportType;
-  initialScanId?: string;
-  initialProjectId?: string;
   initialFrameworkId?: string;
 }
 
@@ -23,22 +25,31 @@ export const GenerateReportDialog: React.FC<GenerateReportDialogProps> = ({
   isOpen,
   onClose,
   onSubmit,
+  scans,
+  projectId,
+  projectName,
   initialType = 'technical',
-  initialScanId = 'scan-109283',
-  initialProjectId = 'prj-finsec-core-01',
   initialFrameworkId = 'pci-dss-4.0',
 }) => {
   const [type, setType] = useState<ReportType>(initialType);
-  const [scanId, setScanId] = useState(initialScanId);
+  const [scanId, setScanId] = useState(scans[0]?.id ?? '');
   const [frameworkId, setFrameworkId] = useState(initialFrameworkId);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  // The scan list arrives async (or the project switches) after this dialog
+  // has already mounted with an empty default — pick up the first real scan
+  // once one exists rather than leaving the selector stuck on nothing.
+  useEffect(() => {
+    if (!scanId && scans.length > 0) setScanId(scans[0].id);
+  }, [scans, scanId]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!projectId || !scanId) return;
     setIsSubmitting(true);
     try {
       await onSubmit({
-        projectId: initialProjectId,
+        projectId,
         scanId,
         type,
         frameworkId: type === 'compliance' ? frameworkId : undefined,
@@ -101,22 +112,31 @@ export const GenerateReportDialog: React.FC<GenerateReportDialogProps> = ({
         {/* Target Scan */}
         <div>
           <label className="sirius-caption" style={{ display: 'block', marginBottom: '6px' }}>TARGET COMPLETED SCAN</label>
-          <select
-            value={scanId}
-            onChange={(e) => setScanId(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              backgroundColor: 'var(--bg-surface)',
-              border: '1px solid var(--border-hairline)',
-              borderRadius: 'var(--radius-md)',
-              color: 'var(--text-primary)',
-              fontSize: '13px',
-            }}
-          >
-            <option value="scan-109283">Scan 8F31 (PayKit Core API · main · 126 findings)</option>
-            <option value="scan-109284">Scan 7A21 (Vault Key Service · release · 32 findings)</option>
-          </select>
+          {scans.length === 0 ? (
+            <div className="sirius-caption" style={{ padding: '10px 12px', backgroundColor: 'var(--bg-surface)', border: '1px solid var(--border-hairline)', borderRadius: 'var(--radius-md)' }}>
+              No completed scans yet for this project — run one first.
+            </div>
+          ) : (
+            <select
+              value={scanId}
+              onChange={(e) => setScanId(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 12px',
+                backgroundColor: 'var(--bg-surface)',
+                border: '1px solid var(--border-hairline)',
+                borderRadius: 'var(--radius-md)',
+                color: 'var(--text-primary)',
+                fontSize: '13px',
+              }}
+            >
+              {scans.map((scan) => (
+                <option key={scan.id} value={scan.id}>
+                  {scan.id} · {scan.commitHash ?? 'local'} · {scan.summary?.totalFindings ?? 0} findings
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Compliance Framework Selection if type === compliance */}
@@ -147,7 +167,7 @@ export const GenerateReportDialog: React.FC<GenerateReportDialogProps> = ({
         <div style={{ backgroundColor: 'var(--bg-surface)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-hairline)' }}>
           <div className="sirius-caption">REPORT SCOPE SUMMARY</div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Layers size={14} color="var(--color-cyan)" /> PayKit Core API · {scanId} · {type.toUpperCase()}
+            <Layers size={14} color="var(--color-cyan)" /> {projectName ?? 'this project'} · {scanId || 'no scan selected'} · {type.toUpperCase()}
           </div>
         </div>
 
@@ -156,7 +176,7 @@ export const GenerateReportDialog: React.FC<GenerateReportDialogProps> = ({
           <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="gradient" type="submit" isLoading={isSubmitting}>
+          <Button variant="gradient" type="submit" isLoading={isSubmitting} disabled={!projectId || !scanId}>
             Generate Security Report
           </Button>
         </div>

@@ -1,15 +1,33 @@
 import React, { useState } from 'react';
 import { Report } from '@sirius/types';
 import { GlassCard, Badge, MoneyTicker } from '@sirius/ui';
-import { ShieldCheck, FileText, ArrowRight } from 'lucide-react';
+import { ShieldCheck, FileText } from 'lucide-react';
 
 import { redactSensitiveText } from '@sirius/utils';
 
-export interface ReportPreviewProps {
-  report: Report | null;
+/** The `sirius.report/v1` document `GET /scans/:id/report?format=json` returns — the same bytes `sirius report --verify` checks. */
+export interface SignedReportDocument {
+  schema: string;
+  scan_id: string;
+  compliance_refs: string[];
+  findings: {
+    rule_id: string;
+    severity: string;
+    file: string;
+    line: number;
+    message?: string;
+    compliance_ref: string[];
+    money_at_risk_inr: number;
+  }[];
 }
 
-export const ReportPreview: React.FC<ReportPreviewProps> = ({ report }) => {
+export interface ReportPreviewProps {
+  report: Report | null;
+  /** The real signed document for `report`, fetched separately — undefined while still loading. */
+  signedDoc?: SignedReportDocument;
+}
+
+export const ReportPreview: React.FC<ReportPreviewProps> = ({ report, signedDoc }) => {
   const [activeSection, setActiveSection] = useState<'overview' | 'executive' | 'findings' | 'attack_paths' | 'compliance' | 'remediation'>('overview');
 
   if (!report) {
@@ -28,15 +46,17 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ report }) => {
     );
   }
 
-  const summary = report.summary || {
-    overallScore: 72.5,
-    totalFindings: 43,
-    criticalCount: 3,
-    highCount: 12,
-    mediumCount: 28,
-    moneyAtRiskUSD: 1450000,
-    passedControlsCount: 35,
-    failedControlsCount: 13,
+  // `report.summary` always exists once a report is generated (see
+  // `adapters.ts#toReport`) — this is a type-safety fallback, not a demo one.
+  const summary = report.summary ?? {
+    overallScore: 0,
+    totalFindings: 0,
+    criticalCount: 0,
+    highCount: 0,
+    mediumCount: 0,
+    moneyAtRiskUSD: 0,
+    passedControlsCount: 0,
+    failedControlsCount: 0,
   };
 
   const scrollToSection = (id: typeof activeSection) => {
@@ -112,7 +132,7 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ report }) => {
           </h1>
 
           <div className="sirius-caption" style={{ fontFamily: 'var(--font-code)' }}>
-            Generated for PayKit Core API · Target Scan {report.scanId} · {new Date(report.generatedAt).toLocaleString()}
+            Target Scan {report.scanId} · {new Date(report.generatedAt).toLocaleString()}
           </div>
         </div>
 
@@ -144,102 +164,99 @@ export const ReportPreview: React.FC<ReportPreviewProps> = ({ report }) => {
               </div>
             </div>
           </div>
-
-          <div style={{ backgroundColor: 'var(--color-primary-soft)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(24, 101, 68, 0.25)', fontSize: '13px', lineHeight: 1.6, color: 'var(--color-text-primary)' }}>
-            "Security posture for PayKit Core API is primarily constrained by hardcoded provider credentials in authentication middleware and unencrypted payment PAN logging. Remediation is active with verifier checks."
-          </div>
         </div>
 
-        {/* Section 2: Technical Findings Evidence */}
+        {/* Section 2: Technical Findings Evidence — from the signed document itself, not invented per-report copy */}
         <div id="section-findings" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
           <div className="sirius-caption" style={{ color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '0.05em' }}>
             2. TECHNICAL FINDINGS EVIDENCE & SOURCE LOCATIONS
           </div>
 
-          <div style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
-                FIN-SEC-001: Hardcoded JWT Signing Private Key
+          {!signedDoc && (
+            <div className="sirius-caption" style={{ padding: '12px 0' }}>Loading signed evidence…</div>
+          )}
+
+          {signedDoc && signedDoc.findings.length === 0 && (
+            <div className="sirius-caption" style={{ padding: '12px 0' }}>This scan reported no findings.</div>
+          )}
+
+          {signedDoc?.findings.slice(0, 8).map((f, idx) => (
+            <div
+              key={`${f.rule_id}-${f.file}-${f.line}-${idx}`}
+              style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', display: 'flex', flexDirection: 'column', gap: '10px' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                  {f.rule_id}
+                </div>
+                <Badge variant={f.severity === 'critical' ? 'violet' : f.severity === 'high' ? 'cyan' : 'teal'} size="sm">
+                  {f.severity.toUpperCase()}
+                </Badge>
               </div>
-              <Badge variant="violet" size="sm">CRITICAL</Badge>
+              <div className="sirius-caption" style={{ fontFamily: 'var(--font-code)' }}>
+                Location: {f.file}:{f.line}
+              </div>
+              {f.message && (
+                <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                  {redactSensitiveText(f.message)}
+                </div>
+              )}
             </div>
-            <div className="sirius-caption" style={{ fontFamily: 'var(--font-code)' }}>
-              Location: src/middleware/auth.ts:42-58 · Rule: SEC-JWT-004
-            </div>
-            <div style={{ fontSize: '12.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-              {redactSensitiveText('A static RSA private key was detected in code. Attackers could forge valid session tokens for any tenant.')}
-            </div>
-          </div>
+          ))}
+
+          {signedDoc && signedDoc.findings.length > 8 && (
+            <div className="sirius-caption">+ {signedDoc.findings.length - 8} more in the full report.</div>
+          )}
         </div>
 
-        {/* Section 3: Attack Path Evidence */}
+        {/* Section 3: Attack Path Evidence — not part of the signed report document; nothing real to show here yet */}
         <div id="section-attack_paths" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
           <div className="sirius-caption" style={{ color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '0.05em' }}>
             3. CRITICAL ATTACK PROPAGATION PATHS
           </div>
-
           <div style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-            <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)', marginBottom: '8px' }}>
-              Exposed Provider Credential &rrArr; Financial Payment Ledger ($1.45M Exposure)
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--color-text-secondary)', flexWrap: 'wrap' }}>
-              <Badge variant="cyan" size="sm">Credential</Badge>
-              <ArrowRight size={12} />
-              <Badge variant="violet" size="sm">JWT Signing Key</Badge>
-              <ArrowRight size={12} />
-              <Badge variant="teal" size="sm">Auth Gateway</Badge>
-              <ArrowRight size={12} />
-              <Badge variant="emerald" size="sm">Payment Ledger DB</Badge>
+            <div className="sirius-caption">
+              Not part of this report format yet — see the Attack Paths view for what's derived from this scan.
             </div>
           </div>
         </div>
 
-        {/* Section 4: Compliance Control Evidence */}
+        {/* Section 4: Compliance clauses implicated by findings — from the signed document */}
         <div id="section-compliance" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
           <div className="sirius-caption" style={{ color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '0.05em' }}>
-            4. REGULATORY COMPLIANCE AUDIT EVIDENCE
+            4. COMPLIANCE CLAUSES IMPLICATED BY THIS SCAN
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
-            <div style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-              <div className="sirius-caption">PCI DSS 4.0 CONTROL 6.3.1</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-red)', marginTop: '4px' }}>
-                FAIL — Software Architecture Vulnerability Prevention
-              </div>
-              <div className="sirius-caption" style={{ marginTop: '4px' }}>
-                Evidence: Static Analysis Scan {report.scanId}
-              </div>
-            </div>
+          {signedDoc && signedDoc.compliance_refs.length === 0 && (
+            <div className="sirius-caption" style={{ padding: '12px 0' }}>No compliance clauses implicated — no findings mapped to one.</div>
+          )}
 
-            <div style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-              <div className="sirius-caption">SOC 2 TYPE II CONTROL CC6.1</div>
-              <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--color-emerald)', marginTop: '4px' }}>
-                PASS — Access Transmission Boundary Controls
-              </div>
-              <div className="sirius-caption" style={{ marginTop: '4px' }}>
-                Evidence: Verified in Scan {report.scanId}
-              </div>
-            </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+            {signedDoc?.compliance_refs.map((ref) => (
+              <Badge key={ref} variant="cyan" size="sm" style={{ fontFamily: 'var(--font-code)' }}>
+                {ref}
+              </Badge>
+            ))}
           </div>
+          {signedDoc && signedDoc.compliance_refs.length > 0 && (
+            <div className="sirius-caption">
+              Clauses a finding in this scan maps to — not a pass/fail audit verdict per control.
+            </div>
+          )}
         </div>
 
-        {/* Section 5: Remediation Verification */}
+        {/* Section 5: Remediation — no fix-count data in this report; point at the real workspace instead of inventing one */}
         <div id="section-remediation" style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '10px' }}>
           <div className="sirius-caption" style={{ color: 'var(--color-primary)', fontWeight: 700, letterSpacing: '0.05em' }}>
-            5. SAFE REMEDIATION VERIFICATION SUMMARY
+            5. REMEDIATION
           </div>
 
           <div style={{ backgroundColor: 'var(--color-bg-surface-elevated)', padding: '14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div>
-              <div style={{ fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
-                18 Security Fix Proposals Generated & Verified
-              </div>
-              <div className="sirius-caption" style={{ marginTop: '2px' }}>
-                All patches verified via local sandboxed test suite prior to human approval.
-              </div>
+            <div className="sirius-caption">
+              Fix status isn't tracked in this report — open a finding's Remediation workspace for its verifier result.
             </div>
-            <Badge variant="emerald" size="sm" icon={<ShieldCheck size={12} />}>
-              VERIFIED SAFE
+            <Badge variant="cyan" size="sm" icon={<ShieldCheck size={12} />}>
+              SEE FINDINGS
             </Badge>
           </div>
         </div>

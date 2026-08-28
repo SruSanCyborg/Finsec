@@ -1,11 +1,12 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FolderGit2, Plus, GitBranch, ShieldCheck, AlertCircle } from 'lucide-react';
-import { MOCK_PROJECTS } from '@sirius/mock-api';
 import { Badge, Button } from '@sirius/ui';
+import { useProjectsQuery } from '../../api/queries';
 
 export const ActiveTargetsWidget: React.FC = () => {
   const navigate = useNavigate();
+  const { data: projects = [] } = useProjectsQuery();
 
   return (
     <div
@@ -43,7 +44,7 @@ export const ActiveTargetsWidget: React.FC = () => {
 
       {/* Target Projects List */}
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', flex: 1, justifyContent: 'center' }}>
-        {MOCK_PROJECTS.slice(0, 3).map((project) => {
+        {projects.slice(0, 3).map((project) => {
           const isAtRisk = (project.openFindingsCount?.critical || 0) > 0;
           return (
             <div

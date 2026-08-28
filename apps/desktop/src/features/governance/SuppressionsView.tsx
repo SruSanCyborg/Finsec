@@ -69,9 +69,9 @@ export const SuppressionsView: React.FC = () => {
     setSearchParams(next, { replace: true });
   };
 
-  const handleRevoke = async (id: string) => {
-    if (confirm(`Revoke suppression policy ${id}? Matching findings will become actionable.`)) {
-      await revokeSuppressionMutation.mutateAsync(id);
+  const handleRevoke = async (suppression: Suppression) => {
+    if (confirm(`Revoke suppression policy for ${suppression.ruleId}? Matching findings will become actionable.`)) {
+      await revokeSuppressionMutation.mutateAsync({ ruleId: suppression.ruleId, projectId: activeProject?.id });
     }
   };
 
@@ -253,7 +253,7 @@ export const SuppressionsView: React.FC = () => {
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={() => handleRevoke(selectedSuppression.id)}
+                onClick={() => handleRevoke(selectedSuppression)}
                 leftIcon={<Trash2 size={14} color="var(--color-red)" />}
                 style={{ marginTop: 'auto' }}
               >
@@ -269,9 +269,15 @@ export const SuppressionsView: React.FC = () => {
         isOpen={isCreateOpen}
         onClose={() => setIsCreateOpen(false)}
         onSubmit={async (params) => {
+          // No fake project id fallback: the daemon always lists its own
+          // serving root first (see `server/projects.ts`), so `activeProject`
+          // is real once `useProjectsQuery` has data. An empty id here means
+          // that hasn't happened yet, and the request should fail honestly
+          // rather than silently target a project that doesn't exist.
+          if (!activeProject?.id) return;
           await createSuppressionMutation.mutateAsync({
             ...params,
-            projectId: activeProject?.id || 'prj-finsec-core-01',
+            projectId: activeProject.id,
           });
         }}
       />

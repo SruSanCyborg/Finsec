@@ -22,7 +22,10 @@ export const CreateSuppressionDialog: React.FC<CreateSuppressionDialogProps> = (
   isOpen,
   onClose,
   onSubmit,
-  initialRuleId = 'FIN-SEC-001',
+  // No stale default: this project's rule ids are `SIR-SEC-*` now (renamed
+  // from `FIN-SEC-*`), and prefilling one that doesn't exist in the current
+  // catalog invites submitting a suppression for a rule nothing ever matches.
+  initialRuleId = '',
   initialFindingId,
 }) => {
   const [ruleId, setRuleId] = useState(initialRuleId);
@@ -70,7 +73,7 @@ export const CreateSuppressionDialog: React.FC<CreateSuppressionDialogProps> = (
           label="Rule ID to Suppress"
           value={ruleId}
           onChange={(e) => setRuleId(e.target.value)}
-          placeholder="e.g. FIN-SEC-001"
+          placeholder="e.g. SIR-SEC-001"
           required
           leftIcon={<FileText size={14} />}
         />

@@ -8,6 +8,7 @@ import {
   ErrorState,
   Card,
   HeroCard,
+  MoneyTicker,
 } from '@sirius/ui';
 
 import { ComplianceCard } from '../dashboard/ComplianceCard';
@@ -15,7 +16,7 @@ import { SeverityOverviewCard } from '../dashboard/SeverityOverviewCard';
 import { MoneyAtRiskCard } from '../dashboard/MoneyAtRiskCard';
 import { RecentScansPanel } from '../dashboard/RecentScansPanel';
 import { RecentFindingsPanel } from '../dashboard/RecentFindingsPanel';
-import { FolderGit2, GitBranch, Play, ShieldAlert, Settings, ArrowLeft, ExternalLink, FileText, DollarSign, Clock } from 'lucide-react';
+import { FolderGit2, GitBranch, Play, ShieldAlert, Settings, ArrowLeft, ExternalLink, FileText, Clock } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const ProjectDetailView: React.FC = () => {
@@ -48,8 +49,8 @@ export const ProjectDetailView: React.FC = () => {
     );
   }
 
-  const isAtRisk = (project.openFindingsCount?.critical || 0) > 0 || (project.complianceScore || 100) < 90;
-  const criticalFindingsCount = project.openFindingsCount?.critical || 0;
+  const isAtRisk = (project.openFindingsCount?.critical ?? 0) > 0 || (project.complianceScore ?? 100) < 90;
+  const criticalFindingsCount = project.openFindingsCount?.critical ?? 0;
 
   return (
     <motion.div
@@ -139,7 +140,7 @@ export const ProjectDetailView: React.FC = () => {
                 SECURITY SCORE
               </div>
               <div className="sirius-numeral-tabular" style={{ fontSize: '36px', fontWeight: 800, color: isAtRisk ? 'var(--color-red)' : 'var(--color-primary)', lineHeight: 1 }}>
-                {project.complianceScore || 100}<span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-text-muted)' }}>/100</span>
+                {project.complianceScore ?? 100}<span style={{ fontSize: '18px', fontWeight: 600, color: 'var(--color-text-muted)' }}>/100</span>
               </div>
             </div>
 
@@ -149,9 +150,8 @@ export const ProjectDetailView: React.FC = () => {
               <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: '4px' }}>
                 EXPOSURE
               </div>
-              <div className="sirius-numeral-tabular" style={{ fontSize: '28px', fontWeight: 800, color: 'var(--color-primary)', lineHeight: 1, display: 'flex', alignItems: 'center' }}>
-                <DollarSign size={20} />
-                {((project.moneyAtRiskUSD || 1450000) / 1000000).toFixed(2)}M
+              <div style={{ fontSize: '28px', fontWeight: 800, lineHeight: 1 }}>
+                <MoneyTicker amountUSD={project.moneyAtRiskUSD ?? 0} durationMs={0} variant="compact" />
               </div>
             </div>
 
@@ -205,9 +205,9 @@ export const ProjectDetailView: React.FC = () => {
       {activeTab === 'overview' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '24px' }}>
-            <ComplianceCard score={project.complianceScore || 94} />
+            <ComplianceCard score={project.complianceScore ?? 0} />
             <SeverityOverviewCard counts={project.openFindingsCount} />
-            <MoneyAtRiskCard amountUSD={project.moneyAtRiskUSD || 1450000} />
+            <MoneyAtRiskCard amountUSD={project.moneyAtRiskUSD ?? 0} />
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(440px, 1fr))', gap: '24px' }}>

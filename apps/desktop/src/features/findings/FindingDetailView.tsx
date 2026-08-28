@@ -46,7 +46,7 @@ export const FindingDetailView: React.FC<FindingDetailViewProps> = ({
   const handleResolve = async () => {
     setTriageActionState('Resolving finding...');
     try {
-      await triageMutation.mutateAsync({ findingId: finding.id, status: 'fixed', reasonText: 'Resolved by engineer.' });
+      await triageMutation.mutateAsync({ scanId: finding.scanId, findingId: finding.id, status: 'fixed', reasonText: 'Resolved by engineer.' });
     } catch {
       // Handled
     } finally {
@@ -58,7 +58,7 @@ export const FindingDetailView: React.FC<FindingDetailViewProps> = ({
     if (confirm('ACCEPT SECURITY RISK?\n\nThis finding will remain visible but will no longer be treated as an unreviewed risk according to policy.')) {
       setTriageActionState('Updating risk status...');
       try {
-        await triageMutation.mutateAsync({ findingId: finding.id, status: 'ignored', reasonText: 'Accepted risk by security team.' });
+        await triageMutation.mutateAsync({ scanId: finding.scanId, findingId: finding.id, status: 'ignored', reasonText: 'Accepted risk by security team.' });
       } catch {
         // Handled
       } finally {
@@ -70,7 +70,7 @@ export const FindingDetailView: React.FC<FindingDetailViewProps> = ({
   const handleReopen = async () => {
     setTriageActionState('Reopening finding...');
     try {
-      await triageMutation.mutateAsync({ findingId: finding.id, status: 'open', reasonText: 'Reopened by engineer.' });
+      await triageMutation.mutateAsync({ scanId: finding.scanId, findingId: finding.id, status: 'open', reasonText: 'Reopened by engineer.' });
     } catch {
       // Handled
     } finally {
@@ -226,7 +226,7 @@ export const FindingDetailView: React.FC<FindingDetailViewProps> = ({
           <div style={{ fontSize: '11px', fontWeight: 700, textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: '8px', display: 'flex', alignItems: 'center', gap: '6px' }}>
             <DollarSign size={13} color="var(--color-primary)" /> Financial Exposure
           </div>
-          <MoneyTicker amountUSD={finding.moneyAtRiskUSD || 1450000} durationMs={0} variant="compact" />
+          <MoneyTicker amountUSD={finding.moneyAtRiskUSD ?? 0} durationMs={0} variant="compact" />
         </InspectorCard>
       </div>
 

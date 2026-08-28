@@ -29,7 +29,7 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ settings, proj
         <div style={{ backgroundColor: 'var(--bg-surface)', padding: '16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-hairline)', display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <div style={{ fontSize: '15px', fontWeight: 700, color: 'var(--text-primary)' }}>
-              {activeProject?.name || 'PayKit Core API'}
+              {activeProject?.name ?? 'No project opened yet'}
             </div>
             <Badge variant="cyan" size="sm">
               ACTIVE WORKSPACE PROJECT
@@ -37,15 +37,15 @@ export const ProjectSettings: React.FC<ProjectSettingsProps> = ({ settings, proj
           </div>
 
           <div style={{ fontSize: '13px', fontFamily: 'var(--font-code)', color: 'var(--text-secondary)' }}>
-            Repository: {activeProject?.repositoryUrl || 'https://github.com/finsec/core-gateway.git'}
+            Repository: {activeProject?.repositoryUrl ?? 'none'}
           </div>
 
           <div style={{ display: 'flex', gap: '12px', fontSize: '12px', color: 'var(--text-secondary)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <GitBranch size={13} color="var(--color-primary)" /> Default Branch: <strong>{activeProject?.branch || 'main'}</strong>
+              <GitBranch size={13} color="var(--color-primary)" /> Default Branch: <strong>{activeProject?.branch ?? 'local'}</strong>
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <Shield size={13} color="var(--color-primary)" /> Score: <strong>{activeProject?.complianceScore || 72.5}/100</strong>
+              <Shield size={13} color="var(--color-primary)" /> Score: <strong>{activeProject?.complianceScore ?? '—'}/100</strong>
             </span>
           </div>
         </div>

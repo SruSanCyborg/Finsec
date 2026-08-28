@@ -15,18 +15,19 @@ export const CreateBaselineDialog: React.FC<CreateBaselineDialogProps> = ({
   isOpen,
   onClose,
   onSubmit,
-  scanId = 'scan-109283',
-  projectId = 'prj-finsec-core-01',
-  findingCount = 126,
+  scanId,
+  projectId,
+  findingCount,
 }) => {
   const [branch, setBranch] = useState('main');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!scanId) return;
     setIsSubmitting(true);
     try {
-      await onSubmit({ projectId, scanId, branch });
+      await onSubmit({ projectId: projectId ?? '', scanId, branch });
       onClose();
     } catch {
       // Handled
@@ -51,7 +52,13 @@ export const CreateBaselineDialog: React.FC<CreateBaselineDialogProps> = ({
         <div style={{ backgroundColor: 'var(--bg-surface)', padding: '12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-hairline)' }}>
           <div className="sirius-caption">TARGET SCAN FOR BASELINE CAPTURE</div>
           <div style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', marginTop: '2px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <Layers size={14} color="var(--color-cyan)" /> Scan {scanId} ({findingCount} Findings)
+            {scanId ? (
+              <>
+                <Layers size={14} color="var(--color-cyan)" /> Scan {scanId} ({findingCount ?? 0} Findings)
+              </>
+            ) : (
+              'No completed scan yet — run one first.'
+            )}
           </div>
         </div>
 
@@ -80,7 +87,7 @@ export const CreateBaselineDialog: React.FC<CreateBaselineDialogProps> = ({
           <Button variant="ghost" type="button" onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="gradient" type="submit" isLoading={isSubmitting}>
+          <Button variant="gradient" type="submit" isLoading={isSubmitting} disabled={!scanId}>
             Capture Baseline
           </Button>
         </div>
