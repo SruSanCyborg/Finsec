@@ -365,12 +365,6 @@ async function writeLocalReport(
   flags: { output?: string },
   format: 'pdf' | 'json' | 'sarif',
 ): Promise<void> {
-  if (format === 'pdf') {
-    throw new CliError('PDF reports need the hosted renderer.', {
-      hint: 'Use --format json for a signed local report.',
-    });
-  }
-
   const { attest } = await import('../engine/attest.js');
   const { countBySeverity } = await import('../ui/ScanView.js');
 
@@ -411,11 +405,29 @@ async function writeLocalReport(
   const attestation = attest(payload);
   const document = { ...payload, attestation };
 
+  const extension = format === 'pdf' ? 'pdf' : 'json';
   const target = flags.output
     ? isAbsolute(flags.output)
       ? flags.output
       : resolve(process.cwd(), flags.output)
-    : resolve(process.cwd(), `sirius-report-${cache.scan_id.slice(0, 8)}.json`);
+    : resolve(process.cwd(), `sirius-report-${cache.scan_id.slice(0, 8)}.${extension}`);
+
+  if (format === 'pdf') {
+    const { reportToPdf } = await import('../engine/report-pdf.js');
+    writeFileSync(target, reportToPdf(document));
+
+    process.stdout.write(`Report written to ${target}\n`);
+    process.stdout.write(`Signed ed25519 · key ${attestation.key_id} · ${attestation.signed_at}\n`);
+    // The PDF carries the digest and the signature as text, but it is not the
+    // signed artefact — the signature covers the payload, and a verifier needs
+    // that payload byte for byte. Saying so beside the file is the difference
+    // between a document somebody can check and one they only believe.
+    process.stdout.write(
+      `The signature covers the report payload, not this PDF. For a verifiable file:\n` +
+        `  sirius report --format json\n`,
+    );
+    return;
+  }
 
   writeFileSync(target, JSON.stringify(document, null, 2) + '\n', 'utf8');
 

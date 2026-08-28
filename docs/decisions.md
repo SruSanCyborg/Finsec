@@ -1142,3 +1142,47 @@ an example.
 engine". It exists now, so it points at `sirius rules test` instead.
 
 ---
+## D-035 — A PDF is a text format, so write one
+
+`report --format pdf` answered "PDF reports need the hosted renderer", and with
+`rules test` fixed it was the last thing in the CLI that needed a backend at
+all. It never needed one either.
+
+A PDF is a text format with a table of byte offsets at the end, and the fourteen
+base fonts are guaranteed present in every conforming reader — so a document
+made of text and horizontal rules needs no font embedding, no rasteriser and no
+dependency. `engine/pdf.ts` is about two hundred lines against a hosted service
+and a network round trip, for a document the scan already holds every value of.
+
+**Deliberately narrow**: text, rules, page breaks. No images, no embedded fonts,
+no compression. That is the whole of what a compliance report is, and every
+feature left out is one that cannot be subtly wrong.
+
+**Two things in a PDF have to be exactly right, and both fail as "the file opens
+but is empty" rather than as an error.** The xref offsets, because a reader
+seeks by them instead of scanning — so they are taken while writing the body,
+never computed afterwards. And string escaping, because an unescaped `)` ends
+the literal early and every object after it is garbage. Both are asserted
+directly: the test walks the xref table and checks each offset lands on the
+object it claims.
+
+**The encoding forces one substitution and it is stated rather than hidden.**
+WinAnsiEncoding has no ₹, so rupees are written `Rs.` with Indian grouping
+intact — `Rs.42,00,000`, the same number the terminal shows as `₹42,00,000`.
+Reaching for a similar-looking glyph would quietly change a currency symbol in a
+signed compliance document. Characters outside the encoding become `?` for the
+same reason: a byte the reader cannot map draws a glyph nobody can predict.
+
+**The PDF is not the signed artefact, and says so on itself.** The signature
+covers the report payload, and a verifier needs that payload byte for byte. The
+page carries the key id and the payload digest so the two can be compared by
+eye, and points at `--format json` for the file that can actually be checked. A
+compliance document that implies its own signature is verifiable when it is not
+would be worse than one with no signature line at all.
+
+One thing the tests caught: `wrapToWidth` split on whitespace and rejoined with
+single spaces, so `Compliance score  60/100` lost a space it was never asked to
+touch. A line that already fits is now returned untouched — a wrapper should lay
+text out, not edit it.
+
+---

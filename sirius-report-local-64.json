@@ -1,0 +1,1336 @@
+{
+  "schema": "sirius.report/v1",
+  "scan_id": "local-64a65ef4bf7a",
+  "scanned_at": "2026-08-27T07:07:50.102Z",
+  "root": "/Applications/Sanjay/personal/clifintech",
+  "source": "local",
+  "tool": {
+    "name": "sirius",
+    "version": "0.4.0"
+  },
+  "summary": {
+    "findings": 96,
+    "counts": {
+      "critical": 24,
+      "high": 59,
+      "medium": 12,
+      "low": 1
+    },
+    "money_at_risk_inr": 94730000,
+    "compliance_score": 0,
+    "files_scanned": 147
+  },
+  "compliance_refs": [
+    "CWE:78",
+    "CWE:798",
+    "CWE:89",
+    "DPDP:8",
+    "GDPR:Art.5",
+    "PCI-DSS:3.4.1",
+    "PCI-DSS:3.5.1",
+    "PCI-DSS:3.6.1",
+    "PCI-DSS:4.2.1",
+    "PCI-DSS:6.2.4",
+    "PCI-DSS:6.3.2",
+    "PCI-DSS:8.3.1",
+    "PCI-DSS:8.4.2",
+    "PCI-DSS:8.6.2",
+    "RBI-DPSC"
+  ],
+  "findings": [
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "contract/fixtures/chaos-repo/src/config.py",
+      "line": 14,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "f5305892f6b474db6c38797241e31d62"
+    },
+    {
+      "rule_id": "SIR-SEC-010",
+      "severity": "critical",
+      "file": "contract/fixtures/chaos-repo/src/ledger.py",
+      "line": 88,
+      "message": "SQL built with string formatting",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "8fdd1c4a42e59f2408c6cef5f398dc2c"
+    },
+    {
+      "rule_id": "SIR-SEC-020",
+      "severity": "high",
+      "file": "contract/fixtures/chaos-repo/src/webhooks.py",
+      "line": 38,
+      "message": "Route missing an authentication decorator",
+      "compliance_ref": [
+        "PCI-DSS:8.4.2",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 600000,
+      "fingerprint": "2ed895cd12b5a4485287845482097f1c"
+    },
+    {
+      "rule_id": "SIR-SEC-030",
+      "severity": "high",
+      "file": "contract/fixtures/chaos-repo/src/webhooks.py",
+      "line": 52,
+      "message": "PAN, Aadhaar, or other PII written to logs",
+      "compliance_ref": [
+        "PCI-DSS:3.4.1",
+        "DPDP:8",
+        "GDPR:Art.5"
+      ],
+      "money_at_risk_inr": 1300000,
+      "fingerprint": "42ce260fef97dbd7d9f568922f31e2b7"
+    },
+    {
+      "rule_id": "SIR-SEC-050",
+      "severity": "medium",
+      "file": "contract/fixtures/chaos-repo/src/webhooks.py",
+      "line": 38,
+      "message": "Money-movement endpoint without a rate limit",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 250000,
+      "fingerprint": "4f1a9550ca00731a1c23e31014ab2b1c"
+    },
+    {
+      "rule_id": "SIR-SEC-051",
+      "severity": "medium",
+      "file": "contract/fixtures/chaos-repo/src/webhooks.py",
+      "line": 38,
+      "message": "Money-movement POST without an idempotency key",
+      "compliance_ref": [],
+      "money_at_risk_inr": 180000,
+      "fingerprint": "bc8c015116a0b5085393c40f55d0184f"
+    },
+    {
+      "rule_id": "SIR-SEC-060",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/package.json",
+      "line": 7,
+      "message": "\"postinstall\" runs on every dependency install",
+      "compliance_ref": [
+        "PCI-DSS:6.3.2"
+      ],
+      "money_at_risk_inr": 500000,
+      "fingerprint": "5645c8521d273153e36640e962b0bc91"
+    },
+    {
+      "rule_id": "SIR-SEC-060",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/package.json",
+      "line": 12,
+      "message": "Dependency \"acme-risk-sdk\" resolved outside the registry",
+      "compliance_ref": [
+        "PCI-DSS:6.3.2"
+      ],
+      "money_at_risk_inr": 500000,
+      "fingerprint": "f95516d692be4da2ae46a681e28c6b7d"
+    },
+    {
+      "rule_id": "SIR-SEC-060",
+      "severity": "low",
+      "file": "contract/fixtures/rule-gallery/requirements.txt",
+      "line": 6,
+      "message": "Dependency \"requests\" pinned to a floating range",
+      "compliance_ref": [
+        "PCI-DSS:6.3.2"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "5ef341d8002ab1878671e3e4c6f4a646"
+    },
+    {
+      "rule_id": "SIR-SEC-060",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/requirements.txt",
+      "line": 9,
+      "message": "Dependency \"ledger-client\" resolved outside the registry",
+      "compliance_ref": [
+        "PCI-DSS:6.3.2"
+      ],
+      "money_at_risk_inr": 500000,
+      "fingerprint": "7117c4caf5404632e897ce38e43c6073"
+    },
+    {
+      "rule_id": "SIR-SEC-020",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/src/auth.py",
+      "line": 18,
+      "message": "Route missing an authentication decorator",
+      "compliance_ref": [
+        "PCI-DSS:8.4.2",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 600000,
+      "fingerprint": "cac854e4b8aef52ecd8106b7733d86d0"
+    },
+    {
+      "rule_id": "SIR-SEC-021",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/auth.py",
+      "line": 30,
+      "message": "JWT decoded without signature verification",
+      "compliance_ref": [
+        "PCI-DSS:8.4.2",
+        "PCI-DSS:8.3.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 350000,
+      "fingerprint": "f09230177f5e59980859698e62fe1a04"
+    },
+    {
+      "rule_id": "SIR-SEC-040",
+      "severity": "medium",
+      "file": "contract/fixtures/rule-gallery/src/crypto.py",
+      "line": 19,
+      "message": "Weak hash algorithm (MD5)",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "PCI-DSS:3.6.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 150000,
+      "fingerprint": "b966c2d0de8685b8f371f97d09d41690"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/src/crypto.py",
+      "line": 9,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "38f0c22b2c319d042e3952a708bb139e"
+    },
+    {
+      "rule_id": "SIR-SEC-010",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/injection.py",
+      "line": 14,
+      "message": "SQL built with string formatting",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "ba04d028bb03e84cc49482649069701a"
+    },
+    {
+      "rule_id": "SIR-SEC-011",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/injection.py",
+      "line": 25,
+      "message": "OS command built from user input",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "CWE:78"
+      ],
+      "money_at_risk_inr": 3000000,
+      "fingerprint": "a0ba2c69b1c85e310d48257d13ea8f50"
+    },
+    {
+      "rule_id": "SIR-SEC-050",
+      "severity": "medium",
+      "file": "contract/fixtures/rule-gallery/src/money.py",
+      "line": 19,
+      "message": "Money-movement endpoint without a rate limit",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 250000,
+      "fingerprint": "8b52b49ed3d638298a9fbb370de795e2"
+    },
+    {
+      "rule_id": "SIR-SEC-051",
+      "severity": "medium",
+      "file": "contract/fixtures/rule-gallery/src/money.py",
+      "line": 19,
+      "message": "Money-movement POST without an idempotency key",
+      "compliance_ref": [],
+      "money_at_risk_inr": 180000,
+      "fingerprint": "9be749ee3a19c31fd365b468d1893876"
+    },
+    {
+      "rule_id": "SIR-SEC-030",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/src/pii.py",
+      "line": 16,
+      "message": "PAN, Aadhaar, or other PII written to logs",
+      "compliance_ref": [
+        "PCI-DSS:3.4.1",
+        "DPDP:8",
+        "GDPR:Art.5"
+      ],
+      "money_at_risk_inr": 1300000,
+      "fingerprint": "589e4ee3a8af80aebe2e8493d04fa6bc"
+    },
+    {
+      "rule_id": "SIR-SEC-031",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/pii.py",
+      "line": 26,
+      "message": "Full PAN stored unmasked",
+      "compliance_ref": [
+        "PCI-DSS:3.5.1",
+        "PCI-DSS:3.4.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 400000,
+      "fingerprint": "a1bf8da7239422e7f789a90287f53e9f"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/secrets.py",
+      "line": 9,
+      "message": "Hardcoded Razorpay live key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "37b2d8b48b2854945421542752886eb8"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "contract/fixtures/rule-gallery/src/secrets.py",
+      "line": 12,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "cbe2a988740b512126881ddb4b7507af"
+    },
+    {
+      "rule_id": "SIR-SEC-010",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/taint.py",
+      "line": 48,
+      "message": "SQL built with string formatting",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "bd509ed67996f30757e5ad9bda47da10"
+    },
+    {
+      "rule_id": "SIR-SEC-010",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/taint.py",
+      "line": 58,
+      "message": "SQL built from attacker-controlled input",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "b11214c0a9c27a24bcf88f558b8205ff"
+    },
+    {
+      "rule_id": "SIR-SEC-011",
+      "severity": "critical",
+      "file": "contract/fixtures/rule-gallery/src/taint.py",
+      "line": 68,
+      "message": "OS command built from attacker-controlled input",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "CWE:78"
+      ],
+      "money_at_risk_inr": 3000000,
+      "fingerprint": "dce6f5145b059a0b8db5c42aeab9d28c"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "contract/mock/generate-fixture.mjs",
+      "line": 38,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "91ee02e8e46ff1d6389f498495147aea"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "contract/mock/generate-fixture.mjs",
+      "line": 65,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "d8022396ffb5bec282ab1dc305f93ff3"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "contract/mock/generate-fixture.mjs",
+      "line": 89,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "3fe76f3f9b3122b69197ab6e81116d40"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "contract/mock/generate-fixture.mjs",
+      "line": 81,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "a831ee3de05a2fb8106128e859706ba6"
+    },
+    {
+      "rule_id": "SIR-SEC-010",
+      "severity": "critical",
+      "file": "demo/src/ledger.py",
+      "line": 88,
+      "message": "SQL built with string formatting",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "dad6732b290044ea89ce239c8d23d428"
+    },
+    {
+      "rule_id": "SIR-SEC-020",
+      "severity": "high",
+      "file": "demo/src/webhooks.py",
+      "line": 38,
+      "message": "Route missing an authentication decorator",
+      "compliance_ref": [
+        "PCI-DSS:8.4.2",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 600000,
+      "fingerprint": "9f06a03760e71af11c9f9cae62f7f63e"
+    },
+    {
+      "rule_id": "SIR-SEC-030",
+      "severity": "high",
+      "file": "demo/src/webhooks.py",
+      "line": 52,
+      "message": "PAN, Aadhaar, or other PII written to logs",
+      "compliance_ref": [
+        "PCI-DSS:3.4.1",
+        "DPDP:8",
+        "GDPR:Art.5"
+      ],
+      "money_at_risk_inr": 1300000,
+      "fingerprint": "556a805544a0cec0db0e8708d98a08c4"
+    },
+    {
+      "rule_id": "SIR-SEC-050",
+      "severity": "medium",
+      "file": "demo/src/webhooks.py",
+      "line": 38,
+      "message": "Money-movement endpoint without a rate limit",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 250000,
+      "fingerprint": "9c878ca6c23aedf04b996f34bce33a41"
+    },
+    {
+      "rule_id": "SIR-SEC-051",
+      "severity": "medium",
+      "file": "demo/src/webhooks.py",
+      "line": 38,
+      "message": "Money-movement POST without an idempotency key",
+      "compliance_ref": [],
+      "money_at_risk_inr": 180000,
+      "fingerprint": "12509731e25089bc8b32e4c7b09fe8c3"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/api/stream.ts",
+      "line": 124,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "6c7f6fe98a0959ce7fb517a0522be6fa"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/commands/auth.ts",
+      "line": 37,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "b56a15d18052bc68de93556a854a0afd"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 325,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "cd6e677d045f9ebd091c908d567882b7"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/commands/doctor.ts",
+      "line": 517,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "0d4d98d778eabec688a39a5adf058122"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 63,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "f1fe0b5f5a547e9689078e4882006e4b"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 71,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "af64ef2141ef7d70be37e104e9b62e57"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 90,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "d1d608489d80d8748dafab3dc4dd3b7a"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 111,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "e67de282d8baa718c929b0e47274f397"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 113,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "56749390fc90d48c9123951964291f98"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 118,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "58825aa174424365923724aa8a8634f7"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 125,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "8909e9a0cebaaeafc3d19a37867d2005"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 146,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "1887295b649ed375af62af5efed3dfab"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 169,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "1ddbc14f580584090acefe072fee91c4"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/exposure-model.ts",
+      "line": 173,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "fb94a26788b5e505e600e8c859fcf5d0"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "packages/cli/src/engine/rule-schema.ts",
+      "line": 222,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "3d1c1e06d4fdfb8787b8199aecc6910b"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/rules.ts",
+      "line": 176,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "41828acd38084939238d94edfb7ba46e"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/rules.ts",
+      "line": 217,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "bd5b210296b1be4c5ca53c66b5d4d92a"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/rules.ts",
+      "line": 393,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "f9db95ea6f60c2aa9a42c64cb2a92ce7"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 295,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "a1603136a6c76b9342aef09e2e6d175c"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 298,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "e59065ee8d4e331ed8f3da70525bca5d"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 314,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "ba10218791a8567355af4d7f48addf3b"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 317,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "2c3e9e3dd039b1a83039c223dcfa7ac1"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 322,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "73d4e7373830f9732300d5bb47d993f6"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 331,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "4bc88b46c3b840602adc3b9b2cd9ebc1"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 334,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "c36d977741e156b192f862969bb3b05a"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 335,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "f8d0e0796ae672e7b8fb7f3b0daf2f92"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/engine/threat.ts",
+      "line": 339,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "fddc1da4160b0ff074b0be5a2356c59b"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/policy.ts",
+      "line": 102,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "b09eb2e720697632cb6af1eaec2f933c"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/policy.ts",
+      "line": 103,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "e3abb545bf27a09e69ea65d1dfad79af"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/synth.ts",
+      "line": 53,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "2e58ebe48e2dd2c0f32a235e91f4871f"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/synth.ts",
+      "line": 62,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "1d2e078c402e24d52ab6992924e9c95f"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/synth.ts",
+      "line": 70,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "fce33dd537204a72e7097e3635dcda0d"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/synth.ts",
+      "line": 78,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "bae59ffee2ba3d6927c6ccbf4dc9e68b"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/src/revenue/synth.ts",
+      "line": 94,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "dcf0861942989fa02b6fab2064122bd1"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/auth-convention.test.ts",
+      "line": 91,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "e2a571122704c48deb1423bea0967f13"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "packages/cli/test/client.test.ts",
+      "line": 36,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "2f58bfd589e5975da834be27e152bc09"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 92,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "2f587151e5b150131202f531ad290534"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 174,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "7d827886b5a481105b8b37f38b887140"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 198,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "48fbc3b78ef30d0544c6bddc9ac368a5"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 261,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "d0500403da19c3e21bcc41573200789b"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "medium",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 288,
+      "message": "Hardcoded Stripe test key — test mode, so no money moves, but it is still a credential in source",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 40000,
+      "fingerprint": "15f7916569447bb27ddf0de6fca2a052"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 299,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "e956dda1ad51634593854c420917efd1"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 304,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "60bc540a601644ae2e9f72fd23fb8484"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "medium",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 305,
+      "message": "Hardcoded Stripe test key — test mode, so no money moves, but it is still a credential in source",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 40000,
+      "fingerprint": "9bf9854510ab2ae1ced957b0b030c1c6"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 313,
+      "message": "Hardcoded Razorpay live key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "cddfee099abbb9b397764e589b57d17a"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "medium",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 314,
+      "message": "Hardcoded Razorpay test key — test mode, so no money moves, but it is still a credential in source",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 40000,
+      "fingerprint": "6ee0a10b7e40bf66830a54207d6af233"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "packages/cli/test/engine.test.ts",
+      "line": 134,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "c9c508714fcf6ab694aabe9fd9640ffd"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/expand.test.tsx",
+      "line": 25,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "cb54162077bf2bc33afe6cbcfc6e451f"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/fix-engine.test.ts",
+      "line": 19,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "2bafe8311e2c603c6147c53b13b1e3e3"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/fix-engine.test.ts",
+      "line": 62,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "463cbc358688d43e459a71d398961012"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/fix-engine.test.ts",
+      "line": 164,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "3ede19aa17261f363b7be68a51ea46bb"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/fix-engine.test.ts",
+      "line": 217,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "0aa305e087850e2f9f2bc30fae8dbdd6"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/fix-engine.test.ts",
+      "line": 201,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "347764399ad24934589bbccab183dfb1"
+    },
+    {
+      "rule_id": "SIR-SEC-041",
+      "severity": "high",
+      "file": "packages/cli/test/rule-schema.test.ts",
+      "line": 101,
+      "message": "Cardholder data sent over plain HTTP",
+      "compliance_ref": [
+        "PCI-DSS:4.2.1",
+        "RBI-DPSC"
+      ],
+      "money_at_risk_inr": 90000,
+      "fingerprint": "5aaaa6865cb1f7fa32afc01789387ee3"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/sarif.test.ts",
+      "line": 20,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "859aacbcbe575ed8c073a7543173b40d"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/stream.test.ts",
+      "line": 109,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "6acc12aab90575b2263aa06fab62b283"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "critical",
+      "file": "packages/cli/test/summary-agrees.test.ts",
+      "line": 32,
+      "message": "Hardcoded Stripe secret key",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "e217bec3c070c28cf3709bce57513307"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "medium",
+      "file": "packages/cli/test/summary-agrees.test.ts",
+      "line": 33,
+      "message": "Hardcoded Stripe test key — test mode, so no money moves, but it is still a credential in source",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 40000,
+      "fingerprint": "4ca0f3e2986f08fb576f47baf6eeea62"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/triage-local.test.ts",
+      "line": 38,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "d4c36a09120d0226a9b9ef5cd861faa3"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/triage.test.tsx",
+      "line": 28,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "03c8a1d8959ab204e8a9316fb3f96db2"
+    },
+    {
+      "rule_id": "SIR-SEC-001",
+      "severity": "medium",
+      "file": "packages/cli/test/validate-secrets.test.ts",
+      "line": 25,
+      "message": "Hardcoded Stripe test key — test mode, so no money moves, but it is still a credential in source",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
+      ],
+      "money_at_risk_inr": 40000,
+      "fingerprint": "9c1d0abe85ef00cdb952879f7e80a104"
+    },
+    {
+      "rule_id": "SIR-SEC-002",
+      "severity": "high",
+      "file": "packages/cli/test/wordmark.test.ts",
+      "line": 19,
+      "message": "High-entropy string in source or config",
+      "compliance_ref": [
+        "PCI-DSS:8.6.2",
+        "DPDP:8"
+      ],
+      "money_at_risk_inr": 80000,
+      "fingerprint": "0ba8cd2a3f7dba8cb9f971b4487de6b6"
+    }
+  ],
+  "attestation": {
+    "algorithm": "ed25519",
+    "key_id": "6947844440ba90c4",
+    "public_key": "-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEARFvboUwocFgIRXQfDqnPekebGAxba0wGikcg8D8Xz7k=\n-----END PUBLIC KEY-----",
+    "signed_at": "2026-08-27T10:22:24.549Z",
+    "signature": "DJplYaJ9ZULcd5Ez22HPI3l8HH0AcuLAUsl15d/Tzh5lxpuM/gSTZY7XIACdbWOP0d5RpBpipyt1RegMlInvDQ==",
+    "payload_sha256": "5987afabeb3d1d9d4c86142e5a9af853ac11f4b96aa3419a3621081fa91f74c6"
+  }
+}
