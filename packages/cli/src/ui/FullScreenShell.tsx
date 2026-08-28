@@ -406,7 +406,10 @@ export function FullScreenShell({
   return (
     <Box flexDirection="column" height={rows}>
       <Box>
-        <Text color={muted}>{` ${header}`}</Text>
+        {/* Truncated, not wrapped. Without this the header reflowed onto a
+            second line, which pushed the whole viewport down by a row and left
+            a half-sentence sitting above the transcript. */}
+        <Text color={muted} wrap="truncate-end">{` ${header}`}</Text>
       </Box>
 
       <Box flexDirection="column" height={viewportHeight} overflow="hidden">

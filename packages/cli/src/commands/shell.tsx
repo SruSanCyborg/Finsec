@@ -40,6 +40,7 @@ import {
   withAlternateScreenSuspended,
 } from '../ui/screen.js';
 import { renderWordmark } from '../ui/wordmark.js';
+import { note, truncate } from '../ui/kit.js';
 import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import type { TranscriptLine } from '../ui/FullScreenShell.js';
@@ -165,13 +166,70 @@ export function parseLine(line: string): ParsedCommand | null {
   };
 }
 
-function helpLines(): string[] {
+/**
+ * Help, grouped by what you are trying to do.
+ *
+ * It was one flat alphabetical list of twenty commands with a one-line summary
+ * each, which tells you what every command is and nothing about which one to
+ * run. The question a person actually has on first contact is "where do I
+ * start", and a list sorted by name cannot answer it.
+ *
+ * So: four groups in the order you would meet them, each opening with the path
+ * through it. The summaries are unchanged — the grouping is the whole change.
+ */
+const HELP_GROUPS: { title: string; flow: string; commands: string[] }[] = [
+  {
+    title: 'START HERE — is anything wrong with this code?',
+    flow: '/scan .   →   /explain <rule>   →   /fix <rule>',
+    commands: ['scan', 'explain', 'fix', 'triage', 'watch'],
+  },
+  {
+    title: 'MONEY AT RISK IN OPERATIONS — failed payments, ageing invoices',
+    flow: '/revenue gen batch   →   /revenue detect batch   →   /revenue recover batch',
+    commands: ['revenue', 'reconcile'],
+  },
+  {
+    title: 'PROVE IT — what you hand a reviewer or a CI pipeline',
+    flow: '/report   →   /badge   →   /baseline set',
+    commands: ['report', 'badge', 'baseline', 'suppress', 'rules'],
+  },
+  {
+    title: 'SET UP AND CHECK — run these when something looks wrong',
+    flow: '/doctor   tells you which mode a scan will actually run in',
+    commands: ['doctor', 'init', 'login', 'logout', 'cd'],
+  },
+];
+
+function helpLines(width = 80): string[] {
   const out: string[] = [''];
-  for (const command of SHELL_COMMANDS) {
-    out.push(`  /${command.name.padEnd(11)} ${command.summary}`);
-    if (command.usage) out.push(`   ${' '.repeat(11)} ${command.usage}`);
+  const shown = new Set<string>();
+
+  for (const group of HELP_GROUPS) {
+    out.push(`  ${group.title}`);
+    out.push(`    ${group.flow}`);
+    out.push('');
+    for (const name of group.commands) {
+      const command = SHELL_COMMANDS.find((candidate) => candidate.name === name);
+      if (!command) continue;
+      shown.add(name);
+      out.push(`    /${command.name.padEnd(10)} ${truncate(command.summary, Math.max(20, width - 18))}`);
+      if (command.usage) out.push(`     ${' '.repeat(10)} ${truncate(command.usage, Math.max(20, width - 18))}`);
+    }
+    out.push('');
   }
-  out.push('');
+
+  // Anything the groups forgot still gets listed, because a command that exists
+  // and appears in no help is worse than one in the wrong group.
+  const rest = SHELL_COMMANDS.filter((command) => !shown.has(command.name));
+  if (rest.length > 0) {
+    out.push('  THE SHELL ITSELF');
+    out.push('');
+    for (const command of rest) {
+      out.push(`    /${command.name.padEnd(10)} ${truncate(command.summary, Math.max(20, width - 18))}`);
+    }
+    out.push('');
+  }
+
   return out;
 }
 
@@ -187,8 +245,12 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
       // inside render for the header prop — so every appended line re-read the
       // config from disk, which is a large part of why output felt laggy.
       const context = sessionContext(glyphs, globals);
+      // The wordmark does not repeat the context. It was printing the same
+      // "scanning … · no sirius.yaml · local engine" the header shows, one line
+      // below the header showing it — and the header's copy is the one that
+      // stays put when the banner scrolls away.
       const banner = renderWordmark(
-        { version: VERSION, tagline: TAGLINE, context, author: AUTHOR },
+        { version: VERSION, tagline: TAGLINE, context: '', author: AUTHOR },
         { unicode: capabilities.unicode, color: capabilities.color, width: capabilities.width },
       );
 
@@ -204,15 +266,23 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         text,
         kind: 'output' as const,
       }));
-      initial.push({ id: nextId++, text: 'Type / for commands. /help lists them, /exit leaves.', kind: 'note' });
+      // Wrapped here rather than at render. A transcript row is one screen line
+      // and truncates, so a hint longer than the terminal lost its ending — and
+      // the ending is the part that says which key to hold.
+      const hint = (text: string): void => {
+        for (const wrapped of note(text, { indent: 0, width: capabilities.width - 2 })) {
+          initial.push({ id: nextId++, text: wrapped, kind: 'note' });
+        }
+      };
+
+      hint('Type / for commands. /help lists them, /exit leaves.');
       if (mouseReportingAvailable()) {
         // Say this up front. Losing click-drag selection without explanation
         // reads as a broken terminal rather than a deliberate trade.
-        initial.push({
-          id: nextId++,
-          text: `Scroll with the wheel. Drag to select — it copies on release. Hold ${nativeSelectionKey()} for the terminal's own selection.`,
-          kind: 'note',
-        });
+        hint(
+          `Scroll with the wheel. Drag to select — it copies on release. ` +
+            `Hold ${nativeSelectionKey()} for the terminal's own selection.`,
+        );
       }
 
       /** What survives an unmount: everything the user would be sorry to lose. */
@@ -318,7 +388,10 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
           if (parsed.name === 'exit' || parsed.name === 'quit') return finish();
 
           if (parsed.name === 'clear') {
-            setLines([]);
+            // Back to the opening screen, not to an empty one. `/clear` wiped
+            // the wordmark along with the transcript, and a blank terminal with
+            // a prompt in it does not say what it is.
+            setLines(initial);
             return;
           }
 
@@ -345,7 +418,7 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
 
           if (parsed.name === 'help' || !parsed.command) {
             if (!parsed.command) append(`unknown command: /${parsed.name}`, 'error');
-            for (const l of helpLines()) append(l, 'note');
+            for (const l of helpLines(capabilities.width)) append(l, 'note');
             return;
           }
 

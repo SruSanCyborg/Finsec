@@ -1047,3 +1047,41 @@ renderers. And pastel's file-routed commands are a framework decision, not a
 visual one; commander is working and replacing it would be churn.
 
 ---
+## D-033 — The opening screen, and help that answers "where do I start"
+
+Four things the shell's first screen got wrong, all visible in one screenshot at
+80 columns.
+
+**The header reflowed onto a second line.** `sirius v0.4.0  scanning
+/Applications/… · no sirius.yaml · local engine` is ninety-odd columns and the
+header had no wrap mode, so Ink broke it in half, pushed the viewport down a row
+and left a dangling half-sentence above the transcript. It truncates now.
+
+**And it said the same thing twice.** The wordmark printed the session context
+one line below the header printing the session context. The header keeps it —
+that copy stays put when the banner scrolls away — and the wordmark no longer
+takes a context at all.
+
+**The hints lost their endings.** A transcript row is one screen line and
+renders `truncate-end`, so "Hold fn for the terminal's own selection" ended at
+"Hold fn for the …" — the half with the instruction in it. They are wrapped at
+insert time now, into as many rows as they need.
+
+**`/clear` deleted the wordmark.** It set the transcript to empty, and since the
+banner is transcript lines, clearing the screen removed the only thing on it
+that said what the program was. It restores the opening screen instead.
+
+**Help is grouped by intent, not sorted by name.** Twenty commands in one
+alphabetical list tells you what each command is and nothing about which to run
+— and "where do I start" is the only question a new user actually has. Four
+groups in the order you meet them, each opening with the path through it:
+`/scan .` → `/triage` → `/fix`, and so on. The summaries did not change; the
+grouping is the whole change. Anything a group forgets is still listed under
+"the shell itself", because a command that exists and appears in no help is
+worse than one filed in the wrong place.
+
+`scripts/artifact/sirius-map.html` is the same four groups as a page, with the
+flows drawn out and a column for what each command hands back. Hand-authored,
+so unlike the revenue page it is committed rather than generated.
+
+---

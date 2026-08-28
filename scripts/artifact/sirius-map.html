@@ -1,0 +1,563 @@
+<title>Sirius Command Map</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+
+<style>
+  /* sirius's own tokens (scripts/artifact/style.html, ui/theme.ts) so this page
+     and the revenue page read as one product. Single-theme on purpose: the
+     material is literal terminal output. Every colour is painted explicitly so
+     the page holds on whatever ground the host paints behind it. */
+  :root {
+    --ink: #07080a;
+    --panel: #101111;
+    --raised: #16181d;
+    --rule: #23262d;
+    --rule-soft: #1a1c21;
+    --text: #f2f3f5;
+    --muted: #8a8f98;
+    --dim: #6b7078;
+    --violet: #7c3aed;
+    --violet-lit: #a678f5;
+    --gain: #04b575;
+    --hold: #ff9f43;
+    --loss: #ff5c5c;
+    --cool: #5ac8fa;
+
+    --sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --cond: "IBM Plex Sans Condensed", "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --col: 1000px;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ink);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 16px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .wrap { max-width: var(--col); margin: 0 auto; padding: 0 24px 100px; }
+
+  .eyebrow {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin: 0;
+  }
+
+  code, .mono { font-family: var(--mono); }
+
+  /* ---- masthead ---- */
+  .mast { padding: 64px 0 0; }
+  .brandline {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--dim);
+    letter-spacing: 0.04em;
+  }
+  .brandline b { color: var(--violet-lit); font-weight: 500; }
+  .brandline .sep { color: var(--rule); }
+
+  h1 {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: clamp(34px, 5.5vw, 54px);
+    line-height: 1.05;
+    letter-spacing: -0.025em;
+    text-wrap: balance;
+    margin: 22px 0 0;
+  }
+  .thesis {
+    max-width: 62ch;
+    margin: 20px 0 0;
+    font-size: 18px;
+    color: var(--muted);
+  }
+  .thesis strong { color: var(--text); font-weight: 500; }
+
+  /* ---- the two surfaces ---- */
+  .surfaces {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1px;
+    background: var(--rule);
+    border: 1px solid var(--rule);
+    margin: 44px 0 0;
+  }
+  .surface { background: var(--panel); padding: 22px; }
+  .surface h3 {
+    margin: 10px 0 0;
+    font-size: 19px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  .surface p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; }
+  .surface .cmds { margin-top: 14px; display: flex; flex-wrap: wrap; gap: 6px; }
+
+  /* ---- flow strip: the run order, which is the information people miss ---- */
+  .flow {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 16px 18px;
+    background: var(--raised);
+    border: 1px solid var(--rule);
+    margin: 18px 0 0;
+  }
+  .step {
+    font-family: var(--mono);
+    font-size: 13.5px;
+    color: var(--text);
+    background: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 7px 11px;
+    white-space: nowrap;
+  }
+  .step.lead { border-color: var(--violet); color: var(--violet-lit); }
+  .arrow { color: var(--violet); font-family: var(--mono); font-size: 15px; }
+  .flow .then { color: var(--dim); font-size: 13px; font-style: italic; }
+
+  /* ---- tracks ---- */
+  section { margin-top: 76px; }
+  .track-head {
+    border-top: 1px solid var(--rule);
+    padding-top: 20px;
+    position: relative;
+  }
+  .track-head::before {
+    content: "";
+    position: absolute;
+    top: -1px; left: 0;
+    width: 42px; height: 2px;
+    background: var(--violet);
+  }
+  .track-head h2 {
+    margin: 10px 0 0;
+    font-size: 26px;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .track-head p { margin: 10px 0 0; color: var(--muted); max-width: 66ch; }
+
+  /* ---- command tables ---- */
+  .scroll { overflow-x: auto; margin-top: 22px; }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; }
+  th {
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 11.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+    text-align: left;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--rule);
+    white-space: nowrap;
+  }
+  td {
+    padding: 14px;
+    border-bottom: 1px solid var(--rule-soft);
+    font-size: 14.5px;
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: 0; }
+  td.cmd { white-space: nowrap; }
+  td.cmd .name {
+    font-family: var(--mono);
+    font-size: 14px;
+    color: var(--violet-lit);
+    font-weight: 500;
+  }
+  td.cmd .use {
+    display: block;
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--dim);
+    margin-top: 5px;
+    white-space: nowrap;
+  }
+  td.does { color: var(--text); }
+  td.back { color: var(--muted); font-size: 14px; }
+
+  .tag {
+    display: inline-block;
+    font-family: var(--cond);
+    font-weight: 600;
+    font-size: 10.5px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 2px 7px;
+    border: 1px solid var(--rule);
+    color: var(--dim);
+    margin-left: 8px;
+    vertical-align: 2px;
+  }
+  .tag.full { color: var(--hold); border-color: rgba(255,159,67,0.4); }
+  .tag.local { color: var(--gain); border-color: rgba(4,181,117,0.35); }
+
+  /* ---- exit codes ---- */
+  .codes { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: 22px; }
+  .code { background: var(--panel); padding: 18px; }
+  .code .n { font-family: var(--mono); font-size: 30px; font-weight: 500; line-height: 1; }
+  .code .k { font-family: var(--cond); font-weight: 600; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--dim); margin-top: 10px; }
+  .code .d { font-size: 13.5px; color: var(--muted); margin-top: 6px; }
+  .code.ok .n { color: var(--gain); }
+  .code.found .n { color: var(--hold); }
+  .code.err .n { color: var(--loss); }
+  .code.none .n { color: var(--dim); }
+
+  /* ---- gotchas ---- */
+  .notes { display: grid; gap: 1px; background: var(--rule); border: 1px solid var(--rule); margin-top: 22px; }
+  .note { background: var(--panel); padding: 20px 22px; }
+  .note h4 { margin: 0; font-size: 16px; font-weight: 600; }
+  .note p { margin: 8px 0 0; color: var(--muted); font-size: 14.5px; max-width: 74ch; }
+  .note code { color: var(--cool); font-size: 13.5px; }
+
+  .term {
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.7;
+    background: var(--ink);
+    border: 1px solid var(--rule);
+    padding: 18px;
+    overflow-x: auto;
+    margin-top: 22px;
+    color: var(--muted);
+    white-space: pre;
+  }
+  .term .c { color: var(--violet-lit); }
+  .term .g { color: var(--gain); }
+  .term .h { color: var(--hold); }
+  .term .w { color: var(--text); }
+
+  footer { margin-top: 80px; border-top: 1px solid var(--rule); padding-top: 22px; color: var(--dim); font-size: 13.5px; }
+
+  @media (max-width: 760px) {
+    .surfaces { grid-template-columns: 1fr; }
+    .codes { grid-template-columns: repeat(2, 1fr); }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <div class="brandline"><b>sirius</b><span class="sep">/</span><span>v0.4.0</span><span class="sep">/</span><span>command map</span></div>
+    <h1>Twenty commands, in the order you meet them</h1>
+    <p class="thesis">
+      sirius finds money at risk in two different places, and almost every confusion about it
+      comes from mixing them up. <strong>One half reads your code.</strong> The other half reads
+      your <strong>operations</strong> — failed payments, abandoned checkouts, ageing invoices,
+      books that disagree. Same binary, same shell, entirely different inputs.
+    </p>
+
+    <div class="surfaces">
+      <div class="surface">
+        <p class="eyebrow">Surface one</p>
+        <h3>Money at risk in code</h3>
+        <p>Scans a repository. Finds a hardcoded key, a SQL query built from a request parameter, a card number in a log — and prices each one in rupees against a PCI-DSS or DPDP clause.</p>
+        <div class="cmds">
+          <span class="step">scan</span><span class="step">fix</span><span class="step">triage</span><span class="step">explain</span><span class="step">report</span>
+        </div>
+      </div>
+      <div class="surface">
+        <p class="eyebrow">Surface two</p>
+        <h3>Money at risk in operations</h3>
+        <p>Reads a batch of records rather than a repository. Decides which failures are worth chasing, works them under a capacity cap, and refuses the ones a rule forbids. Everything simulated — there is no <code>--execute</code>.</p>
+        <div class="cmds">
+          <span class="step">revenue</span><span class="step">reconcile</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">If you run one thing</p>
+      <h2>The sixty-second path</h2>
+      <p>
+        From a cold start in any repository. No config, no account, no server — the scan engine is
+        compiled into the binary, so this works offline on the first try.
+      </p>
+    </div>
+
+    <div class="flow">
+      <span class="step lead">sirius scan .</span>
+      <span class="arrow">→</span>
+      <span class="step">sirius explain SIR-SEC-001</span>
+      <span class="arrow">→</span>
+      <span class="step">sirius fix SIR-SEC-001</span>
+      <span class="arrow">→</span>
+      <span class="step">sirius report</span>
+    </div>
+
+    <div class="term"><span class="c">$ sirius scan .</span>
+
+  <span class="h">✗ CRITICAL</span>  SIR-SEC-001  Hardcoded Stripe secret key
+     src/config.py:14 · PCI-DSS 8.6.2 · RBI-DPSC · DPDP §8   <span class="w">₹42,00,000</span>
+     ↳ fix: env_lookup      run  sirius fix SIR-SEC-001
+
+  ────────────────────────────────────────────────────────────
+   Findings    2 critical   2 high   2 medium
+   Money@risk  <span class="w">₹89,30,000</span>       Compliance <span class="h">60/100</span>
+   <span class="g">Exit 1</span>      severity≥high → BLOCKED
+</div>
+    <p class="thesis" style="font-size:15px;margin-top:18px">
+      Two rupee figures, and they are not the same number. <strong>₹42,00,000</strong> is that one
+      finding. <strong>₹89,30,000</strong> is all six together. Exit 1 means findings were found —
+      it is the gate doing its job, not a crash.
+    </p>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Track 1</p>
+      <h2>Is anything wrong with this code?</h2>
+      <p>Where you start. Everything here runs with no backend at all.</p>
+    </div>
+
+    <div class="flow">
+      <span class="step lead">/scan .</span>
+      <span class="arrow">→</span>
+      <span class="step">/triage</span>
+      <span class="then">decide what is real</span>
+      <span class="arrow">→</span>
+      <span class="step">/fix SIR-SEC-001</span>
+      <span class="then">accept the diff</span>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th><th>What you get back</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="cmd"><span class="name">/scan</span><span class="use">/scan [path] [--json] [--sarif f]</span></td>
+            <td class="does">Walks a directory, parses each file into a syntax tree, runs 13 rules over it.</td>
+            <td class="back">Findings streaming as they are found, each with a clause and a rupee figure. Ends with totals and an exit code.</td>
+          </tr>
+          <tr>
+            <td class="cmd"><span class="name">/explain</span><span class="use">/explain SIR-SEC-001</span></td>
+            <td class="does">Shows how that rupee figure was derived — base amount, reachability, provider weight, age in version control.</td>
+            <td class="back">The whole derivation, so you can argue with it. Every figure states what it assumes.</td>
+          </tr>
+          <tr>
+            <td class="cmd"><span class="name">/fix</span><span class="use">/fix &lt;rule&gt; [--all] [--apply]</span></td>
+            <td class="does">Proposes a patch through the Cerebus guardrail, then <em>re-runs the rule</em> to check the fix actually cleared it.</td>
+            <td class="back">A provenance panel, a diff, and a verifier verdict. Nothing is written until you accept.</td>
+          </tr>
+          <tr>
+            <td class="cmd"><span class="name">/triage</span><span class="use">/triage [--severity level]</span><span class="tag full">full screen</span></td>
+            <td class="does">Walks the findings one at a time so you can accept, dismiss or suppress each.</td>
+            <td class="back">Decisions saved to <code>.sirius/</code>. Press <code>q</code> to come back to the shell.</td>
+          </tr>
+          <tr>
+            <td class="cmd"><span class="name">/watch</span><span class="use">/watch [path]</span><span class="tag full">full screen</span></td>
+            <td class="does">Re-scans whenever a file changes.</td>
+            <td class="back">A live view. Ctrl-C returns you to the shell with the transcript intact.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Track 2</p>
+      <h2>Money at risk in operations</h2>
+      <p>
+        A different input entirely: a batch of payment failures, abandoned checkouts and overdue
+        invoices. <code>gen</code> makes a synthetic one so you can try the whole loop with nothing
+        of your own at stake.
+      </p>
+    </div>
+
+    <div class="flow">
+      <span class="step lead">/revenue gen batch</span>
+      <span class="arrow">→</span>
+      <span class="step">/revenue detect batch</span>
+      <span class="arrow">→</span>
+      <span class="step">/revenue eval batch</span>
+      <span class="then">is it any good?</span>
+      <span class="arrow">→</span>
+      <span class="step">/revenue recover batch</span>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Subcommand</th><th>What it does</th><th>What you get back</th></tr></thead>
+        <tbody>
+          <tr><td class="cmd"><span class="name">revenue gen</span><span class="use">/revenue gen batch</span></td>
+            <td class="does">Generates a seeded batch of records with a known answer key, plus one gateway outage and one abuse ring.</td>
+            <td class="back">A folder of records and their ground truth, reproducible from the seed.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue detect</span><span class="use">/revenue detect batch</span></td>
+            <td class="does">Scores every record, names the outage, holds the ring for a human, and picks what to work under a capacity cap.</td>
+            <td class="back">Records streaming with a score and a reason, and a count of what it refuses to touch.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue eval</span><span class="use">/revenue eval batch</span></td>
+            <td class="does">Measures the detector against the half of the data it never saw.</td>
+            <td class="back">Precision, recall, what being wrong cost, calibration, and a comparison against sorting by amount.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue recover</span><span class="use">/revenue recover batch</span></td>
+            <td class="does">Works the queue under thirteen stopping rules — quiet hours, consent, contact limits, mandate caps.</td>
+            <td class="back">A timeline of actions taken <em>and refused</em>, money attributed honestly, and a signed hash-chained audit trail.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue stress</span><span class="use">/revenue stress</span></td>
+            <td class="does">Shifts the world the model was trained on — no outage, a mandate-heavy book, larger tickets — and measures what survives.</td>
+            <td class="back">Six worlds, how much edge each one costs, and whether a refit would recover it.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue sweep</span><span class="use">/revenue sweep --seeds 8</span></td>
+            <td class="does">Runs the whole evaluation over N seeded batches, because one batch is an anecdote.</td>
+            <td class="back">Per-seed rows and a mean. <code>--save</code> / <code>--against</code> catch regressions.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue explain</span><span class="use">/revenue explain pay_00051</span></td>
+            <td class="does">Why this one record scored what it did.</td>
+            <td class="back">The evidence ladder, feature by feature, and the rule that held it if one did.</td></tr>
+          <tr><td class="cmd"><span class="name">revenue audit</span><span class="use">/revenue audit --verify &lt;file&gt;</span></td>
+            <td class="does">Checks the recovery trail has not been altered, deleted from, reordered or appended to.</td>
+            <td class="back">A verdict on the hash chain and the signature.</td></tr>
+          <tr><td class="cmd"><span class="name">/reconcile</span><span class="use">/reconcile books [--gen] [--exceptions]</span></td>
+            <td class="does">Matches three sets of books — your ledger, the gateway's settlements, the bank statement — through five tiers of matching.</td>
+            <td class="back">Match rate, verified accuracy, and an honest list of what it could not resolve.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Track 3</p>
+      <h2>Prove it to someone else</h2>
+      <p>What you hand a reviewer, a pipeline, or an auditor.</p>
+    </div>
+
+    <div class="flow">
+      <span class="step lead">/baseline set</span>
+      <span class="then">accept today's findings</span>
+      <span class="arrow">→</span>
+      <span class="step">/scan .</span>
+      <span class="then">only new ones appear</span>
+      <span class="arrow">→</span>
+      <span class="step">/report</span>
+      <span class="arrow">→</span>
+      <span class="step">/badge</span>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th><th>What you get back</th></tr></thead>
+        <tbody>
+          <tr><td class="cmd"><span class="name">/report</span><span class="use">/report [scan-id] [--format json]</span></td>
+            <td class="does">Builds a report from the last scan and signs it with an ed25519 key stored at 0600.</td>
+            <td class="back">A signed file. <code>--verify</code> gates on it and exits 0, 1 or 2.</td></tr>
+          <tr><td class="cmd"><span class="name">/badge</span></td>
+            <td class="does">Writes an SVG of the compliance score, or prints the hosted URL when a project is configured.</td>
+            <td class="back">A badge for a README that only moves when someone scans and commits.</td></tr>
+          <tr><td class="cmd"><span class="name">/baseline</span><span class="use">/baseline [set|show]</span></td>
+            <td class="does">Records today's findings as accepted, so later scans show only what is new.</td>
+            <td class="back">A stored fingerprint set in <code>.sirius/</code>. Totals respect it too.</td></tr>
+          <tr><td class="cmd"><span class="name">/suppress</span><span class="use">/suppress &lt;rule&gt; --reason "…"</span></td>
+            <td class="does">Silences a rule — and requires a reason and an expiry date to do it.</td>
+            <td class="back">A suppression that stops counting in the totals, not just in the list.</td></tr>
+          <tr><td class="cmd"><span class="name">/rules</span><span class="use">/rules [list|show|validate] [target]</span></td>
+            <td class="does">Lists the 13 compiled rules, shows one in detail, or validates a rule file against the conventions.</td>
+            <td class="back">Severity, category, clause numbers, fix action and the exact suppression comment to paste.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Track 4</p>
+      <h2>When something looks wrong</h2>
+      <p>Start with <code>/doctor</code>. It reports against the mode a scan will <em>actually</em> run in, which is usually the thing you are confused about.</p>
+    </div>
+
+    <div class="scroll">
+      <table>
+        <thead><tr><th>Command</th><th>What it does</th><th>What you get back</th></tr></thead>
+        <tbody>
+          <tr><td class="cmd"><span class="name">/doctor</span><span class="tag local">no backend</span></td>
+            <td class="does">Self-tests both engines, names the working directory, checks the terminal's unicode and colour, and refuses a signing key that is not 0600.</td>
+            <td class="back">Which config layer every value came from — so "why did it do that?" has an answer.</td></tr>
+          <tr><td class="cmd"><span class="name">/init</span></td>
+            <td class="does">Scaffolds <code>sirius.yaml</code> and <code>.siriusignore</code>, including the revenue policy thresholds.</td>
+            <td class="back">Config you can read and edit. Nothing hidden.</td></tr>
+          <tr><td class="cmd"><span class="name">/login</span><span class="use">/login --api-key &lt;key&gt;</span></td>
+            <td class="does">Verifies a key, then stores it at 0600. Only needed for hosted history — scanning never requires it.</td>
+            <td class="back">A stored profile.</td></tr>
+          <tr><td class="cmd"><span class="name">/logout</span></td><td class="does">Removes the stored profile.</td><td class="back">Back to local-only.</td></tr>
+          <tr><td class="cmd"><span class="name">/cd</span><span class="use">/cd [path]</span></td>
+            <td class="does">Changes the directory everything runs in. Bare <code>/cd</code> tells you where you are.</td>
+            <td class="back">The new working directory, echoed in the header.</td></tr>
+          <tr><td class="cmd"><span class="name">/help</span> <span class="name">/clear</span> <span class="name">/exit</span></td>
+            <td class="does">The shell itself. <code>/help</code> is this map in the terminal, grouped the same way.</td>
+            <td class="back"><code>/clear</code> returns to the opening screen, wordmark included.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Reading the result</p>
+      <h2>What the exit code means</h2>
+      <p>Modelled on Snyk. The one that surprises people is 1 — it means the scan worked and found something.</p>
+    </div>
+
+    <div class="codes">
+      <div class="code ok"><div class="n">0</div><div class="k">Clean</div><div class="d">Nothing at or above your threshold.</div></div>
+      <div class="code found"><div class="n">1</div><div class="k">Findings</div><div class="d">Action needed — not an error. The gate worked.</div></div>
+      <div class="code err"><div class="n">2</div><div class="k">Failure</div><div class="d">Auth, network or a parse problem. Something broke.</div></div>
+      <div class="code none"><div class="n">3</div><div class="k">No target</div><div class="d">Nothing scannable was found at that path.</div></div>
+    </div>
+    <p class="thesis" style="font-size:15px;margin-top:18px">
+      In a pipeline that should not block, the escape hatch is
+      <code class="mono" style="color:var(--cool)">sirius scan . || true</code>.
+    </p>
+  </section>
+
+  <section>
+    <div class="track-head">
+      <p class="eyebrow">Before you file a bug</p>
+      <h2>Four things that look broken and are not</h2>
+    </div>
+
+    <div class="notes">
+      <div class="note">
+        <h4>Two different rupee figures on one screen</h4>
+        <p>The first finding line carries its own amount. The footer totals every finding. They are supposed to differ — a single critical is not the whole repository.</p>
+      </div>
+      <div class="note">
+        <h4>The scan says <code>Exit 1</code></h4>
+        <p>That is a finding at or above your threshold, which is the tool doing what it was asked. Exit 2 is the one that means something went wrong.</p>
+      </div>
+      <div class="note">
+        <h4><code>/triage</code> and <code>/watch</code> take the whole terminal</h4>
+        <p>They draw their own full-screen interface, so the shell steps aside and hands them the real terminal — the way <code>git</code> hands over to your editor. <code>q</code> leaves triage, Ctrl-C leaves watch, and the transcript is still there when you come back.</p>
+      </div>
+      <div class="note">
+        <h4>Nothing in <code>revenue</code> contacts anybody</h4>
+        <p>Every action is simulated and the output says so. There is deliberately no <code>--execute</code> flag; the audit trail records what <em>would</em> have happened, including everything a rule refused.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    Every command works as <code class="mono">sirius &lt;name&gt;</code> from your shell, or
+    <code class="mono">/&lt;name&gt;</code> inside <code class="mono">sirius shell</code>.
+    The scan engine, the rules, the money model and the whole revenue surface run with no backend
+    and no network.
+  </footer>
+
+</div>
