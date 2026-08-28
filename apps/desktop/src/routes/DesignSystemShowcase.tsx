@@ -135,9 +135,9 @@ export const DesignSystemShowcase: React.FC = () => {
             {/* Money Ticker */}
             <GlassCard padding="lg">
               <h3 className="sirius-heading-3" style={{ marginTop: 0 }}>MoneyTicker</h3>
-              <MoneyTicker amountUSD={1450000} currencySymbol="$" variant="large" delta={120000} />
+              <MoneyTicker amountUSD={1450000} variant="large" delta={120000} />
               <div style={{ marginTop: '16px' }}>
-                <MoneyTicker amountUSD={3800000} currencySymbol="$" variant="compact" />
+                <MoneyTicker amountUSD={3800000} variant="compact" />
               </div>
             </GlassCard>
 

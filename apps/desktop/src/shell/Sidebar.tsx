@@ -1,7 +1,7 @@
 import React from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAppStore, useSessionStore } from '@sirius/state';
-import { MOCK_PROJECTS } from '@sirius/mock-api';
+import { useProjectsQuery } from '../api/queries';
 import {
   Tooltip,
   Avatar,
@@ -145,8 +145,9 @@ export const Sidebar: React.FC = () => {
   const navigate = useNavigate();
   const { isSidebarCollapsed, toggleSidebar, activeProjectId } = useAppStore();
   const { currentUser } = useSessionStore();
+  const { data: projects = [] } = useProjectsQuery();
 
-  const activeProject = MOCK_PROJECTS.find((p) => p.id === activeProjectId) || MOCK_PROJECTS[0];
+  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
 
   const sidebarWidth = isSidebarCollapsed ? '64px' : '220px';
 
@@ -253,11 +254,11 @@ export const Sidebar: React.FC = () => {
                   ACTIVE WORKSPACE
                 </div>
                 <div style={{ fontWeight: 700, fontSize: '13px', color: 'var(--color-text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                  {activeProject.name}
+                  {activeProject?.name ?? 'No project open'}
                 </div>
 
                 <div className="sirius-caption" style={{ display: 'flex', alignItems: 'center', gap: '4px', marginTop: '2px', color: 'var(--color-primary)', fontWeight: 600 }}>
-                  <GitBranch size={11} color="var(--color-primary)" /> {activeProject.branch}
+                  <GitBranch size={11} color="var(--color-primary)" /> {activeProject?.branch ?? '\u2014'}
                 </div>
               </div>
 

@@ -1,15 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useAppStore } from '@sirius/state';
-import { MOCK_PROJECTS } from '@sirius/mock-api';
+import { useProjectsQuery } from '../api/queries';
 import { Badge } from '@sirius/ui';
 import { FolderGit2, GitBranch, Check, ChevronDown } from 'lucide-react';
 
 export const ProjectSelector: React.FC = () => {
   const { activeProjectId, setActiveProject } = useAppStore();
+  const { data: projects = [] } = useProjectsQuery();
   const [isOpen, setIsOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  const activeProject = MOCK_PROJECTS.find((p) => p.id === activeProjectId) || MOCK_PROJECTS[0];
+  const activeProject = projects.find((p) => p.id === activeProjectId) || projects[0];
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -20,6 +21,8 @@ export const ProjectSelector: React.FC = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  if (!activeProject) return null;
 
   return (
     <div ref={containerRef} style={{ position: 'relative', display: 'inline-block' }}>
@@ -69,7 +72,7 @@ export const ProjectSelector: React.FC = () => {
           <div className="sirius-label" style={{ padding: '6px 8px' }}>
             Switch Active Project
           </div>
-          {MOCK_PROJECTS.map((prj) => {
+          {projects.map((prj) => {
             const isSelected = prj.id === activeProject.id;
             return (
               <button

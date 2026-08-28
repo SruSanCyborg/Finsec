@@ -17,7 +17,7 @@
         "height": 900,
         "resizable": true,
         "fullscreen": false,
-        "darkTheme": true,
+        "theme": "Dark",
         "transparent": false
       }
     ],

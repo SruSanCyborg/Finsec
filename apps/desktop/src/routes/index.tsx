@@ -9,6 +9,7 @@ import {
   ConnectProjectScreen,
   FirstScanPrimerScreen,
 } from '../onboarding';
+import { useCreateScanMutation } from '../api/queries';
 import { AppShell, RouteFrame } from '../shell';
 import { DashboardView } from '../features/dashboard';
 import { ProjectsGridView, ProjectDetailView } from '../features/projects';
@@ -30,11 +31,13 @@ export const AppRoutes: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const {
+    activeProjectId,
     lifecyclePhase,
     setLifecyclePhase,
     hasCompletedOnboarding,
     completeOnboarding,
   } = useAppStore();
+  const createScanMutation = useCreateScanMutation();
 
   // Route /design-system is independent QA laboratory
   if (location.pathname === '/design-system') {
@@ -81,9 +84,21 @@ export const AppRoutes: React.FC = () => {
       case 'onboarding_primer':
         return (
           <FirstScanPrimerScreen
-            onRunFirstScan={() => {
+            onRunFirstScan={async () => {
               completeOnboarding();
-              navigate('/scans/new');
+              // No project chosen (shouldn't happen — onboarding_project
+              // requires a selection) falls back to the config form rather
+              // than starting a scan against nothing.
+              if (!activeProjectId) {
+                navigate('/scans/new');
+                return;
+              }
+              try {
+                const scan = await createScanMutation.mutateAsync({ projectId: activeProjectId });
+                navigate(`/scans/${scan.id}`);
+              } catch {
+                navigate('/scans/new');
+              }
             }}
             onSkip={() => {
               completeOnboarding();

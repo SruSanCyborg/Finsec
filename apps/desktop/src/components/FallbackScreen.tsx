@@ -62,10 +62,10 @@ export const FallbackScreen: React.FC = () => {
         }}>
           <div style={{ background: 'var(--bg-raised)', padding: '12px', borderRadius: '6px' }}>
             <div style={{ color: 'var(--text-secondary)', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-              <Layers size={14} color="var(--color-emerald)" /> API Client Mode
+              <Layers size={14} color="var(--color-emerald)" /> Local Daemon
             </div>
             <strong style={{ color: 'var(--color-emerald)' }}>
-              {env.VITE_USE_MOCK_API ? 'Mock Core API' : 'Live Core API'}
+              {env.VITE_API_URL}
             </strong>
           </div>
           <div style={{ background: 'var(--bg-raised)', padding: '12px', borderRadius: '6px' }}>
