@@ -11,7 +11,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 
 import { languageOf, parseFile } from './parse.js';
-import { runRules } from './rules.js';
+import { runManifestRules, runRules } from './rules.js';
+import { manifestKind, readManifest } from './manifests.js';
 import type { RawFinding, Rule } from './rules.js';
 import type { Finding, WsFrame } from '../domain.js';
 
@@ -42,6 +43,11 @@ export interface ScanEngineOptions {
   maxFiles?: number;
   /** The rules to run. Defaults to the whole catalogue; see `rulesFor`. */
   rules?: Rule[];
+  /**
+   * Also walk dependency manifests. On by default for a scan; off for callers
+   * that only want parseable source, such as the fix verifier.
+   */
+  manifests?: boolean;
 }
 
 export function collectFiles(root: string, options: ScanEngineOptions = {}): string[] {
@@ -74,7 +80,7 @@ export function collectFiles(root: string, options: ScanEngineOptions = {}): str
         continue;
       }
 
-      if (!languageOf(path)) continue;
+      if (!languageOf(path) && !(options.manifests && manifestKind(path))) continue;
       if (stats.size > MAX_FILE_BYTES) continue;
       found.push(path);
     }
@@ -104,6 +110,29 @@ function isSuppressed(lines: string[], finding: RawFinding): boolean {
   });
 }
 
+/** One raw finding, in the shape the wire and every renderer expect. */
+function toFinding(raw: RawFinding, shown: string): Finding {
+  return {
+    id: nextId(),
+    file: shown,
+    line: raw.line,
+    col: raw.col,
+    ...(raw.endLine ? { end_line: raw.endLine } : {}),
+    severity: raw.severity,
+    rule_id: raw.rule_id,
+    category: raw.category,
+    compliance_ref: raw.compliance_ref,
+    message: raw.message,
+    snippet: redact(raw.snippet),
+    fingerprint: fingerprint(raw.rule_id, shown, raw.snippet),
+    baseline_state: 'new',
+    suppressed: false,
+    ...(raw.validity ? { validity: raw.validity } : {}),
+    ...(raw.money_at_risk_inr ? { money_at_risk_inr: raw.money_at_risk_inr } : {}),
+    ...(raw.fix_action ? { fix_action: raw.fix_action } : {}),
+  } as Finding;
+}
+
 let counter = 0;
 function nextId(): string {
   counter += 1;
@@ -117,7 +146,7 @@ function nextId(): string {
  * renderer as they are discovered instead of arriving in one lump at the end.
  */
 export async function* scanDirectory(root: string, options: ScanEngineOptions = {}): AsyncGenerator<WsFrame> {
-  const files = collectFiles(root, options);
+  const files = collectFiles(root, { manifests: true, ...options });
 
   yield {
     type: 'scan.started',
@@ -134,6 +163,19 @@ export async function* scanDirectory(root: string, options: ScanEngineOptions = 
     const shown = relative(root, path) || path.split(sep).pop() || path;
     yield { type: 'file.scanning', path: shown, index: index + 1, total: files.length } as WsFrame;
 
+    // A manifest has no syntax tree; it gets the narrow supply-chain pass.
+    const manifest = manifestKind(path) ? readManifest(path) : undefined;
+    if (manifest) {
+      for (const raw of runManifestRules(manifest, options.rules)) {
+        if (isSuppressed(manifest.lines, raw)) continue;
+        found += 1;
+        counts[raw.severity] = (counts[raw.severity] ?? 0) + 1;
+        money += raw.money_at_risk_inr ?? 0;
+        yield { type: 'finding', finding: toFinding(raw, shown) } as WsFrame;
+      }
+      continue;
+    }
+
     let parsed;
     try {
       parsed = await parseFile(path);
@@ -148,34 +190,24 @@ export async function* scanDirectory(root: string, options: ScanEngineOptions = 
     }
     if (!parsed) continue;
 
+    const emitted = new Set<string>();
     for (const raw of runRules(parsed, options.rules)) {
       if (isSuppressed(parsed.lines, raw)) continue;
+      // Two findings with the same fingerprint are one finding — that is what
+      // the fingerprint means, and baseline and suppress already treat them as
+      // one. SIR-SEC-031 matched a class-body assignment twice, once as the
+      // assignment and once as the statement wrapping it, and the duplicate
+      // counted twice in the totals and twice in the money while collapsing to
+      // a single row in every baseline.
+      const key = fingerprint(raw.rule_id, shown, raw.snippet);
+      if (emitted.has(key)) continue;
+      emitted.add(key);
 
       found += 1;
       counts[raw.severity] = (counts[raw.severity] ?? 0) + 1;
       money += raw.money_at_risk_inr ?? 0;
 
-      const finding: Finding = {
-        id: nextId(),
-        file: shown,
-        line: raw.line,
-        col: raw.col,
-        ...(raw.endLine ? { end_line: raw.endLine } : {}),
-        severity: raw.severity,
-        rule_id: raw.rule_id,
-        category: raw.category,
-        compliance_ref: raw.compliance_ref,
-        message: raw.message,
-        snippet: redact(raw.snippet),
-        fingerprint: fingerprint(raw.rule_id, shown, raw.snippet),
-        baseline_state: 'new',
-        suppressed: false,
-        ...(raw.validity ? { validity: raw.validity } : {}),
-        ...(raw.money_at_risk_inr ? { money_at_risk_inr: raw.money_at_risk_inr } : {}),
-        ...(raw.fix_action ? { fix_action: raw.fix_action } : {}),
-      } as Finding;
-
-      yield { type: 'finding', finding } as WsFrame;
+      yield { type: 'finding', finding: toFinding(raw, shown) } as WsFrame;
     }
 
     if ((index + 1) % 16 === 0) {

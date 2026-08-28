@@ -12,7 +12,9 @@
  */
 
 import { enclosing, walk } from './parse.js';
+import type { ManifestFile } from './manifests.js';
 import { estimateExposure } from './exposure-model.js';
+import type { Reachability } from './exposure-model.js';
 import type { ParsedFile, SyntaxNode } from './parse.js';
 import type { Category, Severity } from '../domain.js';
 
@@ -42,7 +44,10 @@ export interface Rule {
   compliance_ref: string[];
   fix_action?: string;
   languages?: string[];
-  run(file: ParsedFile): RawFinding[];
+  /** Rules that read source. Absent on a manifest-only rule. */
+  run?(file: ParsedFile): RawFinding[];
+  /** Rules that read dependency manifests. Absent on every source rule. */
+  runManifest?(file: ManifestFile): RawFinding[];
 }
 
 // ---------------------------------------------------------------- helpers
@@ -364,9 +369,12 @@ const jwtUnverified: Rule = {
       if (!/jwt\.decode$|jsonwebtoken\.decode$/.test(calleeName(node))) continue;
 
       const text = node.text;
+      // The quote matters. PyJWT's documented way to skip verification is
+      // `options={"verify_signature": False}` — a dict key, so the name is
+      // followed by `"` before the colon. Matching only the bare `verify=False`
+      // form meant the rule missed the spelling almost every real codebase uses.
       const unverified =
-        /verify\s*[:=]\s*(False|false)/.test(text) ||
-        /verify_signature\s*[:=]\s*(False|false)/.test(text) ||
+        /["']?verify(_signature)?["']?\s*[:=]\s*(False|false)/.test(text) ||
         /alg(orithms)?\s*[:=]\s*\[?\s*['"]none['"]/i.test(text);
 
       if (!unverified) continue;
@@ -398,6 +406,25 @@ const PII_ACCESS = /\bcard\b[^)]{0,24}?['"]?(number|no|cvv|cvc)['"]?/i;
  */
 const REDACTED = /^\s*(redact|mask|tokeni[sz]e|hash|anonymi[sz]e|scrub|saniti[sz]e|last4|truncate)\s*\(/i;
 
+/**
+ * Truncation, the other form PCI-DSS 3.3.1 permits: at most the first six and
+ * the last four digits may be displayed. `card["number"][-4:]` is the idiom, and
+ * flagging it told a team doing exactly the right thing that it was leaking a
+ * PAN — the false positive that gets a linter switched off.
+ *
+ * Deliberately narrow. A slice that keeps more than six characters is not
+ * truncation, and `[0:16]` is still a finding.
+ */
+function isTruncated(text: string): boolean {
+  // Python: [-4:] or [:6]
+  if (/\[\s*-[1-6]\s*:\s*\]/.test(text)) return true;
+  if (/\[\s*:\s*[1-6]\s*\]/.test(text)) return true;
+  // JavaScript: .slice(-4), .substr(-4), .slice(0, 6)
+  if (/\.(slice|substr|substring)\s*\(\s*-[1-6]\s*\)/.test(text)) return true;
+  if (/\.(slice|substr|substring)\s*\(\s*0\s*,\s*[1-6]\s*\)/.test(text)) return true;
+  return false;
+}
+
 const LOG_CALL = /(^|\.)(log|logger|logging|console)\.(debug|info|warn|warning|error|log)$/;
 
 const piiInLogs: Rule = {
@@ -420,7 +447,10 @@ const piiInLogs: Rule = {
       // equivalent check; this one did not.
       const args = argumentsOf(node);
       const leaking = args.some(
-        (arg) => (PII_FIELD.test(arg.text) || PII_ACCESS.test(arg.text)) && !REDACTED.test(arg.text),
+        (arg) =>
+          (PII_FIELD.test(arg.text) || PII_ACCESS.test(arg.text)) &&
+          !REDACTED.test(arg.text) &&
+          !isTruncated(arg.text),
       );
       if (!leaking) continue;
 
@@ -581,6 +611,140 @@ const missingIdempotency: Rule = {
   },
 };
 
+
+// ---------------------------------------------------------------- supply chain
+
+/**
+ * A dependency line, as far as it can be judged without a network.
+ *
+ * The PRD calls this rule "dependency with install script/obfuscation" and the
+ * demo replay shows two variants of it. Neither can be read the way it sounds:
+ * knowing whether a *dependency* runs an install script means fetching that
+ * package's own manifest from the registry, and a scan makes no network calls.
+ * So the rule reports the supply-chain facts a manifest states about itself, and
+ * names each one for what it observed rather than for what it implies.
+ */
+const NON_REGISTRY = /^(git\+|git:|https?:|ssh:|file:|link:|\.{0,2}\/)|\.(tar\.gz|tgz|zip|whl)(#|$)/i;
+const FLOATING_NPM = /^(\*|latest|x|\^|~|>=?|<)/;
+const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
+const INSTALL_HOOKS = ['preinstall', 'install', 'postinstall'];
+
+/**
+ * The line a `"key": "value"` pair sits on, so a JSON finding still points at
+ * source. Falls back to the key alone, then to the top of the file — a finding
+ * that admits it only knows which file is better than one pointing at a line
+ * that has nothing to do with it.
+ */
+function lineOf(lines: readonly string[], key: string, value: string): number {
+  const exact = lines.findIndex((text) => text.includes(`"${key}"`) && text.includes(value));
+  if (exact >= 0) return exact;
+  const byKey = lines.findIndex((text) => text.includes(`"${key}"`));
+  return byKey >= 0 ? byKey : 0;
+}
+
+const supplyChain: Rule = {
+  id: 'SIR-SEC-060',
+  severity: 'high',
+  category: 'supplychain',
+  message: 'Dependency declared outside the registry',
+  compliance_ref: ['PCI-DSS:6.3.2'],
+  fix_action: 'pin_or_remove_dep',
+  runManifest(file) {
+    const findings: RawFinding[] = [];
+
+    /** One finding on a manifest line, priced by how reachable that fact is. */
+    const at = (
+      index: number,
+      message: string,
+      severity: Severity,
+      reachability: Reachability,
+    ): RawFinding => {
+      const raw = file.lines[index] ?? '';
+      const text = raw.trim();
+      return {
+        rule_id: this.id,
+        severity,
+        category: this.category,
+        message,
+        line: index + 1,
+        col: raw.length - raw.trimStart().length + 1,
+        snippet: text.length > 120 ? `${text.slice(0, 117)}…` : text,
+        compliance_ref: this.compliance_ref,
+        ...(this.fix_action ? { fix_action: this.fix_action } : {}),
+        money_at_risk_inr: estimateExposure({ ruleId: this.id, severity, reachability }).amount,
+        tags: ['supplychain'],
+      };
+    };
+
+    // package.json is data, so it is read as data. Scanning it line by line
+    // matched `"sirius": "./dist/cli.js"` under `bin` and called the package a
+    // dependency resolved outside the registry — a key-value pair looks the
+    // same everywhere in a JSON file, and only its position says what it means.
+    if (file.kind === 'npm') {
+      let pkg: Record<string, unknown>;
+      try {
+        pkg = JSON.parse(file.lines.join('\n')) as Record<string, unknown>;
+      } catch {
+        return findings; // a manifest we cannot read is not one we can judge
+      }
+
+      const scripts = (pkg.scripts ?? {}) as Record<string, string>;
+      for (const hook of INSTALL_HOOKS) {
+        const body = scripts[hook];
+        if (typeof body !== 'string') continue;
+        // The project's own script, not a dependency's — but it is the same
+        // execution slot, it runs on every `npm install`, and in CI that means
+        // it runs with whatever credentials the build has.
+        findings.push(
+          at(lineOf(file.lines, hook, body), `"${hook}" runs on every dependency install`, 'high', 'direct'),
+        );
+      }
+
+      for (const field of DEPENDENCY_FIELDS) {
+        const deps = pkg[field];
+        if (!deps || typeof deps !== 'object') continue;
+        for (const [name, spec] of Object.entries(deps as Record<string, unknown>)) {
+          if (typeof spec !== 'string') continue;
+          const index = lineOf(file.lines, name, spec);
+          if (NON_REGISTRY.test(spec)) {
+            findings.push(at(index, `Dependency "${name}" resolved outside the registry`, 'high', 'direct'));
+          } else if (!file.locked && FLOATING_NPM.test(spec)) {
+            findings.push(at(index, `Dependency "${name}" pinned to a floating range`, 'low', 'local'));
+          }
+        }
+      }
+
+      return findings.sort((a, b) => a.line - b.line);
+    }
+
+    // requirements.txt is a line format and has to be read as one.
+    for (const [index, raw] of file.lines.entries()) {
+      const text = raw.trim();
+      if (!text || text.startsWith('#')) continue;
+
+      const editable = /^-(e|-editable)\b/.test(text);
+      const body = text.replace(/^-(e|-editable)\s+/, '').split(/\s+(?:#|--)/)[0] ?? '';
+      if (!body) continue;
+
+      if (editable || NON_REGISTRY.test(body)) {
+        // `#egg=name` where the line names one, else the last path segment: a
+        // whole URL in the message crowds out the findings around it.
+        const named = /#egg=([A-Za-z0-9._-]+)/.exec(body)?.[1] ?? body.split('/').pop() ?? body;
+        findings.push(at(index, `Dependency "${named}" resolved outside the registry`, 'high', 'direct'));
+        continue;
+      }
+
+      if (body.startsWith('-')) continue; // an option line, not a requirement
+      if (!file.locked && !/(==|@)/.test(body)) {
+        const name = /^[A-Za-z0-9._-]+/.exec(body)?.[0] ?? body;
+        findings.push(at(index, `Dependency "${name}" pinned to a floating range`, 'low', 'local'));
+      }
+    }
+
+    return findings;
+  },
+};
+
 export const RULES: Rule[] = [
   hardcodedSecret,
   highEntropySecret,
@@ -594,6 +758,7 @@ export const RULES: Rule[] = [
   plaintextTransport,
   missingRateLimit,
   missingIdempotency,
+  supplyChain,
 ];
 
 /** Runs every applicable rule over one parsed file, or just the ones given. */
@@ -601,10 +766,23 @@ export function runRules(file: ParsedFile, rules: readonly Rule[] = RULES): RawF
   const findings: RawFinding[] = [];
   for (const rule of rules) {
     try {
-      findings.push(...rule.run(file));
+      if (rule.run) findings.push(...rule.run(file));
     } catch {
       // One malformed rule must not abandon the scan of a whole file; the other
       // rules still have something useful to say about it.
+    }
+  }
+  return findings;
+}
+
+/** Runs every manifest rule over one dependency manifest, or just the ones given. */
+export function runManifestRules(file: ManifestFile, rules: readonly Rule[] = RULES): RawFinding[] {
+  const findings: RawFinding[] = [];
+  for (const rule of rules) {
+    try {
+      if (rule.runManifest) findings.push(...rule.runManifest(file));
+    } catch {
+      // Same contract as runRules: one bad rule does not abandon the file.
     }
   }
   return findings;

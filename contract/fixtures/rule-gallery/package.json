@@ -1,0 +1,14 @@
+{
+  "name": "rule-gallery",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tsc -p .",
+    "postinstall": "node ./tools/fetch-certs.js"
+  },
+  "dependencies": {
+    "stripe": "14.10.0",
+    "dayjs": "^1.11.10",
+    "acme-risk-sdk": "https://cdn.acme.dev/risk-sdk-2.1.0.tgz"
+  }
+}

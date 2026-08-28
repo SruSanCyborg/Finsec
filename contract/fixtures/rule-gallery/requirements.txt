@@ -1,0 +1,9 @@
+# --- true negative: pinned to an exact version -----------------------------
+stripe==7.1.0
+razorpay==1.4.2
+
+# --- SIR-SEC-060: floating, with no lockfile beside it ---------------------
+requests>=2.28.0
+
+# --- SIR-SEC-060: fetched from a host, not from the index ------------------
+-e git+https://github.com/acme/ledger-client.git#egg=ledger-client
