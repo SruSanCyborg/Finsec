@@ -77,7 +77,7 @@ async function listRules(flags: RulesFlags, globals: GlobalFlags): Promise<void>
   }
 
   const capabilities = detectCapabilities({ noColor: globals.color === false });
-  const paint = (text: string, color: string) => (capabilities.color ? `[38;2;${hexToRgb(color)}m${text}[39m` : text);
+  const paint = (text: string, color: string) => (capabilities.color ? `\u001b[38;2;${hexToRgb(color)}m${text}\u001b[39m` : text);
 
   // Group by category so the catalogue reads like the rule table in the docs.
   const byCategory = new Map<string, Rule[]>();

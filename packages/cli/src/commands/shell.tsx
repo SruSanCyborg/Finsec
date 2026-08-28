@@ -23,11 +23,12 @@ import React, { useMemo, useState } from 'react';
 import { CliError } from '../api/errors.js';
 import { CommandPalette, SHELL_COMMANDS, filterCommands } from '../ui/CommandPalette.js';
 import { COLOR, detectCapabilities, glyphsFor } from '../ui/theme.js';
+import { renderWordmark } from '../ui/wordmark.js';
+import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import type { ShellCommand } from '../ui/CommandPalette.js';
 import type { Capabilities, Glyphs } from '../ui/theme.js';
 
-const VERSION = '0.4.0';
 const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), '..', 'cli.js');
 
 interface GlobalFlags {
@@ -73,7 +74,7 @@ export async function runShell(_flags: unknown, globals: GlobalFlags): Promise<v
     if (name === 'exit' || name === 'quit') break;
 
     if (name === 'clear') {
-      process.stdout.write('[2J[H');
+      process.stdout.write('\u001b[2J\u001b[H');
       printBanner(capabilities, glyphs, globals);
       continue;
     }
@@ -95,15 +96,11 @@ export async function runShell(_flags: unknown, globals: GlobalFlags): Promise<v
 // ---------------------------------------------------------------- banner
 
 function printBanner(capabilities: Capabilities, glyphs: Glyphs, globals: GlobalFlags): void {
-  const dim = capabilities.color ? '[38;5;245m' : '';
-  const reset = capabilities.color ? '[0m' : '';
-  const bold = capabilities.color ? '[1m' : '';
+  const dim = capabilities.color ? '\u001b[38;5;245m' : '';
+  const reset = capabilities.color ? '\u001b[0m' : '';
+  const bold = capabilities.color ? '\u001b[1m' : '';
 
-  const inner = 62;
-  const rule = glyphs.horizontal.repeat(inner);
-  const pad = (text: string) => `  ${text}`.padEnd(inner);
-
-  let context = '';
+  let context: string;
   try {
     const cwd = process.cwd();
     const config = loadConfig({
@@ -112,32 +109,31 @@ function printBanner(capabilities: Capabilities, glyphs: Glyphs, globals: Global
     });
     const project = findProjectRoot(cwd);
     context = [
-      project ? `project: ${project.dir.split('/').pop()}` : 'no sirius.yaml',
+      project ? `project ${project.dir.split('/').pop()}` : 'no sirius.yaml',
       config.apiKey ? 'authenticated' : 'no key',
-    ].join(`   ${glyphs.separator.trim()}   `);
+      config.apiUrl.replace(/^https?:\/\//, ''),
+    ].join(glyphs.separator);
   } catch {
-    // A broken config should not stop the shell from opening — `/doctor` is
-    // exactly the tool for diagnosing it.
-    context = 'config could not be read — try /doctor';
+    // A broken config should not stop the shell opening — /doctor is exactly
+    // the tool for diagnosing it.
+    context = 'config could not be read, try /doctor';
   }
 
   process.stdout.write(
-    [
-      '',
-      `${dim}  ${glyphs.boxTopLeft}${rule}${glyphs.boxTopRight}${reset}`,
-      `${dim}  ${glyphs.vertical}${reset}${bold}${pad(`sirius v${VERSION}   ${glyphs.separator.trim()}   Fintech Compliance Scanner`)}${reset}${dim}${glyphs.vertical}${reset}`,
-      `${dim}  ${glyphs.vertical}${pad(context)}${glyphs.vertical}${reset}`,
-      `${dim}  ${glyphs.boxBottomLeft}${rule}${glyphs.boxBottomRight}${reset}`,
-      '',
-      `${dim}  Type ${reset}/${dim} for commands, or a command directly. ${reset}/help${dim} for the list, ${reset}/exit${dim} to leave.${reset}`,
-      '',
-    ].join('\n') + '\n',
+    renderWordmark(
+      { version: VERSION, tagline: TAGLINE, context, author: AUTHOR },
+      { unicode: capabilities.unicode, color: capabilities.color, width: capabilities.width },
+    ),
+  );
+
+  process.stdout.write(
+    `\n${dim}  Type ${reset}${bold}/${reset}${dim} for commands. ${reset}/help${dim} lists them, ${reset}/exit${dim} leaves.${reset}\n\n`,
   );
 }
 
 function printHelp(capabilities: Capabilities): void {
-  const dim = capabilities.color ? '[38;5;245m' : '';
-  const reset = capabilities.color ? '[0m' : '';
+  const dim = capabilities.color ? '\u001b[38;5;245m' : '';
+  const reset = capabilities.color ? '\u001b[0m' : '';
 
   process.stdout.write('\n');
   for (const command of SHELL_COMMANDS) {
