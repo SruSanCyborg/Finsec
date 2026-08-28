@@ -466,12 +466,21 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
   if (outcome.findings.length > 0) {
     const root = findProjectRoot(target)?.dir ?? target;
+    const resolvedScanId = scanId ?? (flags.replay ? 'replay' : localScanId());
+    const scanSummary = {
+      counts: outcome.counts as Record<string, number>,
+      money_at_risk_inr: outcome.moneyAtRisk ?? 0,
+      compliance_score: outcome.complianceScore,
+      files_scanned: outcome.filesScanned ?? null,
+    };
+    const cachedFindings = outcome.findings.map(toCached);
+
     try {
       saveLastScan(root, {
         // A local scan is a real scan and gets a real id. It used to be filed
         // as `replay`, which read as "recorded, nothing here is live" — so
         // `triage` refused to open it and `doctor` reported it as a rehearsal.
-        scan_id: scanId ?? (flags.replay ? 'replay' : localScanId()),
+        scan_id: resolvedScanId,
         // So `fix` can tell a local-engine scan (fixable from source on disk)
         // from a replayed fixture (nothing real to fix).
         source: flags.replay ? 'replay' : useLocalEngine ? 'local' : 'api',
@@ -480,16 +489,45 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         // The headline numbers as this scan reported them, so a badge or a
         // signed report shows what the developer saw rather than a figure
         // re-derived later from a subset of the inputs.
-        summary: {
-          counts: outcome.counts as Record<string, number>,
-          money_at_risk_inr: outcome.moneyAtRisk ?? 0,
-          compliance_score: outcome.complianceScore,
-          files_scanned: outcome.filesScanned ?? null,
-        },
-        findings: outcome.findings.map(toCached),
+        summary: scanSummary,
+        findings: cachedFindings,
       });
     } catch {
       // A read-only working tree should not fail an otherwise good scan.
+    }
+
+    // ---- and into the history the desktop app reads
+    //
+    // The last-scan cache holds one scan, because everything that read it only
+    // ever wanted the most recent. The GUI has a history view, and a history
+    // that shows nothing until you scan from inside the window would make the
+    // two surfaces look like two products. Writing it here is what makes a scan
+    // run in this terminal appear in that list.
+    try {
+      const { saveScan } = await import('../server/scans.js');
+      const finishedAt = new Date().toISOString();
+      saveScan(root, {
+        schema_version: 1,
+        id: resolvedScanId,
+        project_id: config.projectId ?? null,
+        target: resolve(target),
+        status: 'completed',
+        // The scan has already finished by the time this runs and nothing
+        // recorded when it began, so both stamps are the same instant rather
+        // than a duration invented to fill the column.
+        started_at: finishedAt,
+        finished_at: finishedAt,
+        source: flags.replay ? 'replay' : useLocalEngine ? 'local' : 'api',
+        origin: 'cli',
+        rulesets: config.rulesets,
+        severity_threshold: config.severityThreshold,
+        fail_on: config.failOn,
+        exit_code: gate.exitCode,
+        summary: scanSummary,
+        findings: cachedFindings,
+      });
+    } catch {
+      // Same reasoning: history is a convenience, not a reason to fail a scan.
     }
   }
 

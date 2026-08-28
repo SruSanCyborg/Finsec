@@ -207,6 +207,18 @@ export const SHELL_COMMANDS: ShellCommand[] = [
     ],
     keywords: ['merkle', 'transparency', 'history', 'proof', 'root'],
   },
+  {
+    name: 'serve',
+    summary: 'Serve the local engine over HTTP + WebSocket, for the desktop app',
+    usage: '/serve [--port <n>] [--root <dir>]',
+    args: [
+      { name: '--port <n>', summary: 'port to listen on (default 4020)', kind: 'flag' },
+      { name: '--root <dir>', summary: 'project to serve (default: this directory)', kind: 'flag' },
+      { name: '--token <value>', summary: 'use this API token instead of minting one', kind: 'flag' },
+      { name: '--print-config', summary: 'emit one JSON line with the URL and token, for a launcher', kind: 'flag' },
+    ],
+    keywords: ['desktop', 'gui', 'http', 'websocket', 'daemon'],
+  },
   { name: 'badge', summary: 'Print the compliance badge URL' },
   { name: 'init', summary: 'Scaffold sirius.yaml and .siriusignore' },
   { name: 'login', summary: 'Store an API key', usage: '/login --api-key <key>' },

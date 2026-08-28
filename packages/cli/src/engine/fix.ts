@@ -6,19 +6,27 @@
  * may only emit a structured action, a deterministic builder turns that action
  * into a diff, and a verifier re-runs the rule to confirm the finding is gone.
  *
- * **What is real here and what is not.** There is no LLM in this path, and the
- * panel says so. Stage one is a *template selector*, not a model: it maps the
- * rule's `fix_action` to a template and extracts a target from the AST. That is
- * strictly weaker than the PRD's design and strictly more honest than printing
- * a model name that never ran.
+ * **What is real here.** Stage one is a *template selector* first: it maps the
+ * rule's `fix_action` to a hand-written template and extracts a target from
+ * the AST, deterministically, for the handful of shapes a template covers.
+ * When no template matches, `buildGroqReplacement` below is the quarantined
+ * model the PRD describes — it sees a few lines of context, is told which
+ * rule fired, and may answer with exactly one thing: a structured
+ * `{ next: string }` replacement for the flagged line. It cannot touch any
+ * other line, cannot decide to apply itself, and its output is never trusted
+ * as `machine-applicable` — that stays a human decision for anything a model
+ * wrote.
  *
- * Stage three, though, is entirely real, and it is the stage that matters. The
- * patch is applied to a copy of the source in memory, the file is re-parsed,
- * and the *same rule* is re-run against the result. `✓ PASS` means the rule no
- * longer fires. A fix that does not actually clear the finding is reported as
- * `fail` and never auto-applied — which is the whole point of a guardrail.
+ * Stage three is real either way, and it is the stage that matters regardless
+ * of who proposed the patch. It is applied to a copy of the source in memory,
+ * the file is re-parsed, and the *same rule* is re-run against the result.
+ * `✓ PASS` means the rule no longer fires. A fix that does not actually clear
+ * the finding is reported as `fail` and never auto-applied — which is the
+ * whole point of a guardrail, and the reason a model being wrong here is a
+ * reported failure rather than a silently broken file.
  */
 
+import { askGroq, groqConfigured, groqModel } from './groq.js';
 import { parseSource } from './parse.js';
 import { RULES, runRules } from './rules.js';
 import type { RawFinding } from './rules.js';
@@ -415,11 +423,14 @@ export interface BuildFixInput {
 /**
  * Builds a fix and verifies it, or explains why it could not.
  *
- * Returns undefined when no template covers the rule — an honest "not
+ * Template first, always — deterministic and free beats a model call for the
+ * shapes there's already a template for. Only when nothing matches does this
+ * ask Groq, quarantined to one line of the file and one structured answer.
+ * Returns undefined when neither produced anything: an honest "not
  * implemented" rather than a plausible-looking patch nobody checked.
  */
 export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | undefined> {
-  const { filePath, source, line, ruleId, action } = input;
+  const { filePath, source, line, action } = input;
 
   const lines = source.split('\n');
   const original = lines[line - 1];
@@ -430,7 +441,114 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
     lines,
     index: line - 1,
   });
-  if (!replacement) return undefined;
+
+  if (replacement) {
+    return finalizeFix(input, replacement, {
+      name: 'template selector',
+      detail: `${action} → target ${replacement.target ?? 'n/a'}`,
+      // Deterministic, not a model — the PRD puts a quarantined model here,
+      // and the template path skips it entirely because it doesn't need one.
+      real: false,
+    });
+  }
+
+  const aiReplacement = await buildGroqReplacement(input, original, language);
+  if (!aiReplacement) return undefined;
+
+  return finalizeFix(input, aiReplacement, {
+    name: `groq model (${groqModel()})`,
+    detail: `no template covers ${input.ruleId} — asked the model for a narrow, one-line fix`,
+    real: true,
+  });
+}
+
+/**
+ * The quarantined stage the PRD describes: a model sees a handful of lines
+ * around the flagged one, is told which rule fired and what kind of fix is
+ * wanted, and may answer with exactly one structured thing — a replacement
+ * for that line, nothing else. It never sees the rest of the file, cannot
+ * request more context, and its answer is treated as a guess to be verified,
+ * never as a decision that's already been made.
+ */
+async function buildGroqReplacement(
+  input: BuildFixInput,
+  original: string,
+  language: string,
+): Promise<Replacement | undefined> {
+  if (!groqConfigured()) return undefined;
+
+  const lines = input.source.split('\n');
+  const start = Math.max(0, input.line - 4);
+  const end = Math.min(lines.length, input.line + 3);
+  const window = lines.slice(start, end).join('\n');
+
+  const system =
+    'You are a narrow code-repair tool inside a security scanner for money-handling code. ' +
+    'You will be shown a short window of source around one flagged line, the rule that fired, ' +
+    'and what kind of fix is wanted. Reply with ONLY a JSON object of the shape ' +
+    '{"next": "<replacement for the flagged line, or a few lines joined by \\n>"} and nothing ' +
+    "else — no explanation, no markdown fences. Preserve the line's indentation. Do not introduce " +
+    "a function, import, or variable that isn't already visible in the window you were given. If " +
+    'you cannot produce a safe, narrow fix, reply {"next": null}.';
+
+  const user =
+    `Rule: ${input.ruleId}\n` +
+    `Fix action requested: ${input.action}\n` +
+    `Language: ${language}\n` +
+    `Flagged line (1-based ${input.line}):\n${original}\n\n` +
+    `Surrounding window (lines ${start + 1}-${end}):\n${window}`;
+
+  let raw: string;
+  try {
+    raw = await askGroq(
+      [
+        { role: 'system', content: system },
+        { role: 'user', content: user },
+      ],
+      { jsonOnly: true, temperature: 0.1, maxTokens: 400 },
+    );
+  } catch {
+    // A model that is unreachable or misconfigured is the same "nothing to
+    // offer" as a rule with no template — not an error the caller needs.
+    return undefined;
+  }
+
+  let parsed: { next?: string | null };
+  try {
+    parsed = JSON.parse(raw) as { next?: string | null };
+  } catch {
+    return undefined;
+  }
+
+  if (!parsed.next || typeof parsed.next !== 'string') return undefined;
+
+  const next = parsed.next;
+  // Refuses anything that reads as more than a line-level edit — a model that
+  // returns a whole file, a diff, or several unrelated statements is not the
+  // "structured action" this stage is allowed to produce.
+  if (next.length > 400 || next.split('\n').length > 6) return undefined;
+
+  return {
+    line: 0,
+    next,
+    confidence: 0.5,
+    // Never machine-applicable on its own. An AI-authored patch to
+    // money-handling code gets a person reading the diff — the same rule
+    // `maybe-incorrect` templates above already apply to a guess about intent.
+    applicability: 'maybe-incorrect',
+    behaviourNote: `generated by ${groqModel()}, not a template — read the diff before applying`,
+  };
+}
+
+/** The diff-build, verify, and package-up tail shared by every fix source. */
+async function finalizeFix(
+  input: BuildFixInput,
+  replacement: Replacement,
+  stageOne: LocalFixStage,
+): Promise<LocalFix> {
+  const { filePath, source, line, action, ruleId } = input;
+  const lines = source.split('\n');
+  const language = filePath.endsWith('.py') ? 'python' : 'javascript';
 
   const [from, to] = replacement.span ?? [line - 1, line - 1];
   const patchedLines = [...lines];
@@ -451,16 +569,12 @@ export async function buildLocalFix(input: BuildFixInput): Promise<LocalFix | un
 
   const verdict = await verify({ filePath, source: finalSource, ruleId, line });
 
+  const origin = stageOne.name.startsWith('groq') ? 'model' : 'template';
   const stages: LocalFixStage[] = [
-    {
-      name: 'template selector',
-      detail: `${action} → target ${replacement.target ?? 'n/a'}`,
-      // Named honestly: the PRD puts a quarantined model here, and no model ran.
-      real: false,
-    },
+    stageOne,
     {
       name: 'diff builder',
-      detail: `template: ${action}${prelude ? ` (+ ${prelude.split('\n').length} import)` : ''}`,
+      detail: `${origin}: ${action}${prelude ? ` (+ ${prelude.split('\n').length} import)` : ''}`,
       real: true,
     },
     {

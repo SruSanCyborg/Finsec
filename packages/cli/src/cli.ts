@@ -10,8 +10,13 @@
 import { Command, InvalidArgumentError } from 'commander';
 
 import { CliError } from './api/errors.js';
+import { loadEnvFile } from './config/env-file.js';
 import { ExitCode, SEVERITIES } from './domain.js';
 import type { ExitCodeValue } from './domain.js';
+
+// Before anything else runs — `serve` spawns as a subprocess with no shell
+// profile behind it, so this is the only chance GROQ_API_KEY has of reaching it.
+loadEnvFile();
 
 const VERSION = '0.4.0';
 
@@ -302,6 +307,18 @@ export function buildProgram(): Command {
     .action(async (books: string, options: Record<string, unknown>, command: Command) => {
       const { runReconcile } = await import('./commands/reconcile.js');
       await runReconcile(books, options, command.parent?.opts() ?? {});
+    });
+
+  program
+    .command('serve')
+    .description('Serve the local engine over HTTP + WebSocket, for the desktop app')
+    .option('--port <n>', 'port to listen on (default 4020)', countArg)
+    .option('--root <dir>', 'project to serve (default: this directory)')
+    .option('--token <value>', 'use this API token instead of minting one')
+    .option('--print-config', 'emit one JSON line with the URL and token, for a launcher')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runServe } = await import('./commands/serve.js');
+      await runServe(options, command.parent?.opts() ?? {});
     });
 
   program

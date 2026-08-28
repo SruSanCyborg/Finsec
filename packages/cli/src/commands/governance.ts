@@ -368,40 +368,18 @@ async function writeLocalReport(
 ): Promise<void> {
   const { attest } = await import('../engine/attest.js');
   const { countBySeverity } = await import('../ui/ScanView.js');
+  const { buildReportPayload } = await import('../engine/report-document.js');
 
-  const counts = countBySeverity(cache.findings as never);
-  const money = cache.findings.reduce((sum, f) => sum + (f.money_at_risk_inr ?? 0), 0);
-
-  const payload = {
-    schema: 'sirius.report/v1',
-    scan_id: cache.scan_id,
-    scanned_at: cache.scanned_at,
+  const payload = buildReportPayload({
     root,
+    scanId: cache.scan_id,
+    scannedAt: cache.scanned_at,
     source: cache.source ?? 'local',
-    tool: { name: 'sirius', version: VERSION },
-    summary: {
-      findings: cache.findings.length,
-      counts,
-      money_at_risk_inr: money,
-      // The score the scan reported, not one re-derived here. A compliance
-      // report that omits the compliance score is an odd document, and one that
-      // recomputes it is a second opinion nobody asked for.
-      compliance_score: cache.summary?.compliance_score ?? null,
-      files_scanned: cache.summary?.files_scanned ?? null,
-    },
-    // The clauses are why this is a compliance report and not a bug list.
-    compliance_refs: [...new Set(cache.findings.flatMap((f) => f.compliance_ref ?? []))].sort(),
-    findings: cache.findings.map((f) => ({
-      rule_id: f.rule_id,
-      severity: f.severity,
-      file: f.file,
-      line: f.line,
-      message: f.message,
-      compliance_ref: f.compliance_ref ?? [],
-      money_at_risk_inr: f.money_at_risk_inr ?? 0,
-      fingerprint: f.fingerprint,
-    })),
-  };
+    version: VERSION,
+    findings: cache.findings,
+    summary: cache.summary,
+    counts: countBySeverity(cache.findings as never),
+  });
 
   const attestation = attest(payload);
   const document = { ...payload, attestation };
