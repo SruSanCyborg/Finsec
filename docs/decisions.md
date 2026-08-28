@@ -1213,3 +1213,36 @@ about severity and the flag is about novelty, and they compose rather than
 override each other.
 
 ---
+## D-037 — `.siriusignore` was documented, scaffolded, and read by nothing
+
+AGENTS.md names three suppression layers and this is one of them. `init` writes
+the file. `ScanEngineOptions.ignorePatterns` declares the field. `scan` passed
+the config's `exclude:` into it. The scanner never read it, and nothing read
+`.siriusignore` during a scan at all — only `watch` ever loaded it.
+
+**It hid behind its own defaults.** The `.siriusignore` that `init` writes lists
+`node_modules/`, `vendor/`, `dist/`, `build/` — every one of which is already in
+the scanner's hardcoded `SKIP_DIRS`. So the file appeared to work exactly as
+advertised while any pattern a user added did nothing whatsoever. A feature that
+is correct on the values it ships with is the hardest kind to notice is broken:
+the only way to see it is to add a pattern of your own and count.
+
+Found by a flag audit that came up clean. All 81 CLI options are wired — the one
+apparent miss, `--no-markdown`, was my own script mis-deriving commander's
+negation form. So the search widened from flags to *config*, which is where
+`--ruleset` and `--diff` both lived, and `exclude:` in `sirius.yaml` turned out
+to change nothing. `.siriusignore` was the same hole from the other end.
+
+Matching follows what a `.gitignore` reader expects, because that is the file it
+looks like: a bare name or a trailing slash means the directory and everything
+under it, `*` and `**` mean what they mean everywhere else, and a pattern with
+no slash in it matches a filename at any depth — anchoring `*.min.js` to the
+root would silently keep every vendored bundle in the tree. `matchesGlob` in
+`store.ts` already existed for suppression path globs and is reused rather than
+reimplemented.
+
+One case is pinned because it is the easy mistake: `src` must not prune
+`src-generated`. Prefix matching on the string rather than on path segments
+would take both.
+
+---

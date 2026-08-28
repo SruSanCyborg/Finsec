@@ -12,6 +12,7 @@ import { join, relative, sep } from 'node:path';
 
 import { languageOf, parseFile } from './parse.js';
 import { runManifestRules, runRules } from './rules.js';
+import { matchesGlob } from './store.js';
 import { manifestKind, readManifest } from './manifests.js';
 import type { RawFinding, Rule } from './rules.js';
 import type { Finding, WsFrame } from '../domain.js';
@@ -38,7 +39,16 @@ const SKIP_DIRS = new Set([
 const MAX_FILE_BYTES = 512 * 1024;
 
 export interface ScanEngineOptions {
-  /** Suppression tokens are honored here, since only the engine sees the source. */
+  /**
+   * Paths to skip, from `.siriusignore` and the config's `exclude:`.
+   *
+   * This field existed and was passed in and was read by nothing. The default
+   * `.siriusignore` that `init` writes lists `node_modules/`, `vendor/`,
+   * `dist/` — all of which are in SKIP_DIRS already — so the file appeared to
+   * work while any pattern a user added themselves did nothing at all. A
+   * feature that looks correct on its own defaults is the hardest kind to
+   * notice is broken.
+   */
   ignorePatterns?: string[];
   maxFiles?: number;
   /** The rules to run. Defaults to the whole catalogue; see `rulesFor`. */
@@ -53,6 +63,27 @@ export interface ScanEngineOptions {
 export function collectFiles(root: string, options: ScanEngineOptions = {}): string[] {
   const found: string[] = [];
   const limit = options.maxFiles ?? 5000;
+  const ignored = options.ignorePatterns ?? [];
+
+  /**
+   * Whether a path is excluded, by the conventions a `.gitignore` reader would
+   * expect: a bare name or a trailing slash means the directory and everything
+   * under it, and `*` / `**` mean what they mean everywhere else.
+   */
+  const isIgnored = (relativePath: string): boolean => {
+    if (ignored.length === 0) return false;
+    const path = relativePath.split(sep).join('/');
+
+    return ignored.some((raw) => {
+      const pattern = raw.replace(/\/$/, '');
+      if (matchesGlob(pattern, path)) return true;
+      // `vendor` and `vendor/` both mean everything beneath it.
+      if (path.startsWith(`${pattern}/`)) return true;
+      // `*.min.js` should match at any depth, as it does in a .gitignore.
+      if (!pattern.includes('/') && matchesGlob(pattern, path.split('/').at(-1) ?? '')) return true;
+      return false;
+    });
+  };
 
   const walkDir = (dir: string) => {
     if (found.length >= limit) return;
@@ -74,14 +105,18 @@ export function collectFiles(root: string, options: ScanEngineOptions = {}): str
         continue;
       }
 
+      const relativePath = relative(root, path);
+
       if (stats.isDirectory()) {
         if (SKIP_DIRS.has(entry) || entry.startsWith('.')) continue;
+        if (isIgnored(relativePath)) continue;
         walkDir(path);
         continue;
       }
 
       if (!languageOf(path) && !(options.manifests && manifestKind(path))) continue;
       if (stats.size > MAX_FILE_BYTES) continue;
+      if (isIgnored(relativePath)) continue;
       found.push(path);
     }
   };

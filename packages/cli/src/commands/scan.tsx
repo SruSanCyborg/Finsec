@@ -20,7 +20,7 @@ import React from 'react';
 import { ApiClient } from '../api/client.js';
 import { CliError, NoTargetError } from '../api/errors.js';
 import { openStream, replayStream } from '../api/stream.js';
-import { loadConfig, findProjectRoot } from '../config/load.js';
+import { loadConfig, findProjectRoot, loadIgnorePatterns } from '../config/load.js';
 import { evaluateGate } from '../gate.js';
 import { ExitCode } from '../domain.js';
 import { buildJsonEnvelope } from '../render/json.js';
@@ -181,7 +181,10 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     }
 
     let source: AsyncIterable<WsFrame> = scanDirectory(target, {
-      ignorePatterns: config.exclude,
+      // `.siriusignore` as well as the config's `exclude:`. AGENTS.md documents
+      // the file as one of three suppression layers and `init` writes one, but
+      // nothing was reading it during a scan — only `watch` ever did.
+      ignorePatterns: [...config.exclude, ...loadIgnorePatterns(findProjectRoot(target)?.dir ?? target)],
       rules,
     });
 
