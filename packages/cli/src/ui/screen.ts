@@ -1,3 +1,5 @@
+import { writeSync } from 'node:fs';
+
 /**
  * Alternate screen buffer management.
  *
@@ -21,7 +23,15 @@ const SHOW_CURSOR = '\u001b[?25h';
 // takeover looks half-finished.
 const CLEAR = '\u001b[3J\u001b[2J\u001b[H';
 
+// Mouse reporting: 1000 sends button events (the wheel is buttons 64/65),
+// 1006 asks for the SGR encoding, which is the only one that survives past
+// column 95. Enabling this takes click-drag selection away from the terminal,
+// which is why it is opt-out-able and why the footer says how to select.
+const ENABLE_MOUSE = '\u001b[?1000h\u001b[?1006h';
+const DISABLE_MOUSE = '\u001b[?1006l\u001b[?1000l';
+
 let active = false;
+let mouseEnabled = false;
 let teardownRegistered = false;
 
 /**
@@ -31,6 +41,12 @@ let teardownRegistered = false;
  * notably `tmux -CC` integration mode — and because a user who wants their
  * native scrollback back should not have to argue with us for it.
  */
+/** Whether to capture mouse events. Off entirely when the alt screen is off. */
+export function mouseReportingAvailable(): boolean {
+  if (process.env.SIRIUS_NO_MOUSE === '1') return false;
+  return alternateScreenAvailable();
+}
+
 export function alternateScreenAvailable(): boolean {
   const env = process.env;
   if (env.SIRIUS_NO_ALT_SCREEN === '1') return false;
@@ -42,9 +58,21 @@ export function alternateScreenAvailable(): boolean {
 export function leaveAlternateScreen(): void {
   if (!active) return;
   active = false;
-  // Cursor first: if the write after it fails, at least the cursor is back.
-  process.stdout.write(SHOW_CURSOR);
-  process.stdout.write(LEAVE_ALT);
+  // Mouse first. A terminal left in reporting mode is worse than a terminal
+  // left on the alternate screen: every click prints escape gibberish and the
+  // user cannot select text until they reset.
+  // writeSync, not stdout.write: this runs from signal handlers and from
+  // 'exit', where process.exit() truncates a queued asynchronous write. A
+  // terminal left in mouse-reporting mode prints escape gibberish on every
+  // click and cannot select text, which is worse than never having had the
+  // feature.
+  const restore = (mouseEnabled ? DISABLE_MOUSE : '') + SHOW_CURSOR + LEAVE_ALT;
+  mouseEnabled = false;
+  try {
+    writeSync(1, restore);
+  } catch {
+    // stdout already closed; nothing left to restore it on.
+  }
 }
 
 export function enterAlternateScreen(): void {
@@ -52,6 +80,10 @@ export function enterAlternateScreen(): void {
   active = true;
   process.stdout.write(ENTER_ALT);
   process.stdout.write(CLEAR);
+  if (mouseReportingAvailable()) {
+    mouseEnabled = true;
+    process.stdout.write(ENABLE_MOUSE);
+  }
 
   if (teardownRegistered) return;
   teardownRegistered = true;

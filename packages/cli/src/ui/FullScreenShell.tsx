@@ -117,6 +117,13 @@ export function FullScreenShell({
     // Ctrl+U/D always reach us.
     const halfPage = Math.max(1, Math.floor(viewportHeight / 2));
 
+    // Mouse wheel. Ink hands the SGR sequence through as raw input with the
+    // escape stripped, so it is matched here rather than as a key: button 64 is
+    // wheel-up, 65 wheel-down. Three lines a notch matches most terminals'
+    // native feel.
+    const wheel = /\[<(6[45]);\d+;\d+[Mm]/.exec(input);
+    if (wheel) return scrollBy(wheel[1] === '64' ? -3 : 3);
+
     if (key.pageUp) return scrollBy(-halfPage);
     if (key.pageDown) return scrollBy(halfPage);
     if (key.ctrl && input === 'o') {

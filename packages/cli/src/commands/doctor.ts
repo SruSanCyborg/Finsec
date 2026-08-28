@@ -144,6 +144,24 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
       : { hint: 'Box drawing and ₹ will use ASCII fallbacks. Check LANG is a UTF-8 locale.' }),
   });
 
+  // Mouse capture is the most common friction point: while the shell has the
+  // mouse, the terminal's own click-drag selection stops working, and people
+  // reasonably read that as a broken terminal rather than a deliberate trade.
+  const { mouseReportingAvailable } = await import('../ui/screen.js');
+  checks.push(
+    mouseReportingAvailable()
+      ? {
+          status: 'ok',
+          label: 'mouse',
+          detail: 'wheel scrolls the shell',
+          hint:
+            process.env.TERM_PROGRAM === 'Apple_Terminal'
+              ? 'Hold Fn to select text natively, or set SIRIUS_NO_MOUSE=1.'
+              : 'Hold Shift (Option in iTerm2) to select text natively, or set SIRIUS_NO_MOUSE=1.',
+        }
+      : { status: 'ok', label: 'mouse', detail: 'not captured — native selection intact' },
+  );
+
   // Render the glyphs that carry the demo, so a font problem is visible now.
   const sample = `${glyphs.severity.critical} ${glyphs.elbow} ${glyphs.warning} ${glyphs.rupee}42,00,000 ${glyphs.barLeftCap}${glyphs.barFull.repeat(4)}${glyphs.barRightCap} ${glyphs.check}`;
   checks.push({ status: 'ok', label: 'glyphs', detail: sample });
