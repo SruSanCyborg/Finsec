@@ -149,10 +149,18 @@ export function FullScreenShell({
     }
     if (key.ctrl && input === 'u') return scrollBy(-halfPage);
     if (key.ctrl && input === 'd' && value !== '') return scrollBy(halfPage);
-    if (key.shift && key.upArrow) return scrollBy(-1);
-    if (key.shift && key.downArrow) return scrollBy(1);
+    if (key.shift && key.upArrow) return scrollBy(-halfPage);
+    if (key.shift && key.downArrow) return scrollBy(halfPage);
     if (key.ctrl && key.upArrow) return setScrollOffset(0);
     if (key.ctrl && key.downArrow) return setScrollOffset(null);
+    if (key.ctrl && input === 'g') return setScrollOffset(0);
+
+    // Plain arrows scroll. This is a full-screen viewer, and reading back is
+    // what people reach for first — Terminal.app also sends a bare arrow for
+    // Shift+Arrow, so binding scroll only to the modified form left no working
+    // key at all. History moves to ctrl-p / ctrl-n, the readline convention.
+    if (!busy && key.upArrow && !showPalette) return scrollBy(-3);
+    if (!busy && key.downArrow && !showPalette) return scrollBy(3);
 
     // Scrolled up with nothing typed, Escape means "put me back at the bottom"
     // — the thing you actually want after reading history.
@@ -213,7 +221,7 @@ export function FullScreenShell({
       return;
     }
 
-    if (key.upArrow) {
+    if (key.upArrow || (key.ctrl && input === 'p')) {
       if (showPalette && matches.length > 0) return setSelected((s) => Math.max(0, s - 1));
       if (history.length > 0) {
         const next = historyIndex === null ? history.length - 1 : Math.max(0, historyIndex - 1);
@@ -223,7 +231,7 @@ export function FullScreenShell({
       return;
     }
 
-    if (key.downArrow) {
+    if (key.downArrow || (key.ctrl && input === 'n')) {
       if (showPalette && matches.length > 0) return setSelected((s) => Math.min(matches.length - 1, s + 1));
       if (historyIndex !== null) {
         const next = historyIndex + 1;
@@ -313,9 +321,9 @@ export function FullScreenShell({
         <Text color={muted}>
           {following
             ? busy
-              ? ' ctrl-c cancel · shift-↑↓ scroll'
-              : ` / commands · ↑ history · shift-↑↓ scroll · ctrl-o ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
-            : ` ${hiddenBelow} line${hiddenBelow === 1 ? '' : 's'} below · shift-↑↓ scroll · esc back to bottom`}
+              ? ' ctrl-c cancel · ↑↓ scroll'
+              : ` / commands · ↑↓ scroll · ctrl-p history · ctrl-o ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
+            : ` ${hiddenBelow} below · ↑↓ scroll · ctrl-g top · esc back to bottom`}
         </Text>
       </Box>
     </Box>
