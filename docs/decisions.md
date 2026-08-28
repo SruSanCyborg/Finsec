@@ -627,6 +627,43 @@ would produce a document that reads as a claim about that company.
 
 ---
 
+## D-024 — Severity is blast radius, not pattern confidence
+
+A hardcoded `sk_test_` key was rated **critical** and priced at **₹40,000**. Both
+halves came from the same finding, and they disagreed by two orders of
+magnitude: the exposure model already weighted test mode at ×0.01 (`test mode
+moves no real money; flagged for hygiene`), while the rule gave every provider
+pattern the rule's own severity.
+
+Severity is what the gate acts on, so `--severity-threshold high` failed a build
+over a test fixture exactly as hard as over a credential that can move ₹42 lakh.
+That is not a strict linter, it is one that gets switched off in a week.
+
+Test-mode patterns are now marked, rated `medium`, and say so in the message
+("test mode, so no money moves, but it is still a credential in source"). It is
+still a finding — PCI-DSS 8.6.2 does not carve out an exception for the
+credentials that are inconvenient to rotate. `Razorpay key` was one pattern
+matching both `rzp_live_` and `rzp_test_`, so a test key there was priced as a
+money-mover; it is now two patterns with two weights.
+
+**The demo's `⚠ VERIFIED LIVE` badge follows from the same honesty.** The
+fixture's key is a non-functional placeholder, so validation asks Stripe, is
+told no, and reports `inactive` — the tool working, and the headline badge never
+appearing. `pnpm rehearse` now stages a real Stripe **test** key from
+`SIRIUS_DEMO_STRIPE_KEY` into the temp copy and turns validation on, then
+reports whether the badge fired. Three properties matter:
+
+- the key never touches the repo, only the staged copy that is deleted after;
+- an `sk_live_` value is **refused with exit 2** — the script sends whatever it
+  is given to Stripe, and that is not a thing to do with a key that moves money;
+- nothing is overstated, because test mode is already priced at a hundredth. The
+  badge means exactly what it says: this credential is accepted right now.
+
+A faked badge would have been easier and would have made every other number on
+the screen worth less.
+
+---
+
 ---
 
 ## Blocked on the `auto` branch

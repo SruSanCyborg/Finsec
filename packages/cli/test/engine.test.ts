@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { parseFile, languageOf } from '../src/engine/parse.js';
+import { parseFile, parseSource, languageOf } from '../src/engine/parse.js';
 import { runRules, shannonEntropy } from '../src/engine/rules.js';
 import { collectFiles, complianceScore, fingerprint, redact, scanDirectory } from '../src/engine/scanner.js';
 import { buildAttackPaths, extractCredential, extractSearchablePrefix } from '../src/engine/threat.js';
@@ -266,5 +266,59 @@ describe('threat stage', () => {
     const prefix = extractSearchablePrefix('KEY = "sk_live_51H8…"');
     expect(prefix).toBe('sk_live_51H8');
     expect(prefix).not.toContain('…');
+  });
+});
+
+/**
+ * Test-mode credentials, rated by what someone holding one can do.
+ *
+ * The exposure model already priced a Stripe test key at a hundredth of a live
+ * key — and the rule rated it `critical` anyway, so severity and money
+ * disagreed by two orders of magnitude on the same finding. Severity is what
+ * the gate acts on, so a test fixture failed a build exactly as hard as a
+ * credential that can move ₹42 lakh. That is how a linter gets switched off.
+ */
+describe('test-mode keys are still findings, at their real blast radius', () => {
+  const scan = async (source: string) => {
+    const parsed = await parseSource('keys.py', source);
+    return runRules(parsed as never).filter((finding) => finding.rule_id === 'SIR-SEC-001');
+  };
+
+  it('still reports a Stripe test key — it is a credential in source', async () => {
+    const found = await scan('KEY = "sk_test_51H8xR2eZvKYlo2Cexam"\n');
+    expect(found).toHaveLength(1);
+    expect(found[0]?.message).toContain('test');
+  });
+
+  it('rates it medium, not critical', async () => {
+    const found = await scan('KEY = "sk_test_51H8xR2eZvKYlo2Cexam"\n');
+    expect(found[0]?.severity).toBe('medium');
+  });
+
+  it('keeps a live key critical', async () => {
+    const found = await scan('KEY = "sk_live_51H8xR2eZvKYlo2Cexam"\n');
+    expect(found[0]?.severity).toBe('critical');
+  });
+
+  it('prices the two at least an order of magnitude apart', async () => {
+    const live = await scan('KEY = "sk_live_51H8xR2eZvKYlo2Cexam"\n');
+    const test = await scan('KEY = "sk_test_51H8xR2eZvKYlo2Cexam"\n');
+    const liveMoney = live[0]?.money_at_risk_inr ?? 0;
+    const testMoney = test[0]?.money_at_risk_inr ?? 1;
+    expect(liveMoney / testMoney).toBeGreaterThan(10);
+  });
+
+  it('tells a Razorpay live key from a test one', async () => {
+    // One pattern used to match both, so a test key was priced as a money-mover.
+    const live = await scan('KEY = "rzp_live_ABCdefGHI1234567"\n');
+    const test = await scan('KEY = "rzp_test_ABCdefGHI1234567"\n');
+    expect(live[0]?.severity).toBe('critical');
+    expect(test[0]?.severity).toBe('medium');
+    expect(live[0]?.money_at_risk_inr).toBeGreaterThan(test[0]?.money_at_risk_inr ?? 0);
+  });
+
+  it('says why in the message, rather than leaving a reader to infer it', async () => {
+    const found = await scan('KEY = "sk_test_51H8xR2eZvKYlo2Cexam"\n');
+    expect(found[0]?.message).toMatch(/no money moves/);
   });
 });

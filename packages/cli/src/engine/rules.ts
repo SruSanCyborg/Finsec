@@ -136,13 +136,22 @@ export function shannonEntropy(value: string): number {
 
 /**
  * Provider key shapes. Prefixes are far stronger evidence than entropy alone,
- * which is why these are matched first and rated critical.
+ * which is why these are matched first.
+ *
+ * `testMode` is the important column. A test-mode credential is a real finding
+ * — it is still a key in source, PCI-DSS 8.6.2 does not carve out an exception
+ * for the ones that are inconvenient to rotate — but it cannot move money, and
+ * the exposure model already prices it at a hundredth of a live key. Rating it
+ * `critical` anyway made severity and money disagree by two orders of magnitude
+ * on the same finding, and made a test fixture fail a build exactly as hard as
+ * a key that can move ₹42 lakh. That is how a linter gets switched off.
  */
-const PROVIDER_PATTERNS: Array<{ name: string; pattern: RegExp }> = [
+const PROVIDER_PATTERNS: Array<{ name: string; pattern: RegExp; testMode?: true }> = [
   { name: 'Stripe secret key', pattern: /\b(sk|rk)_live_[0-9a-zA-Z]{16,}/ },
-  { name: 'Stripe test key', pattern: /\bsk_test_[0-9a-zA-Z]{16,}/ },
+  { name: 'Stripe test key', pattern: /\b(sk|rk)_test_[0-9a-zA-Z]{16,}/, testMode: true },
   { name: 'AWS access key', pattern: /\bAKIA[0-9A-Z]{16}\b/ },
-  { name: 'Razorpay key', pattern: /\brzp_(live|test)_[0-9a-zA-Z]{10,}/ },
+  { name: 'Razorpay live key', pattern: /\brzp_live_[0-9a-zA-Z]{10,}/ },
+  { name: 'Razorpay test key', pattern: /\brzp_test_[0-9a-zA-Z]{10,}/, testMode: true },
   { name: 'Google API key', pattern: /\bAIza[0-9A-Za-z_-]{35}\b/ },
   { name: 'Slack token', pattern: /\bxox[baprs]-[0-9A-Za-z-]{10,}/ },
   { name: 'private key block', pattern: /-----BEGIN (RSA |EC )?PRIVATE KEY-----/ },
@@ -167,11 +176,23 @@ const hardcodedSecret: Rule = {
       for (const provider of PROVIDER_PATTERNS) {
         if (!provider.pattern.test(node.text)) continue;
         findings.push(
-          base(this, file, node, {
-            message: `Hardcoded ${provider.name}`,
-            validity: 'unknown',
-            tags: ['secret', 'credential'],
-          }, provider.name),
+          base(
+            this,
+            file,
+            node,
+            {
+              message: provider.testMode
+                ? `Hardcoded ${provider.name} — test mode, so no money moves, but it is still a credential in source`
+                : `Hardcoded ${provider.name}`,
+              // Severity tracks the blast radius, not the pattern's confidence.
+              // The match is just as certain either way; what differs is what
+              // someone holding the key can do with it.
+              ...(provider.testMode ? { severity: 'medium' as const } : {}),
+              validity: 'unknown',
+              tags: ['secret', 'credential', ...(provider.testMode ? ['test-mode'] : [])],
+            },
+            provider.name,
+          ),
         );
         break;
       }

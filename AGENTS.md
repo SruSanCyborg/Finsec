@@ -188,7 +188,17 @@ Everything is simulated and says so. There is no `--execute`.
 
 The CLI owns the two highest-value beats of the ~4-minute pitch:
 
-1. **(60s) `sirius scan .`** — streaming findings with a `⚠ VERIFIED LIVE` Stripe *test* key and `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
+1. **(60s) `sirius scan .`** — streaming findings with `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
+
+   The `⚠ VERIFIED LIVE` badge needs a credential the provider will actually
+   accept, and the fixture's key is a non-functional placeholder — so validation
+   correctly reports `inactive` and the badge never appears. Export a Stripe
+   **test** key as `SIRIUS_DEMO_STRIPE_KEY` and `pnpm rehearse` stages it into
+   the temp copy, turns on `--validate-secrets`, and reports whether the badge
+   fired. It refuses an `sk_live_` outright: the script sends whatever it is
+   given to Stripe. Nothing is overstated by using test mode — the exposure
+   model already prices a test key at a hundredth of a live one (`medium`,
+   ~₹40,000), so the badge means what it says: *this credential works right now*.
 2. **(45s) `sirius fix SIR-SEC-001`** — the Cerebus provenance panel (quarantined model → diff builder → verifier `✓ PASS`), then accept the diff. That panel *is* the security argument made visible.
 
 A third beat now exists on the revenue side, rehearsed the same way
