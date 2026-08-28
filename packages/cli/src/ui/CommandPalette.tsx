@@ -43,7 +43,7 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'rules', summary: 'List, show, or validate rules', usage: '/rules [list|show|validate] [target]' },
   {
     name: 'revenue',
-    summary: 'Find, price and recover revenue at risk',
+    summary: 'Find, price and recover revenue at risk — `watch` runs until Ctrl-C',
     usage: '/revenue [gen|detect|eval|recover|explain|sweep|watch|audit] [batch]',
     keywords: [
       'gen',

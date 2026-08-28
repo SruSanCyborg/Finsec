@@ -94,6 +94,7 @@ pnpm rehearse                  # the scan/fix beat, in a real pty
 pnpm rehearse:revenue          # the revenue beat, with per-beat timings
 pnpm shell:check               # every slash command, dispatched by the shell
 pnpm artifact                  # regenerate the published page from a live run
+pnpm artifact:check            # fail if the published figures no longer match
 ```
 
 Against the live mock:

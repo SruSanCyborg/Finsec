@@ -1,10 +1,10 @@
 {
-  "generated_at": "2026-08-24T15:12:57.201Z",
+  "generated_at": "2026-08-25T08:32:19.173Z",
   "seeds": {
     "batch": "sirius-2026",
     "books": "sirius-books"
   },
-  "tests": 533,
+  "tests": 546,
   "batch": {
     "records": 333,
     "capacity": 67,

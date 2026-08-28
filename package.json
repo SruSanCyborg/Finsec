@@ -22,7 +22,8 @@
     "rehearse": "bash scripts/rehearse.sh",
     "rehearse:revenue": "bash scripts/rehearse-revenue.sh",
     "shell:check": "bash scripts/shell-check.sh",
-    "artifact": "node scripts/artifact/collect.mjs && node scripts/artifact/build.mjs"
+    "artifact": "node scripts/artifact/collect.mjs && node scripts/artifact/build.mjs",
+    "artifact:check": "node scripts/artifact/check.mjs"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",

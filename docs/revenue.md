@@ -346,6 +346,13 @@ from it. Nothing on the page is typed except the prose, and where the prose
 makes a numeric claim it interpolates the same figure the table does, so the two
 cannot drift.
 
+`pnpm artifact:check` re-collects and diffs against the committed
+`metrics.json`, naming every figure that moved and exiting 1 if any did.
+Generating the page stops it being *typed* wrong; it does not stop it going
+stale, and a model change with no regeneration publishes figures describing a
+build nobody can run. It caught one on its first run — the page claimed 533
+tests against a build with 546.
+
 It exists because the first version was transcribed from a terminal and went
 stale twice in a day — once when the risk-block hold changed the baselines, once
 when the calibration wording changed. A number that has to be copied is a number
