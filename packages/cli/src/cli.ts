@@ -175,6 +175,27 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('revenue')
+    .description('Detect, diagnose and price revenue at risk in a batch of records')
+    .argument('[subcommand]', 'gen | detect | eval', 'detect')
+    .argument('[batch]', 'batch directory', 'batch')
+    .option('--seed <value>', 'seed for `gen` — the same seed is the same batch')
+    .option('--payments <n>', 'payments to generate', (v) => Number.parseInt(v, 10))
+    .option('--checkouts <n>', 'checkouts to generate', (v) => Number.parseInt(v, 10))
+    .option('--invoices <n>', 'invoices to generate', (v) => Number.parseInt(v, 10))
+    .option('--split <name>', 'test | train | all (default: test — the held-out half)')
+    .option('--threshold <n>', 'override the score floor', (v) => Number.parseInt(v, 10))
+    .option('--capacity <n>', 'interventions available this run', (v) => Number.parseInt(v, 10))
+    .option('--limit <n>', 'rows to print', (v) => Number.parseInt(v, 10))
+    .option('--all', 'include records the agent would leave alone')
+    .option('--model <file>', 'score with a model fitted elsewhere')
+    .option('--json', 'machine-readable output')
+    .action(async (subcommand: string, batch: string, options: Record<string, unknown>, command: Command) => {
+      const { runRevenue } = await import('./commands/revenue.js');
+      await runRevenue(subcommand, batch, options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('shell')
     .description('Open the interactive shell (the default when run with no arguments)')
     .action(async (options: Record<string, unknown>, command: Command) => {
