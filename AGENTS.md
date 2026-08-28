@@ -135,6 +135,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `rules list\|show\|validate\|test` | Done, from the compiled catalogue. `validate` checks schema, vocabularies and clause numbers offline; `test` runs a YAML rule against an annotated fixture |
 | `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` — including the totals |
 | `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2. `--format pdf` writes the page itself, no renderer |
+| `ledger` | Done — RFC 6962 Merkle log of every report. `--verify` proves inclusion; `ledger verify` proves the history only ever appended |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
 | `triage` | Done — inline in the shell, one keypress per finding, revisable; or full-screen standalone. Decisions to `.sirius/`, or PATCHed to the API |
 | `doctor` | Done — reports against the mode the scan will actually run in, self-tests both engines, and fails on a signing key that is not 0600 |

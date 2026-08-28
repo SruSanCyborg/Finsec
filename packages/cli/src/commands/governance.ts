@@ -405,6 +405,17 @@ async function writeLocalReport(
   const attestation = attest(payload);
   const document = { ...payload, attestation };
 
+  // Recorded before the file is written, so a report that exists is a report
+  // that is in the log. The digest is the identity, so re-running `report` over
+  // an unchanged scan appends nothing — the log counts distinct reports, not
+  // invocations of the command.
+  const { record } = await import('../engine/ledger.js');
+  const ledger = record(root, {
+    digest: attestation.payload_sha256,
+    scan_id: cache.scan_id,
+    findings: cache.findings.length,
+  });
+
   const extension = format === 'pdf' ? 'pdf' : 'json';
   const target = flags.output
     ? isAbsolute(flags.output)
@@ -433,6 +444,11 @@ async function writeLocalReport(
 
   process.stdout.write(`Report written to ${target}\n`);
   process.stdout.write(`Signed ed25519 · key ${attestation.key_id} · ${attestation.signed_at}\n`);
+  process.stdout.write(
+    `Ledger entry ${ledger.index + 1} of ${ledger.ledger.entries.length}` +
+      `${ledger.added ? '' : ' (already recorded — same report)'}` +
+      ` · root ${ledger.ledger.root.slice(0, 16)}…\n`,
+  );
   process.stdout.write(`Verify with:  sirius report --verify ${target}\n`);
 }
 
@@ -471,6 +487,53 @@ async function verifyReport(path: string): Promise<void> {
     `        the report is unmodified since signing. Pin key ${result.keyId} to\n` +
       `        also prove who signed it — the key travels inside the file.\n`,
   );
+
+  // The second question, which the signature cannot answer: is this the report
+  // that was recorded, or one signed later in its place? That is what the log
+  // is for, and it is checked here rather than by a separate command nobody
+  // would think to run.
+  const digest = (document as { attestation?: { payload_sha256?: string } }).attestation?.payload_sha256;
+  const { loadLedger, evidenceFor, checkInclusion } = await import('../engine/ledger.js');
+  const project = findProjectRoot(process.cwd())?.dir ?? process.cwd();
+
+  let ledger;
+  try {
+    ledger = loadLedger(project);
+  } catch (error) {
+    process.stdout.write(`        ledger: ${error instanceof Error ? error.message : String(error)}\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!digest || ledger.entries.length === 0) return;
+
+  const evidence = evidenceFor(ledger, digest);
+  if (!evidence) {
+    process.stdout.write(
+      `        NOT IN THE LEDGER — this report is signed but was never recorded,\n` +
+        `        or the entry has been removed. ${ledger.entries.length} entr` +
+        `${ledger.entries.length === 1 ? 'y' : 'ies'} in ${ledgerPathOf(project)}.\n`,
+    );
+    process.exitCode = 1;
+    return;
+  }
+
+  if (!checkInclusion(digest, evidence)) {
+    process.stdout.write(`        LEDGER PROOF FAILED — the entry does not hash into the recorded root.\n`);
+    process.exitCode = 1;
+    return;
+  }
+
+  process.stdout.write(
+    `        in the ledger at entry ${evidence.index + 1} of ${evidence.size}, proved by ` +
+      `${evidence.proof.length} hash${evidence.proof.length === 1 ? '' : 'es'}\n` +
+      `        against root ${evidence.root.slice(0, 16)}…\n`,
+  );
+}
+
+/** Named separately so the message above stays one readable line. */
+function ledgerPathOf(root: string): string {
+  return `${root}/.sirius/ledger.json`;
 }
 
 // ---- local baselines and suppressions --------------------------------------
@@ -569,4 +632,77 @@ async function localSuppress(
   );
   process.stdout.write(`  ${suppressionsPath(root)}\n`);
   process.stdout.write('Commit this file: an exception to a security finding belongs in review.\n');
+}
+
+
+// ---- the transparency log ---------------------------------------------------
+
+/**
+ * `sirius ledger [show|verify]`.
+ *
+ * `show` prints the log; `verify` proves it only ever appended. The second is
+ * the one worth running: recomputing the root proves the file is internally
+ * consistent *now*, and a log rebuilt from scratch around an altered entry
+ * passes that. Walking every prefix is what catches a rewritten history.
+ */
+export async function runLedger(
+  subcommand: string | undefined,
+  flags: { json?: boolean; target?: string },
+  globals: GlobalFlags,
+): Promise<void> {
+  void globals;
+  const root = findProjectRoot(process.cwd())?.dir ?? process.cwd();
+  const { loadLedger, checkLedger, ledgerPath } = await import('../engine/ledger.js');
+
+  let ledger;
+  try {
+    ledger = loadLedger(root);
+  } catch (error) {
+    throw new CliError(error instanceof Error ? error.message : String(error));
+  }
+
+  if (flags.json) {
+    const verdict = checkLedger(ledger);
+    process.stdout.write(JSON.stringify({ ...ledger, verified: verdict.ok, detail: verdict.detail }, null, 2) + '\n');
+    if (!verdict.ok) process.exitCode = 1;
+    return;
+  }
+
+  if (ledger.entries.length === 0) {
+    process.stdout.write(
+      `No reports recorded yet.\n` +
+        `Every \`sirius report\` appends one to ${ledgerPath(root)}.\n`,
+    );
+    return;
+  }
+
+  if ((subcommand ?? 'show') === 'show') {
+    process.stdout.write(`\n  ${ledger.entries.length} report(s) · root ${ledger.root}\n\n`);
+    for (const [index, entry] of ledger.entries.entries()) {
+      process.stdout.write(
+        `  ${String(index + 1).padStart(3)}  ${entry.recorded_at}  ${entry.scan_id.padEnd(22)}` +
+          `${String(entry.findings).padStart(4)} finding(s)  ${entry.digest.slice(0, 16)}…\n`,
+      );
+    }
+    process.stdout.write(`\n  Prove the history with:  sirius ledger verify\n\n`);
+    return;
+  }
+
+  if (subcommand === 'verify') {
+    const verdict = checkLedger(ledger);
+    process.stdout.write(
+      verdict.ok
+        ? `\n  OK      ${verdict.detail}\n` +
+            `          root ${ledger.root}\n\n` +
+            `  Proved: every earlier version of this log is a prefix of the one on disk,\n` +
+            `  so no entry was rewritten or removed. Not proved: that somebody who can\n` +
+            `  edit the file did not rebuild the whole log — for that the root has to be\n` +
+            `  published somewhere they do not control.\n\n`
+        : `\n  FAILED  ${verdict.detail}\n\n`,
+    );
+    if (!verdict.ok) process.exitCode = 1;
+    return;
+  }
+
+  throw new CliError(`Unknown subcommand "${subcommand}".`, { hint: 'Expected show or verify.' });
 }

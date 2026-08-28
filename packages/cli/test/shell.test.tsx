@@ -186,9 +186,19 @@ describe('the palette finds subcommands', () => {
   });
 
   it('finds reconciliation by the words the job is called', () => {
-    for (const query of ['/settlement', '/utr', '/close', '/ledger']) {
+    for (const query of ['/settlement', '/utr', '/close']) {
       expect(names(query), query).toContain('reconcile');
     }
+  });
+
+  it('gives a real command its own name back, even one another command claims', () => {
+    // `/ledger` used to be a keyword that found `reconcile`, because matching
+    // the ledger against the bank is what reconciliation is. It is now also a
+    // command in its own right — the transparency log — and an exact name wins
+    // outright, which is the same rule `/explain` relies on below. `reconcile`
+    // keeps the keyword for the fuzzy path.
+    expect(names('/ledger')).toEqual(['ledger']);
+    expect(SHELL_COMMANDS.find((c) => c.name === 'reconcile')?.keywords).toContain('ledger');
   });
 
   it('lets an exact name win outright', () => {

@@ -1453,3 +1453,50 @@ nothing would select the line again. The verifier says that instead of claiming
 a test it is not running.
 
 ---
+## D-044 — A signature is per-document; the ledger is about the history
+
+From the design report's Part C, which calls the Merkle scan ledger the killer
+feature. The gap it closes is real and easy to miss: an ed25519 signature proves
+a report has not changed since it was signed, and says nothing about whether a
+*different* report was signed in its place, or whether an inconvenient one was
+deleted. Signatures answer a question about one document. A transparency log
+answers one about the sequence.
+
+Every `sirius report` appends its canonical digest as a leaf; the root sits
+beside it in `.sirius/ledger.json`. RFC 6962's construction, the one behind
+Certificate Transparency and Rekor, including the `0x00`/`0x01` domain
+separation — without those a leaf hash and an interior node hash come from the
+same space and a leaf can be forged to collide with a subtree, which is the
+classic second-preimage bug in a naive Merkle implementation.
+
+**Two layers, catching different things.** `report --verify` proves a report is
+in the log, in log(n) hashes, holding no other report. `ledger verify` proves
+the log only ever appended, by checking every prefix against the whole. The
+second is the one nobody thinks to ask for and the one that catches a rewritten
+history.
+
+**The limit is stated, not discovered.** Somebody who can edit the file can
+delete an entry and recompute the root, and `ledger verify` will pass — a log
+rebuilt from scratch is internally perfect. What catches that is the other
+layer: the deleted report can no longer prove it was ever there, and
+`report --verify` says `NOT IN THE LEDGER` and exits 1. Past that, the root has
+to be published somewhere the writer does not control, which is what a witness
+or a hosted log is for. Both behaviours are tested, including the rebuild.
+
+**Recorded by digest, not by invocation.** Running `report` twice over an
+unchanged scan appends nothing, or the log's size would count command
+invocations rather than distinct reports.
+
+**A corrupt ledger is not an empty one.** Loading refuses rather than starting a
+fresh log over the top, because quietly beginning again destroys exactly the
+history the file exists to keep, at the moment somebody most needs it.
+
+The proofs are tested against brute force rather than against themselves —
+every leaf of every tree up to 33, every pair of sizes up to 25 — because an
+inclusion check that walks the tree it was handed returns true for anything, and
+an off-by-one in consistency passes every happy path while rejecting nothing.
+That is how the 5 → 6 case was caught: the first verifier collapsed the CT
+algorithm's two loops into one and dropped the "left child with a right sibling
+in the new tree only" branch, which exists precisely where the two trees differ.
+
+---

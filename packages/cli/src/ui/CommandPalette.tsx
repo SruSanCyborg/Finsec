@@ -167,6 +167,16 @@ export const SHELL_COMMANDS: ShellCommand[] = [
       { name: 'show', summary: 'what the baseline currently holds', kind: 'subcommand' },
     ],
   },
+  {
+    name: 'ledger',
+    summary: 'The append-only log of reports, and proof it was never rewritten',
+    usage: '/ledger [show|verify]',
+    args: [
+      { name: 'show', summary: 'every report recorded, and the current root', kind: 'subcommand' },
+      { name: 'verify', summary: 'prove no entry was rewritten or removed', kind: 'subcommand' },
+    ],
+    keywords: ['merkle', 'transparency', 'history', 'proof', 'root'],
+  },
   { name: 'badge', summary: 'Print the compliance badge URL' },
   { name: 'init', summary: 'Scaffold sirius.yaml and .siriusignore' },
   { name: 'login', summary: 'Store an API key', usage: '/login --api-key <key>' },

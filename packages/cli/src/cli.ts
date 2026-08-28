@@ -166,6 +166,16 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('ledger')
+    .description('The append-only log of reports, and proof it was never rewritten')
+    .argument('[subcommand]', 'show | verify', 'show')
+    .option('--json', 'machine-readable output')
+    .action(async (sub: string, options: Record<string, unknown>, command: Command) => {
+      const { runLedger } = await import('./commands/governance.js');
+      await runLedger(sub, options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('badge')
     .description('Write the compliance badge, or print the hosted URL')
     .option('--no-markdown', 'print only the path or URL')
