@@ -9,6 +9,11 @@ shaped like a Stripe secret key so the detector's regex and entropy checks fire,
 but it is not a key and never was. Live secret validation in the demo uses a
 Stripe **test** key, per the PRD's risk register.
 
+**This fixture is the demo, not the coverage.** It plants three findings and the
+engine reports six; the other seven rules are demonstrated in
+[`../rule-gallery`](../rule-gallery), which exists so this one's totals never
+have to move to prove a rule works.
+
 ## Planted findings
 
 Line numbers are load-bearing — `contract/fixtures/demo.jsonl` references them,

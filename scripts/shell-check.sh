@@ -130,7 +130,9 @@ check "/triage handover"         "handed the terminal to /triage"
 check "/triage came back"        "/triage finished"
 check "/watch handover"          "handed the terminal to /watch"
 check "/watch came back"         "/watch finished"
-check "shell alive afterwards"   "12 rules · local engine"
+# Not "12 rules": the catalogue grows, and a marker pinned to its size fails the
+# day a rule is added, reporting a broken handover that is nothing of the kind.
+check "shell alive afterwards"   "rules · local engine"
 
 echo
 # A command that fails prints `error:` into the transcript. Any at all is worth

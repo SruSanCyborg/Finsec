@@ -119,6 +119,10 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // network, and a replay carries its own recorded timing.
   let interactivePacing = false;
   let policy: import('../engine/policy.js').PolicyOutcome | undefined;
+  // How many rules this scan ran, for the banner. Only the local engine knows;
+  // a hosted scan or a replay is not ours to count, and the banner omits the
+  // `(N rules)` clause rather than printing a number it made up.
+  let ruleCount: number | undefined;
 
   // The local engine is the default. It needs no backend, and it is what makes
   // `sirius scan .` an actual scanner rather than a client for one — the Core
@@ -155,6 +159,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     // scan and getting the full catalogue anyway is a quiet way to mistrust the
     // config file.
     const { rulesFor } = await import('../engine/catalog.js');
+    const { RULES } = await import('../engine/rules.js');
     let rules;
     try {
       rules = rulesFor(config.rulesets);
@@ -164,8 +169,15 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       });
     }
 
-    if (rules.length < 12 && !machineMode) {
-      process.stderr.write(`note: ${config.rulesets.join(', ')} — ${rules.length} of 12 rules\n`);
+    ruleCount = rules.length;
+
+    // Both halves counted, not written down. The catalogue grew to 13 while this
+    // read `rules.length < 12`, so selecting twelve of thirteen rules narrowed
+    // the scan and said nothing — the failure mode of every number kept by hand.
+    if (rules.length < RULES.length && !machineMode) {
+      process.stderr.write(
+        `note: ${config.rulesets.join(', ')} — ${rules.length} of ${RULES.length} rules\n`,
+      );
     }
 
     let source: AsyncIterable<WsFrame> = scanDirectory(target, {
@@ -238,7 +250,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // ---- consume
 
   const outcome = capabilities.tty
-    ? await renderInteractive({ frames, config, glyphs, capabilities, computeGate, flags })
+    ? await renderInteractive({ frames, config, glyphs, capabilities, computeGate, flags, ruleCount })
     : await collect(frames, {
         stream: process.env.SIRIUS_STREAM_PLAIN === '1',
         render: lineRenderOptions(capabilities),
@@ -462,8 +474,9 @@ function renderInteractive(args: {
   capabilities: ReturnType<typeof detectCapabilities>;
   computeGate: (outcome: ScanOutcome) => ReturnType<typeof evaluateGate>;
   flags: ScanFlags;
+  ruleCount: number | undefined;
 }): Promise<ScanOutcome> {
-  const { frames, config, glyphs, capabilities, computeGate, flags } = args;
+  const { frames, config, glyphs, capabilities, computeGate, flags, ruleCount } = args;
 
   return new Promise<ScanOutcome>((resolvePromise, rejectPromise) => {
     let settled = false;
@@ -474,6 +487,7 @@ function renderInteractive(args: {
         version={VERSION}
         project={config.projectId ? shortId(config.projectId) : undefined}
         ruleset={config.rulesets[0]}
+        ruleCount={ruleCount}
         glyphs={glyphs}
         capabilities={capabilities}
         maxFindings={flags.maxFindings}

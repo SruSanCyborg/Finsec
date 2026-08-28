@@ -39,6 +39,8 @@ export interface ScanViewProps {
   version: string;
   project: string | undefined;
   ruleset: string | undefined;
+  /** How many rules this scan actually ran — the banner's `(N rules)`. */
+  ruleCount: number | undefined;
   glyphs: Glyphs;
   capabilities: Capabilities;
   /** Cards rendered before the rest are folded into a count. */
@@ -52,6 +54,7 @@ export function ScanView({
   version,
   project,
   ruleset,
+  ruleCount,
   glyphs,
   capabilities,
   maxFindings,
@@ -207,7 +210,7 @@ export function ScanView({
               version={version}
               project={project}
               ruleset={ruleset}
-              ruleCount={undefined}
+              ruleCount={ruleCount}
               glyphs={glyphs}
               capabilities={capabilities}
             />

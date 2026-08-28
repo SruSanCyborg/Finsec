@@ -742,3 +742,94 @@ Not ours to decide. Tracked here so no one re-derives them.
 5. **Device-flow endpoints.** `login` is specified as "OAuth device flow" but no `/auth/device/code` or `/auth/device/token` endpoints exist in the API table. Also unstated: the `config.toml` schema, the env var name for an API key in CI, and profile support.
 6. **`rules test`** has no backing endpoint and would require either a local engine (violating the golden rule) or a new endpoint.
 7. **Pagination convention** for `GET /scans/{id}/results` and `GET /scans` — cursor vs offset, param names, envelope shape — and how paginated results reconcile with findings already delivered over WebSocket.
+## D-027 — Supply chain reads manifests, and says what it actually saw
+
+`SIR-SEC-060` was in the PRD's rule table and in `demo.jsonl` and in no build.
+`--replay` streamed a supply-chain finding a live scan could not produce.
+
+**It is the one rule that does not walk an AST.** Everything else in the engine
+is tree-sitter, because that is the whole claim to a low false-positive rate.
+`requirements.txt` is a line format and `package.json` is data; neither has a
+tree worth walking, so supply chain gets its own narrow path rather than a fake
+one. Secrets already make this concession, for the same reason — a credential is
+a lexical fact, and so is a dependency declaration.
+
+**It reports what a manifest states about itself, not what the rule is called.**
+The PRD's name is "dependency with install script/obfuscation", and knowing
+whether a *dependency* runs an install script means fetching that package's
+manifest from the registry. A scan makes no network calls. So the rule names the
+three facts it can actually establish offline — an install hook in the project's
+own manifest, a dependency resolved from outside the registry, and a floating
+range — and each finding says which one it saw.
+
+**A floating range is only a finding when nothing pins it.** `^4.17.21` under a
+lockfile resolves to one version with an integrity hash; the same line without
+one resolves to whatever the registry serves that morning. Without this gate the
+rule flags every caret in every `package.json` it ever sees, which is not a
+detector, it is a migration.
+
+The lockfile is searched for *up* the tree, stopping at `.git`. A pnpm or yarn
+workspace keeps one lockfile at the root and a `package.json` per package, so
+checking only the sibling directory calls every package in every monorepo
+unlocked. pip records integrity inline, so `--hash=` is that ecosystem's lock.
+
+**`package.json` is parsed as JSON, not scanned as lines.** The line-oriented
+version reported `"sirius": "./dist/cli.js"` under `bin` as a dependency
+resolved outside the registry, on this repository. A `"key": "value"` pair looks
+identical everywhere in a JSON file and only its position says what it means. A
+manifest that will not parse produces no findings at all: a broken
+`package.json` is the build's problem, and guessing at one from half a file is
+how a scanner loses trust.
+
+**Severity is per finding, not per rule.** An install hook and a non-registry
+dependency are `high`; a floating pin is `low`, priced through the exposure
+model at `local` reachability rather than by writing a smaller number inline.
+The demo replay shows `SIR-SEC-060` as `low`, the PRD's table says `high`, and
+both are right about different instances of it.
+
+---
+
+## D-028 — Every rule gets one example, on disk
+
+Six rules had no example anywhere. Nothing in any fixture tripped
+`SIR-SEC-002`, `011`, `021`, `031`, `040` or `041`, so they shipped, were unit
+tested against hand-written snippets, and were never once run end to end against
+a file. That is the same shape as the seven features listed Done while being
+unreachable, and it hid for the same reason: a rule that fires in the test
+asserting it looks exactly like a rule that works.
+
+`contract/fixtures/rule-gallery/` plants one of each. **It is a second fixture,
+not an extension of the demo one.** `chaos-repo` has three planted findings at
+line numbers that `demo.jsonl`, `smoke.mjs` and the handoff doc all reference,
+and a footer figure of ₹89,30,000 the demo narration is built around. Adding six
+findings to it to improve coverage would have renegotiated a beat that has to
+survive a stage, in exchange for something a separate directory gives for free.
+
+**Every planted flaw sits beside a correct counterpart doing the same job** —
+bound parameters next to formatted SQL, a verified JWT next to an unverified
+one, a truncated PAN next to a full one. The test asserts the exact lines, so a
+rule that starts flagging the correct version fails the build. A fixture of pure
+positives can only ever measure recall.
+
+Pointed at the engine once, it found three defects:
+
+- **`SIR-SEC-021` matched `verify=False` only.** PyJWT's documented way to skip
+  verification is `options={"verify_signature": False}` — a dict key, so the
+  name is followed by a quote before the colon. The rule missed the spelling
+  almost every real codebase uses, which is to say it missed the vulnerability.
+- **`SIR-SEC-030` flagged `card["number"][-4:]`.** PCI-DSS 3.3.1 explicitly
+  permits the first six and last four digits. Telling a team doing exactly the
+  right thing that it is leaking a PAN is the false positive that gets a linter
+  switched off, and it was sitting in the fixture as a deliberate true negative.
+- **`SIR-SEC-031` counted one flaw twice.** A class-body assignment matched both
+  as the assignment and as the statement wrapping it: two findings sharing one
+  fingerprint, doubled in the counts and in the money, and collapsing back to a
+  single row in every baseline. Findings are now deduplicated by fingerprint in
+  the scanner, because that is what a fingerprint means.
+
+**A test now fails if the replay claims a rule the engine does not ship.** That
+is the check that would have caught `SIR-SEC-060` on the day it appeared. The
+reverse is not asserted: the replay describes a sixteen-file fictional
+repository and need not exhaust the catalogue.
+
+---

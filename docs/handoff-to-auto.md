@@ -22,7 +22,7 @@ Full rationale for each item is in [`decisions.md`](decisions.md).
 
 **Unchanged:** the numbering scheme (blocks of ten by category), and every compliance clause. PCI-DSS 8.6.2, 6.2.4, 8.4.2, 3.4.1, 3.5.1, RBI DPSC, DPDP §8, GDPR Art.5 are external standards and did not move. `docs/original-prd.md` still says `finsec-lint` throughout — it is the source research artifact, deliberately left as received.
 
-**The CLI is no longer a pure client.** The golden rule said no surface may hold a scan engine. The CLI now has one: tree-sitter AST analysis, 12 compiled rules, fingerprints, a money model, live secret validation, signing, and a full local recovery surface. It runs `scan`, `fix`, `triage`, `baseline`, `suppress`, `report`, `rules list|show|validate`, and `badge` with **no backend at all**.
+**The CLI is no longer a pure client.** The golden rule said no surface may hold a scan engine. The CLI now has one: tree-sitter AST analysis, 13 compiled rules, fingerprints, a money model, live secret validation, signing, and a full local recovery surface. It runs `scan`, `fix`, `triage`, `baseline`, `suppress`, `report`, `rules list|show|validate`, and `badge` with **no backend at all**.
 
 This was not a land grab. It was forced: seven features were listed Done while being unreachable in the configuration everything defaults to, because they were written as API clients against a server nobody was running. The rule still governs `web` and `gui`, which have no engine and should not grow one. See D-016 and D-020.
 
@@ -51,6 +51,13 @@ Scaled by file count so a large clean codebase is not punished for the same abso
 `packages/cli/src/engine/scanner.ts › fingerprint()`
 
 `sha256(ruleId ␀ path ␀ normalisedSnippet)`, truncated to 32 hex characters, where the snippet is whitespace-collapsed and the line number is deliberately absent so reformatting does not invalidate a baseline. NUL is the separator because it is the one byte that cannot occur in a rule id or a path.
+
+**Two findings with the same fingerprint are one finding, and the scanner now
+enforces that.** `SIR-SEC-031` matched a class-body assignment twice — once as
+the assignment, once as the statement wrapping it — and the duplicate counted
+twice in the totals and twice in the money while collapsing to a single row in
+every baseline. If your worker can emit two findings that fingerprint alike, it
+has the same bug, and it shows up as totals that disagree with the list.
 
 This is the one where a silent disagreement is worst: baselines, dedup and suppression matching all key on it, and a mismatch does not error — it just stops matching, and findings a team accepted come back as new.
 
@@ -135,7 +142,7 @@ Then:
 sirius scan contract/fixtures/chaos-repo
 ```
 
-The chaos repo has planted findings at known line numbers (`src/config.py:14`, `src/ledger.py:88`, `src/webhooks.py:52`). `contract/mock/smoke.mjs` asserts the totals the demo depends on: 2 critical / 5 high / 9 medium / 3 low, ₹51,20,000, score 72.5, exit 1. If your engine produces those against the chaos repo, the CLI renders the demo correctly.
+The chaos repo has planted findings at known line numbers (`src/config.py:14`, `src/ledger.py:88`, `src/webhooks.py:52`). A second fixture, `contract/fixtures/rule-gallery/`, plants **one example of every rule**, each beside a correct counterpart doing the same job — the fastest way to check your engine agrees with this one about what is and is not a finding. `contract/mock/smoke.mjs` asserts the totals the demo depends on: 2 critical / 5 high / 9 medium / 3 low, ₹51,20,000, score 72.5, exit 1. If your engine produces those against the chaos repo, the CLI renders the demo correctly.
 
 **One caution, and it needs a ruling.** The local engine produces different numbers for that same repo:
 
@@ -144,6 +151,6 @@ The chaos repo has planted findings at known line numbers (`src/config.py:14`, `
 | mock / PRD | 2 | 5 | 9 | 3 | ₹51,20,000 | 72.5 |
 | local engine | 2 | 2 | 2 | — | ₹89,30,000 | 60 |
 
-Neither is wrong: the local engine ships 12 compiled rules against the PRD's 13 YAML ones, and prices exposure with the multipliers in §2.3 rather than a flat table. But it does mean **"the demo totals" now depend on which engine ran**, and two numbers for one repository is one too many.
+Neither is wrong: the two describe different repositories. `demo.jsonl` is a sixteen-file fictional codebase and the chaos repo is three real files, so they were never two readings of one scan. The local engine also prices exposure with the multipliers in §2.3 rather than a flat table. But it does mean **"the demo totals" now depend on which engine ran**, and two numbers for one repository is one too many.
 
 Say which set is canonical. The CLI will report the other as a cross-check, the way it already does for `exit_code`.

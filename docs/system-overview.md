@@ -204,7 +204,7 @@ rule:
 
 ### Rule catalog
 
-The PRD's heading says "12 rules" but the table has 13 rows; the CLI banner advertises `p/fintech-core (52 rules)`. The success metric only requires ≥8.
+The PRD's heading says "12 rules" but the table has 13 rows; the CLI banner advertises `p/fintech-core (52 rules)`. The success metric only requires ≥8. **Resolved:** the local engine implements all 13 — the thirteenth, `SIR-SEC-060`, was the row the heading undercounted, and it was missing from the engine while appearing in the demo replay. See D-027.
 
 | Rule ID | Category | Catches | Sev | PCI-DSS v4.0 | Other | Fix action |
 |---|---|---|---|---|---|---|

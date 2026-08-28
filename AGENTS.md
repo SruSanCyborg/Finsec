@@ -62,6 +62,13 @@ What this means in practice:
 
 **Rule IDs** are `SIR-SEC-NNN`, numbered in blocks of ten by category: `00x` secrets, `01x` injection, `02x` auth, `03x` pii, `04x` crypto, `05x` ratelimit, `06x` supplychain.
 
+Every rule ships with **one planted example on disk**, in
+`contract/fixtures/rule-gallery/`, each beside a correct counterpart doing the
+same job. Six rules once had none — they worked in the test that asserted them
+and had never been run against a file. The gallery found three real defects the
+first time it was pointed at the engine. `chaos-repo` stays the demo fixture and
+its totals do not move; coverage goes in the gallery. See D-028.
+
 **Rulesets** (D-022, decided here — the PRD names them but never defines membership): `p/fintech-core` is the whole catalogue; `p/<category>` is one category. Any other name is an error, never a silent full scan.
 
 **Suppression**, three layers: inline `# sirius-ignore: SIR-SEC-010` (Bandit `# nosec` lineage) · `.siriusignore` path globs · server-side `suppressions` rows with a mandatory `reason` and ISO-8601 `expires_at`.
@@ -90,6 +97,8 @@ pnpm fixtures                  # regenerate contract/fixtures/demo.jsonl
 pnpm contract:lint             # redocly lint
 pnpm contract:types            # regenerate packages/cli/src/api/types.ts
 node contract/mock/smoke.mjs   # assert the mock still matches the PRD mockup
+pnpm --filter sirius build && \
+  node packages/cli/dist/cli.js scan contract/fixtures/rule-gallery   # every rule, once
 pnpm rehearse                  # the scan/fix beat, in a real pty
 pnpm rehearse:revenue          # the revenue beat, with per-beat timings
 pnpm shell:check               # every slash command, dispatched by the shell
@@ -119,7 +128,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Area | State |
 |---|---|
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
-| Local engine | Real. tree-sitter AST, 12 rules, fingerprints, money model |
+| Local engine | Real. tree-sitter AST, 13 rules, fingerprints, money model. `rule-gallery` fires every one |
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
 | Threat stage | Done — live secret validation, git archaeology, attack paths |
 | `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
@@ -136,7 +145,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 572 passing |
+| Tests | 594 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -148,8 +157,10 @@ its own local scans, `--validate-secrets` probed a redacted string, `rules`
 asked a server for rules compiled into the binary, `baseline`/`suppress` wrote
 to an API that is not running, `triage` called a local scan a replay and refused
 to open it, and `doctor` ended "4 problems would stop a scan" on a machine that
-scans fine. Each was found by *running* it, never by the suite — and the pty
-rehearsal caught a regression the 363 green tests did not. Two habits follow:
+scans fine. `SIR-SEC-060` belongs on that list too: the demo replay streamed a
+supply-chain finding the engine had no rule for, and six more rules had never
+been run against a file at all. Each was found by *running* it, never by the
+suite — and the pty rehearsal caught a regression the 363 green tests did not. Two habits follow:
 `pnpm rehearse` drives the real shell in a real pty before believing any of
 this, and a row here says what was verified, not what was written.
 
