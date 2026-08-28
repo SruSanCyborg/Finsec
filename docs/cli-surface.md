@@ -10,6 +10,10 @@ Everything the `cli` branch needs. Read [`system-overview.md`](system-overview.m
 
 ## 1. Command tree
 
+This is the tree as the PRD specifies it, kept for reference. **`sirius --help` is authoritative** for what actually ships — it adds `doctor`, and several flags below gained siblings during implementation.
+
+Two deliberate divergences from the tree: `init` writes `sirius.yaml` + **`.siriusignore`** (not `.siriuslintrc` — the rc file is an override you add per directory, not something to scaffold), and `login` stores an API key rather than running a device flow, because the device-flow endpoints do not exist.
+
 ```
 sirius
 ├── login / logout                 # OAuth device flow → ~/.config/sirius/config.toml
@@ -37,7 +41,7 @@ Added by [`decisions.md`](decisions.md): global `--api-url`, `--project`, and `s
 
 | Command | Endpoints | Notes |
 |---|---|---|
-| `login` | `POST /auth/token`, `POST /auth/api-keys` | Device-flow endpoints **do not exist** in the API table — blocked, see decisions |
+| `login` | `GET /healthz` to verify the key before storing it | Device-flow endpoints **do not exist** in the API table. Ships as `--api-key` storage at 0600, with `--profile` for multiple environments and `--list` to inspect them |
 | `logout` | `DELETE /auth/api-keys/{id}` or local-only | Scope undecided |
 | `init` | `GET/POST /projects`, `GET/PUT /projects/{id}/policy` | Writes `sirius.yaml` + `.siriuslintrc`; no template content specified in the PRD |
 | `scan` | `POST /scans` → `WS /scans/{id}/stream` → `GET /scans/{id}/results`; `GET /scans/{id}` for polling fallback; `POST …/validate-secret` when `--validate-secrets` | §2 below |
@@ -251,19 +255,28 @@ Beat 4 (CI gate) runs this same CLI inside the Action with `severity_threshold: 
 
 ---
 
-## 9. Known gaps
+## 9. Status and remaining gaps
 
-Beyond the twelve resolved in [`decisions.md`](decisions.md), these remain open and are deliberately deferred:
+All thirteen commands are implemented (`doctor` was added beyond the PRD's tree). The list below is what the original gap analysis raised, split into what got settled during implementation and what is still genuinely open. Full reasoning for each decision is in [`decisions.md`](decisions.md).
 
-- **Output truncation** — the mockup shows 3 of 19 findings. How many render, ordered by what, and is there a `--limit`? Not stated.
-- **Pagination reconciliation** — how `GET /scans/{id}/results` pages interact with findings already delivered over WS, and how duplicates are suppressed.
-- **`baseline_state` is never rendered** despite `--fail-on new` depending on it.
-- **Reconnect/resume semantics** — does a mid-scan WS reconnect replay findings from index 0?
-- **Timeouts** — no default scan timeout, no `--timeout` flag.
-- **`watch`** — debounce interval, ignore globs, full vs incremental re-scan, cancel-in-flight vs queue, exit behavior.
-- **`triage` vs `fix` overlap** — the GUI keymap (`j/k` move, `a` accept, `d` dismiss, `f` fix, `s` suppress, `/` filter) is the model, but `PATCH …/findings/{fid}` maps to accept/dismiss/suppress states that have **no column in the `findings` DDL** (only `suppressed BOOLEAN`).
-- **`report`** — where the file lands, and whether the CLI verifies the detached JWS locally. The PRD assigns live signature verification to the web dashboard, but it is a natural CLI beat.
-- **`suppress`** — whether it writes server-side or to a local `.snyk`-style file, and how it interacts with `.siriusignore` and inline ignores.
-- **`baseline set`** — from HEAD or a given sha, and where fingerprints are computed (must be server-side; the CLI has no engine).
-- **Housekeeping commands** — no `version`, `doctor`, `completion`, `--verbose/--quiet/--debug` are specified.
-- **Telemetry** — not mentioned at all. For a security tool the right answer is an explicit "none," and that should be stated rather than left silent.
+### Settled
+
+| Gap | How it was settled |
+|---|---|
+| **Output truncation** | `--max-findings <n>` caps rendered cards; the remainder collapses to a count. Plain output sorts most-severe-first, then by path, so it is deterministic regardless of arrival order. |
+| **`watch` semantics** | 400ms debounce; a full re-scan, not incremental; a burst during a scan queues exactly one follow-up rather than a backlog; the exit code reflects the last scan. It ignores `node_modules`, `.git`, editor scratch files, and its own `.sirius/` cache — without that last one, every scan's state write would retrigger a scan forever. |
+| **`triage` vs `fix`** | D-015 adds a `triage_state` enum (`open\|accepted\|dismissed\|suppressed`), with `suppressed` derived from it so existing gate logic is untouched. `f` in triage prints the `sirius fix` command rather than launching it — nesting one full-screen Ink app in another corrupts the terminal. |
+| **`report` destination and signing** | Writes to `sirius-report-<id>.<format>` in the cwd, or `-o <file>`. It reports that a detached JWS is present and states plainly that it did **not** verify it, because no public-key endpoint exists. A security tool implying a check it did not perform is worse than one admitting the gap. |
+| **`suppress` storage** | Server-side via `POST /suppressions`. A reason is mandatory and a past expiry is rejected — a permanent reasonless suppression is how a codebase quietly stops being audited. |
+| **`baseline set` source** | `HEAD` by default, `--commit <sha>` to override. Fingerprints are computed server-side; the CLI sends the scan to take them from, since it has no engine. |
+| **Housekeeping** | `--version` works; `doctor` added for preflight. |
+| **Telemetry** | **None, deliberately.** No analytics, no update checks, no crash reporting. Stated here so the absence is a decision rather than an oversight. The one postinstall script that would have phoned home (`@scarf/scarf`) is declined in `pnpm-workspace.yaml`. |
+
+### Still open
+
+- **Reconnect/resume mid-scan.** The WebSocket fallback is deliberately narrow: it covers a socket that never opens, not one that dies partway. A reconnect would replay findings from the start and double-count them, and the contract has no resume cursor to prevent that. Needs a contract change to fix properly.
+- **Pagination reconciliation.** `GET /scans/{id}/results` is assumed to be `limit` + `cursor` returning `{ items, next_cursor }`; the CLI de-duplicates against streamed findings by `id`. The convention is still unconfirmed by `auto`.
+- **Whole-scan timeout.** Each HTTP request times out at 30s, but a scan that streams forever has no ceiling and there is no `--timeout` flag.
+- **`baseline_state` is never rendered.** `--fail-on new` depends on it, but a finding card does not show whether it is new or pre-existing. Worth a marker before the CI story is demoed seriously.
+- **Shell completions** and `--verbose` / `--quiet` are unimplemented.
+- **`rules test`** stays unimplemented on purpose — it needs either a local engine, violating the golden rule, or a `POST /rules/test` endpoint that does not exist.
