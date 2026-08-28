@@ -244,6 +244,16 @@ duration):
 
 Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
 
+**Known defect, pre-existing and unfixed: the second handover in a session is
+flaky.** `/triage` hands over and comes back; a `/watch` after it sometimes
+never dispatches — the shell keeps painting but stops reading stdin, and ignores
+even EOF (a probe hung for four minutes and had to be killed). `pnpm shell:check`
+fails on it perhaps half the time. It reproduces at `e9af8f3`, before the rule
+work, so it is not a regression from it. Ruled out so far: transcript length
+(mounting with 2000 lines costs 8.5ms) and Ink reusing a torn-down instance (its
+"render() was called again" warning is never emitted). Do not rehearse `/triage`
+and `/watch` back to back until this is understood.
+
 **Full-screen commands hand over rather than refuse.** `/triage` and `/watch`
 draw their own UI, so the shell unmounts, gives them the real terminal, and
 takes it back with the transcript intact when they exit — the way `git` hands
