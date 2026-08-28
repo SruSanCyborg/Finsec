@@ -34,6 +34,15 @@ const EXTENSIONS: Record<string, SupportedLanguage> = {
 /** The extensions a scan will actually open, for saying so when none matched. */
 export const SUPPORTED_EXTENSIONS: readonly string[] = Object.keys(EXTENSIONS);
 
+/**
+ * The languages there is a grammar for.
+ *
+ * Distinct from what a rule *claims* in its `languages` field, and the two are
+ * checked against each other — a rule may not advertise a language the parser
+ * cannot even open, which is how `doctor` came to print `go`.
+ */
+export const SUPPORTED_LANGUAGES: readonly string[] = [...new Set(Object.values(EXTENSIONS))];
+
 export function languageOf(path: string): SupportedLanguage | undefined {
   return EXTENSIONS[extname(path).toLowerCase()];
 }

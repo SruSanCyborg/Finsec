@@ -1610,3 +1610,50 @@ was caught only by deliberately reverting each fix and watching the suite stay
 green — which is now the standard for a regression test on this branch: a test
 that has not been seen to fail has not been shown to test anything. The file
 renders through Ink directly with a stdout that reports the width under test.
+
+## D-048 — A rule may not advertise a language it does nothing in
+
+`rules show SIR-SEC-010` printed `languages: python, javascript, typescript`.
+`doctor` printed `13 rules · python, javascript, typescript, go`. A JavaScript
+file containing SQL injection, command injection, MD5 over a PAN, a card number
+in a `console.log`, and an unauthenticated transfer endpoint scanned clean apart
+from the hardcoded key — which was caught by a regex that never needed a
+grammar.
+
+Eleven of thirteen rules gated on tree-sitter's *Python* node names. tree-sitter
+names the same construct differently per grammar — Python `call`, JavaScript
+`call_expression` — so on a `.js` file those rules walked the entire tree,
+matched nothing, and reported success.
+
+No Python fixture could ever have caught this, because in Python every one of
+those rules worked perfectly. It took a file in another language, which is why
+the gallery is now bilingual.
+
+Silent under-reporting is the worst failure this tool has. A crash gets fixed; a
+clean report gets believed and shipped.
+
+**What changed.** The node names moved behind `isCall` / `isAssignment`, so a
+rule states what it means rather than what one grammar calls it. Five rules —
+010, 011, 021, 030, 040 — now fire in JavaScript, taint tracing included, since
+the taint sources already knew `req.body` and `req.query`. `SIR-SEC-011` also
+learned Node's shell spawners: matching only `child_process.exec` missed the
+destructured `const { exec } = require('child_process')`, which is how it is
+nearly always written. `execFile` and `spawn` are deliberately excluded — they
+take an argv array and involve no shell, and reporting them is the false
+positive that teaches a team to ignore the rule.
+
+**What did not change, and says so.** `SIR-SEC-020`, `050` and `051` gate on
+`decorated_definition` — Python's `@app.route` idiom, which Express spells as a
+call. They now declare `languages: ['python']`. Narrowing a claim is the fix
+when the alternative is a claim that is not true; the JavaScript equivalents are
+a rule to write, not a language to assert.
+
+`doctor`'s language line is derived from the catalogue instead of being a
+hardcoded string. It had been advertising Go, which no rule has ever declared —
+a health check composing its own good news cannot report bad news. Manifests are
+counted separately, because `package.json` is a file and not a language.
+
+The gallery's per-rule counts are now scoped per language. A single total across
+a bilingual fixture would need editing every time either half grew, and a number
+edited without being re-derived is the failure mode the gallery exists to
+prevent.

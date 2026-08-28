@@ -97,6 +97,36 @@ function base(
 }
 
 /** Dotted call name: `hashlib.md5(...)` → `hashlib.md5`. */
+/**
+ * Whether a node is a function call, in any grammar this engine parses.
+ *
+ * tree-sitter names the same construct differently per language: Python calls
+ * it `call`, JavaScript and TypeScript `call_expression`, Go
+ * `call_expression` too. Eleven of thirteen rules tested the bare string
+ * `'call'`, so on a `.js` file they walked the whole tree, matched nothing and
+ * reported success — while `rules show` printed `languages: python,
+ * javascript, typescript`. A file with SQL injection, command injection, MD5
+ * over a PAN and PII in a log line came back clean.
+ *
+ * Silent under-reporting is the worst failure a linter has, because nothing
+ * about the output looks wrong. The node names are behind these predicates now
+ * so a rule states what it means — "a call" — rather than what one grammar
+ * happens to name it.
+ */
+export function isCall(node: SyntaxNode): boolean {
+  return node.type === 'call' || node.type === 'call_expression';
+}
+
+/** An assignment, however the grammar spells it. */
+export function isAssignment(node: SyntaxNode): boolean {
+  return (
+    node.type === 'assignment' ||
+    node.type === 'assignment_expression' ||
+    node.type === 'variable_declarator' ||
+    node.type === 'short_var_declaration'
+  );
+}
+
 function calleeName(call: SyntaxNode): string {
   const fn = call.childForFieldName('function');
   return fn ? fn.text : '';
@@ -220,7 +250,7 @@ const highEntropySecret: Rule = {
   run(file) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'assignment' && node.type !== 'variable_declarator' && node.type !== 'pair') continue;
+      if (!isAssignment(node) && node.type !== 'pair') continue;
 
       const text = node.text;
       // Only strings assigned to a credential-shaped name. Entropy alone flags
@@ -261,7 +291,7 @@ const sqlInjection: Rule = {
   run(file, taint) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'call') continue;
+      if (!isCall(node)) continue;
       const callee = calleeName(node);
       if (!/\b(execute|executemany|raw|query)$/.test(callee)) continue;
 
@@ -278,7 +308,7 @@ const sqlInjection: Rule = {
         // missed `f"... {uid}"`, which is the most common form of this bug in
         // real code.
         hasInterpolation(first) ||
-        (first.type === 'call' && /\.format$/.test(calleeName(first)));
+        (isCall(first) && /\.format$/.test(calleeName(first)));
 
       // Traced, where the trace is possible.
       //
@@ -367,10 +397,22 @@ const commandInjection: Rule = {
   run(file, taint) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'call') continue;
+      if (!isCall(node)) continue;
       const callee = calleeName(node);
       const isSubprocess = /subprocess\.(run|call|Popen|check_output)$/.test(callee);
-      const isOsSystem = /^os\.system$/.test(callee) || /child_process\.exec$/.test(callee);
+      // Node's shell-string spawners as well as Python's. `exec` and `execSync`
+      // take a command line and hand it to a shell, which is the same hazard as
+      // `os.system` — and the destructured form, `const { exec } =
+      // require('child_process')`, is how it is nearly always written, so
+      // matching only `child_process.exec` matched almost nothing real.
+      //
+      // `execFile` and `spawn` are deliberately absent: they take an argv array
+      // and do not involve a shell, so reporting them would be the false
+      // positive that teaches people to ignore this rule.
+      const isOsSystem =
+        /^os\.system$/.test(callee) ||
+        /(^|\.)exec(Sync)?$/.test(callee) ||
+        /child_process\.exec$/.test(callee);
 
       const args = argumentsOf(node);
       const proven = args.map((arg) => taint?.reaching(arg)).find(Boolean);
@@ -411,6 +453,9 @@ export const AUTH_DECORATORS = /(login_required|requires_auth|authenticated|jwt_
 
 const missingAuth: Rule = {
   id: 'SIR-SEC-020',
+  // Python only, and said so rather than claimed: this rule gates on
+  // `decorated_definition`, which matches a Python decorator (`@app.route`); Express spells the same thing as a call.
+  languages: ['python'],
   severity: 'high',
   category: 'auth',
   message: 'Route missing an authentication decorator',
@@ -448,7 +493,7 @@ const jwtUnverified: Rule = {
   run(file) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'call') continue;
+      if (!isCall(node)) continue;
       if (!/jwt\.decode$|jsonwebtoken\.decode$/.test(calleeName(node))) continue;
 
       const text = node.text;
@@ -520,7 +565,7 @@ const piiInLogs: Rule = {
   run(file) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'call') continue;
+      if (!isCall(node)) continue;
       if (!LOG_CALL.test(calleeName(node))) continue;
 
       // An argument already passed through a redaction helper is not a leak.
@@ -553,7 +598,7 @@ const unmaskedPan: Rule = {
   run(file) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'assignment' && node.type !== 'expression_statement') continue;
+      if (!isAssignment(node) && node.type !== 'expression_statement') continue;
 
       const text = node.text;
       // A column definition whose name is a PAN and whose type is a plain
@@ -582,7 +627,7 @@ const weakCrypto: Rule = {
   run(file) {
     const findings: RawFinding[] = [];
     for (const node of walk(file.root)) {
-      if (node.type !== 'call') continue;
+      if (!isCall(node)) continue;
       const callee = calleeName(node);
 
       if (/hashlib\.(md5|sha1)$|createHash$/.test(callee)) {
@@ -607,7 +652,7 @@ const weakCrypto: Rule = {
 
     // Static IVs are assignments, not calls.
     for (const node of walk(file.root)) {
-      if (node.type !== 'assignment') continue;
+      if (!isAssignment(node)) continue;
       const name = node.text.split('=')[0] ?? '';
       if (!/\biv\b|initialization_vector/i.test(name)) continue;
       if (!/['"][^'"]{8,}['"]|b['"]/.test(node.text)) continue;
@@ -654,6 +699,9 @@ const MONEY_ROUTE = /(transfer|payout|refund|charge|payment|withdraw|settle|disb
 
 const missingRateLimit: Rule = {
   id: 'SIR-SEC-050',
+  // Python only, and said so rather than claimed: this rule gates on
+  // `decorated_definition`, which matches a Python decorator (`@limiter.limit`); no JS equivalent is detected yet.
+  languages: ['python'],
   severity: 'medium',
   category: 'ratelimit',
   message: 'Money-movement endpoint without a rate limit',
@@ -675,6 +723,9 @@ const missingRateLimit: Rule = {
 
 const missingIdempotency: Rule = {
   id: 'SIR-SEC-051',
+  // Python only, and said so rather than claimed: this rule gates on
+  // `decorated_definition`, which matches a Python decorator; no JS equivalent is detected yet.
+  languages: ['python'],
   severity: 'medium',
   category: 'ratelimit',
   message: 'Money-movement POST without an idempotency key',

@@ -43,6 +43,18 @@ async function scan(root: string) {
 }
 
 const gallery = await scan(GALLERY);
+
+/**
+ * The Python half.
+ *
+ * The gallery became bilingual when `payments.js` was added to prove the rules
+ * fire outside Python (see `polyglot.test.ts`). The counts below are per
+ * language and always were — a rule with one planted example in Python and one
+ * in JavaScript legitimately fires twice across the fixture, and a single total
+ * would have to be edited every time either half grew, which is the kind of
+ * number that gets edited without being re-derived.
+ */
+const python = gallery.findings.filter((finding) => finding.file.endsWith('.py'));
 /** Findings in one fixture file, in line order — rules run in catalogue order. */
 const at = (file: string) =>
   gallery.findings.filter((f) => f.file.endsWith(file)).sort((a, b) => a.line - b.line);
@@ -58,7 +70,7 @@ describe('the rule gallery', () => {
 
   it('plants the examples it says it plants, and no others', () => {
     const counts = new Map<string, number>();
-    for (const finding of gallery.findings) {
+    for (const finding of python) {
       counts.set(finding.rule_id, (counts.get(finding.rule_id) ?? 0) + 1);
     }
 
@@ -97,7 +109,7 @@ describe('the rule gallery', () => {
     // The whole difference between "there is an interpolation on this line" and
     // "an attacker controls this string". A finding that claims a trace must
     // carry one, and one that has no trace must not imply safety.
-    const traced = gallery.findings.filter((f) => (f as { taint?: string }).taint);
+    const traced = python.filter((f) => (f as { taint?: string }).taint);
     expect(traced.length).toBe(3);
 
     for (const finding of traced) {
@@ -157,7 +169,7 @@ describe('the three defects the gallery found', () => {
   });
 
   it('SIR-SEC-030 accepts a truncated PAN, which PCI-DSS 3.3.1 permits', () => {
-    const logs = gallery.findings.filter((f) => f.rule_id === 'SIR-SEC-030');
+    const logs = python.filter((f) => f.rule_id === 'SIR-SEC-030');
     expect(logs).toHaveLength(1);
     // The permitted form is on line 11 and must not be the one reported.
     expect(logs[0]?.line).toBe(16);

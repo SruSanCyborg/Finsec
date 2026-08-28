@@ -391,10 +391,29 @@ async function probeEngine(check: string): Promise<Check> {
       };
     }
 
+    // Derived, not written down. This line used to be the literal string
+    // "python, javascript, typescript, go" — so `doctor` advertised Go, which
+    // no rule has ever declared, and kept advertising JavaScript for eleven
+    // rules that silently matched nothing there. A health check that composes
+    // its own good news cannot report bad news.
+    const { localRules } = await import('../engine/catalog.js');
+
+    // The supply-chain rule uses `languages` to name the manifests it reads —
+    // `package.json`, `requirements.txt` — which are files, not languages. Only
+    // the ones the parser actually has a grammar for are reported here; the
+    // manifests are counted separately so neither claim borrows the other's
+    // credibility.
+    const declared = new Set(localRules('local').flatMap((rule) => rule.languages ?? []));
+    const languages = [...declared].filter((each): each is string => Boolean(each) && !each.includes('.')).sort();
+    const manifests = [...declared].filter((each) => Boolean(each) && each.includes('.')).length;
+
     return {
       status: 'ok',
       label: 'engine',
-      detail: `${RULES.length} rules · python, javascript, typescript, go · self-test ${found[0]?.rule_id} ${check}`,
+      detail:
+        `${RULES.length} rules · ${languages.join(', ')}` +
+        (manifests > 0 ? ` · ${manifests} manifest kinds` : '') +
+        ` · self-test ${found[0]?.rule_id} ${check}`,
     };
   } catch (error) {
     return {
