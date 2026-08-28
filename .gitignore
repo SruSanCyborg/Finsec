@@ -1,0 +1,17 @@
+node_modules/
+.next/
+out/
+build/
+.env
+.env*.local
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+
+# Python / backend
+__pycache__/
+*.pyc
+backend/.env
+backend/smoke-report.pdf
+backend/*.log
+.venv/
