@@ -146,7 +146,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`revenue stress`** | Done — six distribution shifts applied to the generator; the money edge holds in 3 of 6, the compliance rule in 6 of 6 |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 623 passing |
+| Tests | 636 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -244,6 +244,14 @@ duration):
    the default money ranking puts invoices on top.
 
 Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
+
+**And its width.** Every view is laid out through `ui/kit.ts` against the real
+terminal width: tables take their columns from the content, the nominated column
+gives way when the row does not fit, and notes wrap under their row rather than
+extending it. `revenue eval` was 217 columns and `recover` 205 — on a projector
+that wraps into the row beneath and stops being a table, while every character
+is still present, so nothing fails. `render-width.test.ts` checks 60/80/100/120
+and colour. See D-032.
 
 **Full-screen commands hand over rather than refuse.** `/triage` and `/watch`
 draw their own UI, so the shell unmounts, gives them the real terminal, and

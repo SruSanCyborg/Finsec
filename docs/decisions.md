@@ -991,3 +991,59 @@ cycles, all eight green, against roughly half failing before. Then two complete
 reporting an error. A flake needs a sample, not a green run.
 
 ---
+## D-032 — Output that fits the terminal it is printed on
+
+Every table in the string renderers was assembled from `padEnd`/`padStart` at
+the call site — sixty-four of them in the revenue renderer alone — and none of
+them knew how wide the terminal was. Measured rather than guessed at:
+
+| view | widest line | after |
+|---|---|---|
+| `revenue eval` | 217 | 80 |
+| `revenue recover` | 205 | 80 |
+| `reconcile` | 193 | 80 |
+| `revenue detect` | 118 | 80 |
+| `revenue stress` | 116 | 80 |
+
+`detect` and `recover` are demo beats. At two hundred columns on a projector the
+table wraps into the row beneath it and stops being a table, and nothing about
+the output *fails* when that happens — every character is still there, in the
+wrong place. That is why this needed a test rather than an eye.
+
+`ui/kit.ts` holds the primitives the call sites could not enforce for
+themselves. Inspired by termcn's actual lesson — composable primitives with
+tokens, rather than each caller inventing a layout — not by copying its
+components, which are Ink/OpenTUI React and would mean rewriting renderers that
+work.
+
+**Width is what you can see, not what `String.length` says.** A cell that has
+already been coloured carries escape bytes that occupy no columns, so padding it
+pads the escapes. Nothing does that today: `rupee`, `bar` and `glyph` all return
+plain text, which is the only reason the tables ever lined up. It is one commit
+away at all times, and it would fail invisibly in colour while looking perfect
+in a pipe — which is where every test looks. `visibleWidth`, `padVisible` and
+`truncate` count columns, and `truncate` walks the string rather than slicing
+it, so an escape is never cut in half.
+
+**A row that does not fit loses something on purpose.** `table()` takes the
+column widths from the content, and when the total exceeds the terminal the
+column the caller nominated is cut back to its floor and then truncated. The
+money and the verdicts stay whole; the prose gives way. Notes moved out of the
+row entirely and sit under it, hung two columns in.
+
+**A word longer than the line is a breaking problem, not a wrapping one.** The
+recovery trail's path under a temp directory is a hundred and fifty characters
+with no spaces in it, and a wrapper that only breaks at spaces emitted it whole
+and overflowed by exactly its own length.
+
+`render-width.test.ts` renders every view at 60, 80, 100 and 120 columns and in
+colour, and asserts nothing overflows — plus one case that the narrowest layout
+still contains `INFEASIBLE`, `this detector` and `perfect foresight`, because a
+table that fits by dropping its own findings has not been fixed.
+
+Two things deliberately left alone. The Ink components in `ui/*.tsx` already
+lay themselves out and are not rewritten to share an abstraction with the string
+renderers. And pastel's file-routed commands are a framework decision, not a
+visual one; commander is working and replacing it would be churn.
+
+---

@@ -23,6 +23,7 @@ import { dirname, join, resolve } from 'node:path';
 import { CliError } from '../api/errors.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import { detectCapabilities } from '../ui/theme.js';
+import { truncate } from '../ui/kit.js';
 import { paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
 import { evaluate } from '../revenue/evaluate.js';
 import { analyzeBatch } from '../revenue/features.js';
@@ -254,7 +255,7 @@ async function detect(
   process.stdout.write('\n');
   process.stdout.write(
     ` ${palette.bold('sirius revenue')}  ${palette.dim(
-      `${inSplit.length} records in front of it · split=${split}${kind ? ` · showing ${kind}s` : ''}` +
+      `${inSplit.length} records · split=${split}${kind ? ` · ${kind}s` : ''}` +
         ` · floor ${model.threshold} · room for ${capacity.max_actions}`,
     )}\n\n`,
   );
@@ -306,13 +307,13 @@ async function detect(
   );
   process.stdout.write(
     ` ${'Held'.padEnd(12)}${palette.amber(String(held.length))} ${palette.dim(
-      'records the agent refuses to touch — disputes and shared-signal clusters',
+      truncate('records the agent refuses to touch — disputes and shared-signal clusters', Math.max(0, palette.width - 22)),
     )}\n`,
   );
   process.stdout.write(palette.hr + '\n');
   process.stdout.write(
     palette.dim(
-      ` Expected recovery is a forecast, not a result. ` +
+      ` A forecast, not a result. ` +
         `Measure it:  sirius revenue eval ${target ?? DEFAULT_BATCH}\n`,
     ),
   );
@@ -468,8 +469,11 @@ async function runRecovery(
   const pace = paceMs(false);
 
   process.stdout.write(
-    `\n ${palette.bold('sirius revenue recover')}  ${palette.dim(
-      `run ${result.run_id} · split=${split} · room for ${capacity.max_actions} · nothing here left this machine`,
+    `\n ${palette.bold('sirius revenue recover')}${palette.dim(
+      truncate(
+        `  run ${result.run_id} · split=${split} · room for ${capacity.max_actions} · simulated, nothing left this machine`,
+        Math.max(0, palette.width - 24),
+      ),
     )}\n`,
   );
 

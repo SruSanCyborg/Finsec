@@ -16,6 +16,7 @@
 import { formatInr, formatInrCompact } from '../money.js';
 import type { CapacityPoint, Evaluation } from '../revenue/evaluate.js';
 import type { StressReport } from '../revenue/stress.js';
+import { note, padVisible, table, truncate, visibleWidth } from '../ui/kit.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
@@ -141,9 +142,13 @@ export function renderAssessment(
     ? (assessment.evidence[0]?.detail ?? '')
     : describe(record);
 
-  const id = assessment.record_id.padEnd(11);
-  const line = `  ${mark} ${score}  ${id} ${money}  ${palette.dim(reason)}`;
-  return line;
+  const id = padVisible(assessment.record_id, 11);
+  // The reason is the only variable-length part of the row, so it is the part
+  // that gives way. A held record's explanation is a full sentence and ran the
+  // line to 118 columns; on a narrow terminal that wraps into the next record
+  // and the stream stops looking like a stream.
+  const head = `  ${mark} ${score}  ${id} ${money}  `;
+  return head + palette.dim(truncate(reason, Math.max(0, palette.width - visibleWidth(head))));
 }
 
 /** The record in one phrase: what it is and why it is here. */
@@ -176,7 +181,7 @@ export function renderIncidents(context: BatchContext, palette: Palette): string
     );
     lines.push(
       `      ${palette.dim(`${clock(degradation.from)}–${clock(degradation.to)}`)} ` +
-        `${palette.glyph('arrow')} ${palette.green('these are worth retrying on another rail, not chasing the customer')}`,
+        `${palette.glyph('arrow')} ${palette.green(truncate('these are worth retrying on another rail, not chasing the customer', Math.max(0, palette.width - 26)))}`,
     );
     lines.push('');
   }
@@ -203,6 +208,13 @@ export function renderEvaluation(
   palette: Palette,
   capacity: readonly CapacityPoint[] = [],
 ): string {
+  /** Room left for the sentence beside a money column, once the money has it. */
+  const gloss = Math.max(0, palette.width - 41);
+
+  /** Prose, wrapped to the terminal rather than trusting it to be wide. */
+  const prose = (text: string, indent = 4): string[] =>
+    note(text, { indent, width: palette.width }).map((line) => palette.dim(line));
+
   const { matrix, cost } = evaluation;
   const lines: string[] = [];
   const pct = (value: number) => `${(value * 100).toFixed(1)}%`;
@@ -210,19 +222,22 @@ export function renderEvaluation(
   lines.push('');
   lines.push(palette.hr);
   lines.push(
-    ` ${palette.bold('HELD-OUT EVALUATION')}   ${palette.dim(
-      `${evaluation.records} records · split=${evaluation.split} · threshold ${evaluation.threshold}`,
+    ` ${palette.bold('HELD-OUT EVALUATION')}${palette.dim(
+      truncate(
+        `   ${evaluation.records} records · split=${evaluation.split} · threshold ${evaluation.threshold}`,
+        Math.max(0, palette.width - 21),
+      ),
     )}`,
   );
   lines.push(palette.hr);
   lines.push('');
   lines.push(
     palette.dim(
-      `  target: money that comes back BECAUSE the agent acted (recoverable and not self-healing).`,
+      `  target: money that comes back BECAUSE the agent acted`,
     ),
   );
   lines.push(
-    palette.dim(`  the model was fitted on ${model.trained_on} training records and has never seen these.`),
+    ...prose(`the model was fitted on ${model.trained_on} training records and has never seen these.`, 2),
   );
   lines.push('');
 
@@ -240,10 +255,19 @@ export function renderEvaluation(
   lines.push('');
 
   // ---- headline metrics with bars
-  const metric = (label: string, value: number, note: string) =>
-    `  ${label.padEnd(18)}${palette.bold(pct(value).padStart(6))}  ${palette.violet(
-      palette.bar(value, 24),
-    )}  ${palette.dim(note)}`;
+  //
+  // The bar is fixed at 24 columns and the label at 18, so the trailing
+  // sentence decides the line's length — and these ran past a hundred columns.
+  // The bar narrows on a narrow terminal and the sentence is what gets cut,
+  // because a meter you can read and a number you can read are the point; the
+  // gloss beside them is not.
+  const barWidth = Math.max(10, Math.min(24, palette.width - 56));
+  const metric = (label: string, value: number, gloss: string) => {
+    const head = `  ${padVisible(label, 18)}${palette.bold(padVisible(pct(value), 6, 'right'))}  ${palette.violet(
+      palette.bar(value, barWidth),
+    )}  `;
+    return head + palette.dim(truncate(gloss, Math.max(0, palette.width - visibleWidth(head))));
+  };
 
   lines.push(metric('precision', evaluation.precision, 'of what it acted on, this much needed it'));
   lines.push(metric('recall', evaluation.recall, 'of what needed acting on, it found this much'));
@@ -265,11 +289,11 @@ export function renderEvaluation(
   );
   lines.push(
     `    ${palette.amber('spent on misses')}    ${palette.amber(('-' + palette.rupee(cost.spent_on_misses_paise)).padStart(14))}  ` +
-      palette.dim('the false-positive bill'),
+      palette.dim(truncate('the false-positive bill', gloss)),
   );
   lines.push(
     `    ${palette.amber('annoyance')}          ${palette.amber(('-' + palette.rupee(cost.annoyance_paise)).padStart(14))}  ` +
-      palette.dim('charged for chasing people who would have paid anyway'),
+      palette.dim(truncate('charged for chasing people who would have paid anyway', gloss)),
   );
   lines.push(`    ${palette.dim('─'.repeat(46))}`);
   lines.push(
@@ -279,96 +303,119 @@ export function renderEvaluation(
   );
   lines.push(
     `    ${palette.dim('forgone')}            ${palette.dim(palette.rupee(cost.forgone_paise).padStart(14))}  ` +
-      palette.dim('recoverable money it decided not to chase'),
+      palette.dim(truncate('recoverable money it decided not to chase', gloss)),
   );
   lines.push('');
 
   // ---- baselines, matched on capacity
   lines.push(
-    `  ${palette.bold('AGAINST THE ALTERNATIVES')}   ${palette.dim(
-      `net rupees, same records, same costs, same room to act (${evaluation.capacity.max_actions} interventions)`,
-    )}`,
+    `  ${palette.bold('AGAINST THE ALTERNATIVES')}`,
   );
+  lines.push(
+    ...note(
+      `same records, same costs, same room to act (${evaluation.capacity.max_actions} interventions)`,
+      { indent: 2, width: palette.width },
+    ).map((line) => palette.dim(line)),
+  );
+  lines.push('');
 
   const best = Math.max(
     cost.net_paise,
     ...evaluation.baselines.filter((b) => b.feasible).map((b) => b.cost.net_paise),
   );
 
-  const row = (
-    name: string,
-    net: number,
-    flagged: number,
-    note: string,
-    options: { self?: boolean; over?: boolean; harm?: number; because?: string } = {},
-  ) => {
-    const paint = options.self
-      ? palette.green
-      : options.over
-        ? palette.dim
-        : net >= best
-          ? palette.amber
-          : palette.dim;
-    const marker = options.self ? palette.violet(palette.glyph('arrow')) : ' ';
-    const harm =
-      options.harm === undefined
-        ? ''
-        : options.harm === 0
-          ? palette.green(`  ${palette.glyph('check')} touched none it must not`)
-          : palette.red(`  ${palette.glyph('cross')} touched ${options.harm} it must not`);
 
-    // A policy that does not fit has no net worth comparing. Its rupee figure
-    // describes a batch with no gateway limit and no contact rule, and printed
-    // in the money column it is simply the largest number on the screen — which
-    // reads as the winner however much grey it is painted. The verdict goes in
-    // the column instead, and the money follows on the next line, in brackets,
-    // as the counterfactual it is.
-    if (options.over) {
-      return (
-        `   ${marker} ${name.padEnd(19)}${palette.dim(palette.bold('INFEASIBLE'.padStart(13)))}${harm}  ` +
-        palette.dim(`${options.because ?? 'over capacity'} · ${note}`)
-      );
-    }
+  // Laid out as a table rather than assembled per row.
+  //
+  // Every row used to carry its own explanation on the same line, which put the
+  // longest one at 176 columns — the numbers a reader came for pushed off the
+  // right edge of the terminal by the sentence explaining them. The notes now
+  // sit under their row, wrapped to the terminal, and the money column is
+  // never the thing that gives way.
+  interface Row {
+    marker: string;
+    name: string;
+    money: string;
+    touched: string;
+    acted: string;
+    notes: string[];
+    self?: boolean;
+  }
 
-    return `   ${marker} ${name.padEnd(19)}${paint(palette.bold(palette.rupee(net).padStart(13)))}${harm}  ${palette.dim(
-      `${flagged} acted on · ${note}`,
-    )}`;
-  };
+  const collected: Row[] = [];
+
+  const touchedCell = (harm: number): string =>
+    harm === 0
+      ? palette.green(`${palette.glyph('check')} none`)
+      : palette.red(`${palette.glyph('cross')} ${harm}`);
 
   for (const baseline of evaluation.baselines) {
-    lines.push(
-      row(baseline.name, baseline.cost.net_paise, baseline.flagged, baseline.note, {
-        over: !baseline.feasible,
-        harm: baseline.harmful_touches,
-        ...(baseline.infeasible_because ? { because: baseline.infeasible_because } : {}),
-      }),
-    );
-    if (!baseline.feasible) {
-      lines.push(
-        palette.dim(
-          `     ${' '.repeat(19)}${`(${palette.rupee(baseline.cost.net_paise)})`.padStart(13)}   ` +
-            `what it would net if those limits did not exist`,
-        ),
-      );
-    }
+    const feasible = baseline.feasible;
+    const paint = feasible ? (baseline.cost.net_paise >= best ? palette.amber : palette.dim) : palette.dim;
+
+    collected.push({
+      marker: ' ',
+      name: feasible ? baseline.name : palette.dim(baseline.name),
+      money: feasible
+        ? paint(palette.bold(palette.rupee(baseline.cost.net_paise)))
+        : palette.dim(palette.bold('INFEASIBLE')),
+      touched: touchedCell(baseline.harmful_touches),
+      // The reason a policy does not fit is a sentence, and a sentence in a
+      // column is what squeezed the names into ellipses. It belongs in the
+      // notes with the rest of the prose.
+      acted: feasible ? String(baseline.flagged) : palette.dim('—'),
+      notes: feasible
+        ? [baseline.note]
+        : [
+            `${baseline.infeasible_because ?? 'over capacity'} — ${baseline.note}`,
+            `${palette.rupee(baseline.cost.net_paise)} is what it would net if those limits did not exist`,
+          ],
+    });
+
     if (baseline.name === 'newest first') {
-      lines.push(
-        row(
-          'this detector',
-          cost.net_paise,
-          matrix.true_positive + matrix.false_positive,
-          shareOfCeiling(cost.net_paise, evaluation),
-          { self: true, harm: evaluation.forbidden.touched },
-        ),
-      );
+      collected.push({
+        marker: palette.violet(palette.glyph('arrow')),
+        name: palette.violet('this detector'),
+        money: palette.green(palette.bold(palette.rupee(cost.net_paise))),
+        touched: touchedCell(evaluation.forbidden.touched),
+        acted: String(matrix.true_positive + matrix.false_positive),
+        notes: [shareOfCeiling(cost.net_paise, evaluation)],
+        self: true,
+      });
     }
   }
+
+  const rendered = table(
+    [
+      { header: '' },
+      { header: 'POLICY', flex: true, min: 14 },
+      { header: 'NET', align: 'right' },
+      { header: 'OUT OF BOUNDS' },
+      { header: 'ACTED ON' },
+    ],
+    collected.map((row) => [row.marker, row.name, row.money, row.touched, row.acted]),
+    { indent: 3, width: palette.width, header: palette.dim },
+  );
+
+  // The header line, then each row followed by its own notes.
+  lines.push(rendered[0] as string);
+  collected.forEach((row, index) => {
+    lines.push(rendered[index + 1] as string);
+    for (const text of row.notes) {
+      // Hung two columns under the policy name, so a note reads as belonging to
+      // the row above rather than as another row.
+      for (const wrapped of note(text, { indent: 9, width: palette.width })) {
+        lines.push(palette.dim(wrapped));
+      }
+    }
+  });
+
   lines.push('');
   lines.push(
-    palette.dim(
-      `    ${evaluation.forbidden.in_population} records in this split are out of bounds — open disputes, ` +
-        `issuer risk blocks,\n    and shared-signal clusters. They are not low-value records to be traded ` +
-        `off; they are\n    outside the trade, and the count above is how often each policy forgot that.`,
+    ...prose(
+      `${evaluation.forbidden.in_population} records in this split are out of bounds — open disputes, ` +
+        `issuer risk blocks, and shared-signal clusters. They are not low-value records to be traded ` +
+        `off; they are outside the trade, and the count above is how often each policy forgot that.`,
     ),
   );
   lines.push('');
@@ -376,39 +423,54 @@ export function renderEvaluation(
   // ---- how the edge moves with capacity
   if (capacity.length > 0) {
     lines.push(
-      `  ${palette.bold('AND HOW MUCH ROOM THERE IS TO ACT')}   ${palette.dim(
-        'the same detector, the same batch, against the best heuristic a team could run',
-      )}`,
+      `  ${palette.bold('AND HOW MUCH ROOM THERE IS TO ACT')}`,
     );
-    for (const point of capacity) {
+    lines.push(...prose('the same detector and the same batch, against the best heuristic a team could actually run', 2));
+    lines.push('');
+
+    const rows = capacity.map((point) => {
       const edge = `${point.edge >= 0 ? '+' : ''}${(point.edge * 100).toFixed(1)}%`;
       const paint = point.edge >= 0.05 ? palette.green : point.edge > 0 ? palette.amber : palette.red;
-      const violations =
+      return [
+        `${Math.round(point.share * 100)}%`,
+        palette.dim(`${point.acted_on}/${point.max_actions}`),
+        paint(palette.bold(edge)),
+        palette.dim(point.best_runnable),
         point.heuristic_forbidden_touched > 0
-          ? palette.red(
-              `  ${palette.glyph('cross')} ${point.heuristic_forbidden_touched} forbidden touch${
-                point.heuristic_forbidden_touched === 1 ? '' : 'es'
-              } by ${point.best_runnable}`,
-            )
-          : palette.dim('  — neither touched anything out of bounds');
-      lines.push(
-        `     ${`${Math.round(point.share * 100)}% capacity`.padEnd(16)}` +
-          `${palette.dim(`${String(point.acted_on).padStart(3)}/${String(point.max_actions).padEnd(3)} used`)}   ` +
-          `${paint(palette.bold(edge.padStart(7)))} ${palette.dim('vs ' + point.best_runnable)}${violations}`,
-      );
-    }
+          ? palette.red(`${palette.glyph('cross')} ${point.heuristic_forbidden_touched}`)
+          : palette.dim(palette.glyph('skip')),
+      ];
+    });
+
+    lines.push(
+      ...table(
+        [
+          { header: 'CAPACITY', align: 'right' },
+          { header: 'USED', align: 'right' },
+          { header: 'EDGE', align: 'right' },
+          { header: 'VERSUS', flex: true, min: 12 },
+          { header: 'ITS BREACHES', align: 'right' },
+        ],
+        rows,
+        { indent: 5, width: palette.width, header: palette.dim },
+      ),
+    );
+
     lines.push('');
     lines.push(
-      palette.dim(
-        '    With room to work a fifth of the batch you can afford to be roughly right —\n' +
-          '    sorting by amount collects most of the money by accident. The tighter capacity\n' +
-          '    gets, the more every one of the few actions has to be the right one, and that is\n' +
-          '    what the model is for. Capacity is the constraint a finance team actually has.\n' +
-          '\n' +
-          '    This is one batch, so read it as an anecdote: on a single seed the edge is often\n' +
-          '    zero, because at tight capacity the highest expected value and the largest amount\n' +
-          '    are frequently the same records. Across eight seeds the mean is +20.4% at 3% and\n' +
-          '    +1.1% at 20%.  sirius revenue sweep --capacity-share 0.03  is that measurement.',
+      ...prose(
+        'With room to work a fifth of the batch you can afford to be roughly right — sorting by ' +
+          'amount collects most of the money by accident. The tighter capacity gets, the more every ' +
+          'one of the few actions has to be the right one, and that is what the model is for.',
+      ),
+    );
+    lines.push('');
+    lines.push(
+      ...prose(
+        'This is one batch, so read it as an anecdote: on a single seed the edge is often zero, ' +
+          'because at tight capacity the highest expected value and the largest amount are frequently ' +
+          'the same records. Across eight seeds the mean is +22.9% at 3% and +1.5% at 20%. ' +
+          '`sirius revenue sweep --capacity-share 0.03` is that measurement.',
       ),
     );
     lines.push('');
@@ -442,7 +504,12 @@ export function renderEvaluation(
 
   if (evaluation.calibration_warning) {
     lines.push('');
-    lines.push(`    ${palette.amber(palette.glyph('warn'))} ${palette.amber(evaluation.calibration_warning)}`);
+    // Wrapped, not one long line. This warning is the longest sentence the
+    // evaluation prints and it ran to 177 columns, which on a projector is the
+    // caveat scrolling off the edge of the claim it qualifies.
+    const warning = note(evaluation.calibration_warning, { indent: 6, width: palette.width });
+    lines.push(`    ${palette.amber(palette.glyph('warn'))} ${palette.amber(warning[0]?.trimStart() ?? '')}`);
+    for (const line of warning.slice(1)) lines.push(palette.amber(line));
   }
   lines.push('');
 
@@ -451,16 +518,23 @@ export function renderEvaluation(
   for (const point of evaluation.curve.filter((p) => p.threshold % 10 === 0 && p.threshold > 0 && p.threshold < 100)) {
     const chosen = Math.abs(point.threshold - evaluation.threshold) <= 5;
     const label = `    ${chosen ? palette.violet(palette.glyph('arrow')) : ' '} ${String(point.threshold).padStart(3)}`;
+    // Two bars at a fixed fourteen columns, plus their percentages and a rupee
+    // figure, is seventy columns before the label — wider than a narrow
+    // terminal and unreadable the moment it wraps. They share what is left.
+    const bars = Math.max(6, Math.floor((palette.width - 44) / 2));
     lines.push(
-      `${label}  ${palette.violet(palette.bar(point.precision, 14))} ${pct(point.precision).padStart(6)}  ` +
-        `${palette.blue(palette.bar(point.recall, 14))} ${pct(point.recall).padStart(6)}  ` +
-        `${(point.net_paise >= 0 ? palette.green : palette.red)(palette.rupee(point.net_paise).padStart(13))}`,
+      `${label}  ${palette.violet(palette.bar(point.precision, bars))} ${pct(point.precision).padStart(6)}  ` +
+        `${palette.blue(palette.bar(point.recall, bars))} ${pct(point.recall).padStart(6)}  ` +
+        `${(point.net_paise >= 0 ? palette.green : palette.red)(padVisible(palette.rupee(point.net_paise), 13, 'right'))}`,
     );
   }
   lines.push('');
   lines.push(
     palette.dim(
-      `  the operating threshold (${model.threshold}) was chosen on the training split alone: ${model.threshold_rule}`,
+      prose(
+        `the operating threshold (${model.threshold}) was chosen on the training split alone: ${model.threshold_rule}`,
+        2,
+      ).join('\n'),
     ),
   );
   lines.push('');
@@ -533,14 +607,14 @@ export function renderRecovery(
     ['net', outcome.net_paise, 'attributable less what it cost'],
   ];
 
-  for (const [label, value, note] of rows) {
+  for (const [label, value, gloss] of rows) {
     const emphasis = label === 'net' || label === 'attributable';
     const paint = value < 0 ? palette.amber : emphasis ? palette.green : palette.bold;
     const text = `${value < 0 ? '-' : ''}${palette.rupee(Math.abs(value))}`;
-    lines.push(
-      `  ${palette.dim(label.padEnd(20))}${paint(emphasis ? palette.bold(text.padStart(14)) : text.padStart(14))}  ` +
-        palette.dim(note),
-    );
+    const head = `  ${palette.dim(padVisible(label, 20))}${paint(
+      emphasis ? palette.bold(padVisible(text, 14, 'right')) : padVisible(text, 14, 'right'),
+    )}  `;
+    lines.push(head + palette.dim(truncate(gloss, Math.max(0, palette.width - visibleWidth(head)))));
     if (label === 'would have anyway' || label === 'spent') {
       lines.push(`  ${palette.dim('─'.repeat(36))}`);
     }
@@ -580,11 +654,14 @@ export function renderRecovery(
     for (const [id, count] of blocked) {
       const rule = rules[id];
       lines.push(
-        `    ${palette.amber(String(count).padStart(4))}  ${palette.bold(id.padEnd(20))}${palette.dim(
-          rule?.says ?? '',
-        )}`,
+        `    ${palette.amber(padVisible(String(count), 4, 'right'))}  ${palette.bold(padVisible(id, 20))}` +
+          palette.dim(truncate(rule?.says ?? '', Math.max(0, palette.width - 30))),
       );
-      if (rule?.basis) lines.push(`          ${palette.dim(rule.basis)}`);
+      if (rule?.basis) {
+        for (const line of note(rule.basis, { indent: 10, width: palette.width })) {
+          lines.push(palette.dim(line));
+        }
+      }
     }
     lines.push('');
   }
@@ -595,12 +672,17 @@ export function renderRecovery(
   }
 
   if (trailPath) {
+    // The path is absolute and can be any length — under a temp directory it
+    // alone was 150 columns, which put the sentence explaining the audit trail
+    // out past the right edge of every terminal that will ever run this.
     lines.push(
-      palette.dim(
-        `  Every decision above — taken, refused and skipped — is in ${trailPath},\n` +
-          `  hash-chained and signed. Check it with:  sirius revenue audit --verify <file>\n`,
-      ),
+      ...note(`Every decision above — taken, refused and skipped — is in ${trailPath}, hash-chained and signed.`, {
+        indent: 2,
+        width: palette.width,
+      }).map((line) => palette.dim(line)),
     );
+    lines.push(palette.dim(`  Check it with:  sirius revenue audit --verify <file>`));
+    lines.push('');
   }
 
   return lines.join('\n');
@@ -625,14 +707,15 @@ export function renderRecoveryLog(
   limit = 120,
 ): string[] {
   const lines: string[] = [];
+  const width = palette.width;
 
   for (const entry of entries) {
     if (entry.disposition === 'skipped') continue;
     if (lines.length >= limit) break;
 
     const clock = entry.at.slice(11, 16);
-    const id = entry.record_id.padEnd(12);
-    const action = entry.action.padEnd(22);
+    const id = padVisible(entry.record_id, 12);
+    const action = padVisible(entry.action, 22);
 
     if (entry.disposition === 'executed') {
       const recovered = entry.recovered_paise ?? 0;
@@ -645,11 +728,14 @@ export function renderRecoveryLog(
       continue;
     }
 
-    lines.push(
+    // The refusal's reason is a sentence — "4 messages already sent to this
+    // party today" — and it is the part that gives way, because the rule that
+    // refused is the thing an audience is being shown.
+    const head =
       `  ${palette.dim(clock)}  ${id}${palette.amber(action)}` +
-        `${palette.amber(palette.glyph('hold'))} ${palette.amber(entry.rule_id ?? 'blocked')} ` +
-        palette.dim(`— ${entry.detail ?? ''}`),
-    );
+      `${palette.amber(palette.glyph('hold'))} ${palette.amber(entry.rule_id ?? 'blocked')} `;
+    const room = Math.max(0, width - visibleWidth(head) - 2);
+    lines.push(head + palette.dim(truncate(`— ${entry.detail ?? ''}`, room)));
   }
 
   return lines;
@@ -1026,69 +1112,86 @@ export function renderStress(report: StressReport, palette: Palette): string {
   const lines: string[] = [''];
   const pct = (value: number | null): string =>
     value === null ? 'n/a' : `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
+  const prose = (text: string, indent = 4): string[] =>
+    note(text, { indent, width: palette.width }).map((line) => palette.dim(line));
 
+  lines.push(`  ${palette.bold('WHEN THE WORLD STOPS MATCHING THE TRAINING DATA')}`);
   lines.push(
-    `  ${palette.bold('WHEN THE WORLD STOPS MATCHING THE TRAINING DATA')}   ${palette.dim(
-      `${report.seeds.length} seeds · ${Math.round(report.capacity_share * 100)}% capacity`,
-    )}`,
-  );
-  lines.push('');
-  lines.push(
-    palette.dim(
-      '    The shift is applied to the generator, not the sample, so a model fitted on the\n' +
-        '    world as it was meets one that genuinely obeys different rules. The heuristics it\n' +
-        '    is measured against are not trained on anything, so they cannot go stale.',
+    ...prose(
+      `${report.seeds.length} seed${report.seeds.length === 1 ? '' : 's'} · ` +
+        `${Math.round(report.capacity_share * 100)}% capacity · the shift is ` +
+        'applied to the generator, not the sample, so a model fitted on the world as it was meets one ' +
+        'that genuinely obeys different rules. The heuristics it is measured against are not trained ' +
+        'on anything, so they cannot go stale.',
+      2,
     ),
   );
   lines.push('');
-  lines.push(
-    `     ${palette.dim('scenario'.padEnd(20))}${palette.dim('before'.padStart(8))}${palette.dim(
-      'after'.padStart(9),
-    )}${palette.dim('retrained'.padStart(11))}   ${palette.dim('ceiling   out of bounds')}`,
-  );
 
-  for (const row of report.rows) {
+  const rows = report.rows.map((row) => {
     const held = (row.edge_after ?? 0) > 0;
     const paint = held ? palette.green : palette.red;
-    const mark = held ? palette.green(palette.glyph('check')) : palette.red(palette.glyph('cross'));
+    return [
+      held ? palette.green(palette.glyph('check')) : palette.red(palette.glyph('cross')),
+      row.name,
+      palette.dim(pct(row.edge_before)),
+      paint(palette.bold(pct(row.edge_after))),
+      palette.dim(pct(row.edge_retrained)),
+      palette.dim(`${(row.ceiling_after * 100).toFixed(0)}%`),
+      row.forbidden_touched === 0
+        ? palette.green(palette.glyph('check'))
+        : palette.red(`${palette.glyph('cross')} ${row.forbidden_touched}`),
+    ];
+  });
 
+  const rendered = table(
+    [
+      { header: '' },
+      { header: 'WORLD', flex: true, min: 12 },
+      { header: 'BEFORE', align: 'right' },
+      { header: 'AFTER', align: 'right' },
+      { header: 'RETRAINED', align: 'right' },
+      { header: 'CEILING', align: 'right' },
+      { header: 'CLEAN', align: 'right' },
+    ],
+    rows,
+    { indent: 3, width: palette.width, header: palette.dim },
+  );
+
+  lines.push(rendered[0] as string);
+  report.rows.forEach((row, index) => {
+    lines.push(rendered[index + 1] as string);
+    lines.push(...prose(row.what, 7));
+  });
+
+  lines.push('');
+  lines.push(`    ${palette.bold(`The money edge held in ${report.held} of ${report.rows.length} worlds.`)}`);
+  lines.push(...prose(`The worst of them was "${report.worst}".`, 4));
+
+  const clean = report.rows.every((row) => row.forbidden_touched === 0);
+  if (clean) {
     lines.push(
-      `   ${mark} ${row.name.padEnd(20)}` +
-        `${palette.dim(pct(row.edge_before).padStart(7))}` +
-        `${paint(palette.bold(pct(row.edge_after).padStart(9)))}` +
-        `${palette.dim(pct(row.edge_retrained).padStart(11))}   ` +
-        `${palette.dim(`${(row.ceiling_after * 100).toFixed(0)}%`.padStart(6))}   ` +
-        (row.forbidden_touched === 0
-          ? palette.green(`${palette.glyph('check')} none`)
-          : palette.red(`${palette.glyph('cross')} ${row.forbidden_touched}`)),
+      `    ${palette.green(palette.glyph('check'))} ${palette.bold('It touched nothing out of bounds in any of them.')}`,
     );
-    lines.push(`     ${' '.repeat(20)}${palette.dim(row.what)}`);
+    lines.push(
+      ...prose(
+        'The money edge is a preference; that is a rule, and a rule that only holds on the ' +
+          'distribution you trained on is not a rule.',
+        6,
+      ),
+    );
+  } else {
+    lines.push(
+      `    ${palette.red(palette.glyph('cross'))} It touched records it must not. That is the failure that matters.`,
+    );
   }
 
   lines.push('');
-  const survived = `${report.held} of ${report.rows.length}`;
   lines.push(
-    `    ${palette.bold('The money edge held in ' + survived + ' worlds')}${palette.dim(
-      `, and the worst of them was "${report.worst}".`,
-    )}`,
-  );
-
-  const clean = report.rows.every((row) => row.forbidden_touched === 0);
-  lines.push(
-    clean
-      ? `    ${palette.green(palette.glyph('check'))} ${palette.bold(
-          'It touched nothing out of bounds in any of them.',
-        )}${palette.dim(' The money edge is a preference; that is a rule,')}\n      ${palette.dim(
-          'and a rule that only holds on the distribution you trained on is not a rule.',
-        )}`
-      : `    ${palette.red(palette.glyph('cross'))} It touched records it must not. That is the failure that matters.`,
-  );
-  lines.push('');
-  lines.push(
-    palette.dim(
-      '    Where `retrained` is worse than `after`, refitting on the shifted world did not\n' +
-        '    help — the heuristic is simply better there, and no amount of retraining fixes a\n' +
-        '    model that has nothing to say about a portfolio it was not designed for.',
+    ...prose(
+      'Where `retrained` is worse than `after`, refitting on the shifted world did not help — the ' +
+        'heuristic is simply better there, and no amount of retraining fixes a model that has nothing ' +
+        'to say about a portfolio it was not designed for.',
     ),
   );
   lines.push('');

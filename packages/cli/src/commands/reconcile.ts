@@ -20,6 +20,7 @@ import type { BankLine, LedgerEntry, LedgerLinks, SettlementLine } from '../reve
 import { reconcile } from '../revenue/reconcile.js';
 import type { Exception, ReconcileResult, Tier } from '../revenue/reconcile.js';
 import { detectCapabilities } from '../ui/theme.js';
+import { note, padVisible, truncate, visibleWidth } from '../ui/kit.js';
 
 interface ReconcileFlags {
   gen?: boolean;
@@ -180,31 +181,54 @@ function render(
   lines.push('');
   lines.push(palette.hr);
   lines.push(
-    ` ${palette.bold('RECONCILIATION')}   ${palette.dim(
-      `${result.counts.ledger} captures · ${result.counts.settlements} settlement lines · ` +
-        `${result.counts.bank} bank lines · ${dir}`,
+    ` ${palette.bold('RECONCILIATION')}${palette.dim(
+      truncate(
+        `   ${result.counts.ledger} captures · ${result.counts.settlements} settlement lines · ` +
+          `${result.counts.bank} bank lines`,
+        Math.max(0, palette.width - 16),
+      ),
     )}`,
   );
   lines.push(palette.hr);
   lines.push('');
 
+  // The bar was a fixed twenty-six columns with a sentence after it, which put
+  // the accuracy row at 106 — the number a reader came for, and then the
+  // explanation of it, past the edge of the terminal.
+  const barWidth = Math.max(10, Math.min(26, palette.width - 54));
+  const metric = (label: string, value: number, paint: (t: string) => string, gloss: string): string => {
+    const head = `  ${padVisible(label, 16)}${palette.bold(padVisible(pct(value), 7, 'right'))}  ${paint(
+      palette.bar(value, barWidth),
+    )}  `;
+    return head + palette.dim(truncate(gloss, Math.max(0, palette.width - visibleWidth(head))));
+  };
+
   lines.push(
-    `  ${'matched'.padEnd(16)}${palette.bold(pct(result.match_rate).padStart(7))}  ${palette.violet(
-      palette.bar(result.match_rate, 26),
-    )}  ${palette.dim(`${result.matches.filter((m) => m.order_id).length} of ${result.counts.ledger} captures`)}`,
+    metric(
+      'matched',
+      result.match_rate,
+      palette.violet,
+      `${result.matches.filter((m) => m.order_id).length} of ${result.counts.ledger} captures`,
+    ),
   );
   lines.push(
-    `  ${'matched (₹)'.padEnd(16)}${palette.bold(pct(result.value_match_rate).padStart(7))}  ${palette.blue(
-      palette.bar(result.value_match_rate, 26),
-    )}  ${palette.dim(`${palette.rupee(result.matched_value_paise)} of ${palette.rupee(result.ledger_value_paise)}`)}`,
+    metric(
+      'matched (₹)',
+      result.value_match_rate,
+      palette.blue,
+      `${palette.rupee(result.matched_value_paise)} of ${palette.rupee(result.ledger_value_paise)}`,
+    ),
   );
 
   if (result.accuracy && result.accuracy.checked > 0) {
     const accuracy = result.accuracy.correct / result.accuracy.checked;
     lines.push(
-      `  ${'correct'.padEnd(16)}${palette.bold(pct(accuracy).padStart(7))}  ${palette.green(
-        palette.bar(accuracy, 26),
-      )}  ${palette.dim(`${result.accuracy.correct} of ${result.accuracy.checked} pairings verified against the true links`)}`,
+      metric(
+        'correct',
+        accuracy,
+        palette.green,
+        `${result.accuracy.correct} of ${result.accuracy.checked} pairings verified against the true links`,
+      ),
     );
   } else {
     lines.push(`  ${palette.dim('correct'.padEnd(16))}${palette.dim('     — no answer key: these are real books')}`);
@@ -215,13 +239,18 @@ function render(
   for (const [tier, count] of Object.entries(result.by_tier) as [Tier, number][]) {
     if (count === 0) continue;
     const paint = tier === 'fuzzy' ? palette.amber : palette.dim;
-    lines.push(`    ${paint(String(count).padStart(5))}  ${palette.bold(tier.padEnd(12))}${palette.dim(TIER_NOTE[tier])}`);
+    lines.push(
+      `    ${paint(padVisible(String(count), 5, 'right'))}  ${palette.bold(padVisible(tier, 12))}` +
+        palette.dim(truncate(TIER_NOTE[tier], Math.max(0, palette.width - 23))),
+    );
   }
   lines.push('');
   lines.push(
-    `  ${palette.dim('deducted along the way')} ${palette.bold(palette.rupee(result.deductions_paise))} ${palette.dim(
-      'in commission, tax and TDS — missing on purpose, and accounted for',
-    )}`,
+    ...note(
+      `deducted along the way ${palette.rupee(result.deductions_paise)} in commission, tax and TDS — ` +
+        `missing on purpose, and accounted for`,
+      { indent: 2, width: palette.width },
+    ).map((line) => palette.dim(line)),
   );
   lines.push('');
 
@@ -254,14 +283,19 @@ function render(
       `  ${palette.amber(palette.glyph('warn'))} ${palette.bold(kind.replace(/_/g, ' '))}  ` +
         `${palette.dim(`${items.length} line(s)`)} · ${palette.bold(palette.rupee(value))}`,
     );
-    lines.push(`      ${palette.dim(items[0]?.next_step ?? '')}`);
+    // The next step is a full sentence and belongs wrapped, not spilling past
+    // the terminal — it is the part of an exception a person actually acts on.
+    for (const line of note(items[0]?.next_step ?? '', { indent: 6, width: palette.width })) {
+      lines.push(palette.dim(line));
+    }
 
     for (const item of items.slice(0, flags.exceptions ? items.length : limit)) {
-      lines.push(
-        `        ${item.reference.padEnd(14)}${palette.rupee(Math.abs(item.amount_paise)).padStart(13)}  ${palette.dim(
-          item.detail,
-        )}`,
-      );
+      const head = `        ${padVisible(item.reference, 14)}${padVisible(
+        palette.rupee(Math.abs(item.amount_paise)),
+        13,
+        'right',
+      )}  `;
+      lines.push(head + palette.dim(truncate(item.detail, Math.max(0, palette.width - visibleWidth(head)))));
     }
     if (!flags.exceptions && items.length > limit) {
       lines.push(palette.dim(`        … ${items.length - limit} more (--exceptions for all of them)`));
