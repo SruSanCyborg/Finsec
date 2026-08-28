@@ -200,7 +200,7 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         // reads as a broken terminal rather than a deliberate trade.
         initial.push({
           id: nextId++,
-          text: `Mouse wheel scrolls. Hold ${nativeSelectionKey()} to select text, or SIRIUS_NO_MOUSE=1 to disable capture.`,
+          text: `Scroll with the wheel. Drag to select — it copies on release. Hold ${nativeSelectionKey()} for the terminal's own selection.`,
           kind: 'note',
         });
       }

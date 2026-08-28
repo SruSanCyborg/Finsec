@@ -17,6 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { CommandPalette, filterCommands } from './CommandPalette.js';
 import { COLOR } from './theme.js';
+import { copyToClipboard } from './clipboard.js';
 import type { ShellCommand } from './CommandPalette.js';
 import type { Capabilities, Glyphs } from './theme.js';
 
@@ -82,6 +83,15 @@ export function FullScreenShell({
   // Ctrl+E reads as the verb here and leaves Ctrl+O free.
   const [expanded, setExpanded] = useState(false);
   const lastCtrlC = useRef(0);
+  // Click-drag selection, in screen rows. Capturing the mouse takes the
+  // terminal's own selection away, so the app has to provide one or the user
+  // simply cannot copy anything.
+  const [selection, setSelection] = useState<{ from: number; to: number } | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+  // Held in a ref, not state: press, drag, and release can all arrive in a
+  // single stdin chunk, so the release must read what the drag just wrote
+  // rather than a value React has not re-rendered yet.
+  const dragging = useRef<{ from: number; to: number; moved: boolean } | null>(null);
 
   // `|| 24`, not `?? 24`: a pty that has not been sized reports 0, which is not
   // nullish, and `height={0}` clips the entire app to nothing. Exactly the bug
@@ -132,14 +142,90 @@ export function FullScreenShell({
     // escape stripped, so it is matched here rather than as a key: button 64 is
     // wheel-up, 65 wheel-down. Three lines a notch matches most terminals'
     // native feel.
-    const mouse = /\[<(\d+);\d+;\d+([Mm])/.exec(input);
-    if (mouse) {
+    // A drag emits an event per pixel-row of travel, and the terminal often
+    // delivers a whole burst of them in one chunk — so every event in the chunk
+    // is processed in order, not just the first. Groups: button, column, row,
+    // and M (press or motion) versus m (release).
+    const events = [...input.matchAll(/\[<(\d+);(\d+);(\d+)([Mm])/g)];
+    if (events.length > 0) {
       // Buttons 64 and 65 are the wheel. Everything else is a click or a drag
       // and is swallowed here — an unmatched sequence used to fall through to
       // the printable branch below and get typed into the prompt as garbage.
-      const button = Number(mouse[1]);
-      if (button === 64) return scrollBy(-WHEEL_LINES);
-      if (button === 65) return scrollBy(WHEEL_LINES);
+      let wheel = 0;
+      for (const event of events) {
+        const button = Number(event[1]);
+        const row = Number(event[3]);
+        const isRelease = event[4] === 'm';
+
+        if (button === 64) {
+          wheel -= WHEEL_LINES;
+          continue;
+        }
+        if (button === 65) {
+          wheel += WHEEL_LINES;
+          continue;
+        }
+
+        // Screen row to transcript index. Row 1 is the header, so the first
+        // transcript line sits on row 2. Clamped, so dragging past the last
+        // line selects to the end rather than selecting blank padding.
+        const row0 = row - 1 - HEADER_HEIGHT;
+        const inTranscript = row0 >= 0 && row0 < viewportHeight;
+        const index = Math.min(offset + Math.max(0, row0), Math.max(0, shown.length - 1));
+
+        if (button === 0 && !isRelease && inTranscript) {
+          dragging.current = { from: index, to: index, moved: false };
+          setSelection({ from: index, to: index });
+          setCopied(null);
+          continue;
+        }
+
+        // 32 is button 0 with the motion flag set: a drag.
+        if (button === 32 && dragging.current) {
+          const drag = dragging.current;
+          if (index !== drag.to) {
+            drag.to = index;
+            drag.moved = true;
+            setSelection({ from: drag.from, to: index });
+          }
+          continue;
+        }
+
+        if (isRelease && dragging.current) {
+          const drag = dragging.current;
+          dragging.current = null;
+
+          // A click that never moved is a click, not a selection. Copying a
+          // line onto the clipboard because someone clicked to focus the
+          // window would destroy whatever they had copied a moment earlier.
+          if (!drag.moved) {
+            setSelection(null);
+            continue;
+          }
+
+          // Copy on release, the way the terminal's own selection behaves.
+          const a = Math.min(drag.from, drag.to);
+          const b = Math.max(drag.from, drag.to);
+          const text = shown
+            .slice(a, b + 1)
+            .map((l) => l.text.trimEnd())
+            .join('\n');
+
+          if (text.trim()) {
+            void copyToClipboard(text).then((ok) => {
+              setCopied(
+                ok
+                  ? `copied ${b - a + 1} line${b === a ? '' : 's'}`
+                  : 'no clipboard tool on this system',
+              );
+            });
+          }
+        }
+      }
+
+      // Wheel notches in the chunk are summed and applied once, so a fast
+      // scroll is one state update instead of a dozen.
+      if (wheel !== 0) scrollBy(wheel);
       return;
     }
 
@@ -316,11 +402,23 @@ export function FullScreenShell({
       </Box>
 
       <Box flexDirection="column" height={viewportHeight} overflow="hidden">
-        {visible.map((line) => (
-          <Text key={line.id} color={lineColor(line.kind)} wrap="truncate-end">
-            {line.kind === 'input' ? ` ${glyphs.arrow} ${line.text}` : ` ${line.text}`}
-          </Text>
-        ))}
+        {visible.map((line, row) => {
+          const absolute = offset + row;
+          const selected =
+            selection !== null &&
+            absolute >= Math.min(selection.from, selection.to) &&
+            absolute <= Math.max(selection.from, selection.to);
+          return (
+            <Text
+              key={line.id}
+              color={selected ? undefined : lineColor(line.kind)}
+              inverse={selected}
+              wrap="truncate-end"
+            >
+              {line.kind === 'input' ? ` ${glyphs.arrow} ${line.text}` : ` ${line.text}`}
+            </Text>
+          );
+        })}
         {/* Pad so the input box stays pinned to the bottom on a short transcript. */}
         {Array.from({ length: Math.max(0, viewportHeight - visible.length) }, (_, i) => (
           <Text key={`pad-${i}`}> </Text>
@@ -353,7 +451,9 @@ export function FullScreenShell({
           {following
             ? busy
               ? ' ctrl-c cancel · ↑↓ scroll'
-              : ` / commands · ↑↓ scroll · ctrl-p history · ctrl-e ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
+              : copied
+                ? ` ${copied} · drag to select · ctrl-e ${expanded ? 'hide' : 'why'}`
+                : ` / commands · ↑↓ scroll · drag to copy · ctrl-e ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
             : ` ${hiddenBelow} below · ↑↓ scroll · ctrl-e ${expanded ? 'hide' : 'why'} · esc bottom`}
         </Text>
       </Box>

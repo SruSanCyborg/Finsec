@@ -17,7 +17,8 @@
     "contract:types": "openapi-typescript contract/openapi.yaml -o packages/cli/src/api/types.ts",
     "cli": "node packages/cli/dist/cli.js",
     "build": "pnpm --filter sirius build",
-    "test": "pnpm --filter sirius test"
+    "test": "pnpm --filter sirius test",
+    "probe:mouse": "bash scripts/probe-mouse.sh"
   },
   "devDependencies": {
     "@redocly/cli": "^2.46.1",

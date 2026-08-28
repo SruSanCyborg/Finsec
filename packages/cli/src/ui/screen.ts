@@ -27,8 +27,11 @@ const CLEAR = '\u001b[3J\u001b[2J\u001b[H';
 // 1006 asks for the SGR encoding, which is the only one that survives past
 // column 95. Enabling this takes click-drag selection away from the terminal,
 // which is why it is opt-out-able and why the footer says how to select.
-const ENABLE_MOUSE = '\u001b[?1000h\u001b[?1006h';
-const DISABLE_MOUSE = '\u001b[?1006l\u001b[?1000l';
+// 1002 is button-event tracking: press, release, *and* motion while a button
+// is held. 1000 reports press and release only, which is enough for the wheel
+// but not for a drag — and without drag there is no in-app selection.
+const ENABLE_MOUSE = '\u001b[?1002h\u001b[?1006h';
+const DISABLE_MOUSE = '\u001b[?1006l\u001b[?1002l';
 
 // Alternate scroll: while the alternate screen is active, the terminal turns
 // wheel events into arrow keys itself. That is the whole trick — the wheel

@@ -205,6 +205,56 @@ The product and the command are now **`sirius`**. The rename was taken all the w
 
 ---
 
+## D-016 — The shell draws its own text selection
+
+**The bind.** A terminal cannot serve two masters with one mouse. Enable SGR
+mouse reporting and the wheel scrolls the transcript, but the terminal stops
+doing click-drag-to-copy, because every button event now belongs to us. Leave it
+disabled and selection works natively, but the wheel scrolls the terminal's
+empty scrollback instead of our transcript — the alternate screen has none.
+Alternate scroll (`?1007h`) is the usual escape hatch, and it was tried; it did
+not work in the terminal this is actually demoed in.
+
+Both halves were shipped in turn and both were rejected in use, correctly: a
+scroll wheel that does nothing and a terminal you cannot copy out of are each
+broken in their own way.
+
+**Resolution.** Capture the mouse *and* implement the selection. `?1002h`
+(button-event tracking, which reports motion while a button is held) plus
+`?1006h` (SGR coordinates). Press starts a selection, motion extends it, release
+copies the range to the system clipboard and shows `copied N lines` in the
+footer. The selection is rendered in inverse video, so it looks like a
+selection. This is the same answer the mainstream agent CLIs reach, for the same reason.
+
+**Consequences, including the unflattering ones.**
+
+- Selection is **line-granular**, not character-granular. Dragging across part of
+  a line copies the whole line. Character granularity is possible and is not
+  built; the transcript is log output, and whole lines are what people paste.
+- Copying needs an external tool: `pbcopy`, `wl-copy`, `xclip`, or `clip`. Where
+  none exists the drag still highlights but cannot copy, and says so rather than
+  failing silently. `sirius doctor` reports this as a warning up front.
+- A click that never moves copies **nothing**. Clicking to focus a window must
+  not overwrite whatever the user had on their clipboard.
+- The terminal's own selection is still reachable by holding the modifier the
+  terminal reserves for it (fn on Apple Terminal, Option in iTerm2), and
+  `SIRIUS_NO_MOUSE=1` releases the mouse entirely.
+
+**Two bugs this exposed, both worth keeping in mind.** The mouse regex captured
+the button and the `M`/`m` flag but *not* the row — good enough for a wheel that
+only needs a direction, useless for a drag, so every drag resolved to one line.
+And a drag arrives as a burst of motion events that the terminal delivers in a
+single stdin chunk, so handling only the first match of the chunk drops most of
+the drag and most of the scroll. Both are pinned by `test/selection.test.tsx`.
+
+**Verification.** The component tests drive real SGR byte sequences through real
+stdin. They cannot prove a real terminal is put into drag reporting and taken
+back out, so `pnpm probe:mouse` runs the shell under `script(1)` in a real pty,
+performs a real drag, and asserts `?1002h`/`?1006h` go on, the drag copies,
+nothing leaks into the prompt, and `?1002l`/`?1049l` restore on exit.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.

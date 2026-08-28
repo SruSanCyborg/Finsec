@@ -16,6 +16,7 @@ import { loadConfig, configTomlPath, findProjectRoot, loadIgnorePatterns } from 
 import { maskKey } from '../config/write.js';
 import { loadLastScan } from '../session.js';
 import { detectCapabilities, glyphsFor } from '../ui/theme.js';
+import { nativeSelectionKey } from '../ui/screen.js';
 
 interface GlobalFlags {
   apiUrl?: string;
@@ -144,20 +145,28 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
       : { hint: 'Box drawing and ₹ will use ASCII fallbacks. Check LANG is a UTF-8 locale.' }),
   });
 
-  // Mouse capture is the most common friction point: while the shell has the
-  // mouse, the terminal's own click-drag selection stops working, and people
-  // reasonably read that as a broken terminal rather than a deliberate trade.
+  // Mouse capture used to be the sharpest friction point: while the shell holds
+  // the mouse, the terminal's own click-drag selection stops working, and people
+  // reasonably read that as a broken terminal. The shell now draws the selection
+  // itself and copies on release, so both halves work — but say which clipboard
+  // tool will be used, because a missing one turns copying into a silent no-op.
   const { mouseReportingAvailable } = await import('../ui/screen.js');
+  const { clipboardAvailable } = await import('../ui/clipboard.js');
   checks.push(
     mouseReportingAvailable()
       ? {
-          status: 'ok',
+          status: clipboardAvailable() ? 'ok' : 'warn',
           label: 'mouse',
-          detail: 'fully captured — clicks handled in-app',
-          hint:
-            process.env.TERM_PROGRAM === 'Apple_Terminal'
-              ? 'Hold Fn to select text, or unset SIRIUS_MOUSE for native selection.'
-              : 'Hold Shift (Option in iTerm2) to select text, or unset SIRIUS_MOUSE.',
+          detail: clipboardAvailable()
+            ? 'wheel scrolls · drag selects and copies on release'
+            : 'wheel scrolls · drag selects, but no clipboard tool to copy into',
+          ...(clipboardAvailable()
+            ? {}
+            : {
+                hint:
+                  'Install xclip (X11) or wl-clipboard (Wayland) to make drag-to-copy work. ' +
+                  `Hold ${nativeSelectionKey()} for the terminal's own selection either way.`,
+              }),
         }
       : {
           status: 'ok',
