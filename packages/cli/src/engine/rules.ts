@@ -649,6 +649,10 @@ const supplyChain: Rule = {
   message: 'Dependency declared outside the registry',
   compliance_ref: ['PCI-DSS:6.3.2'],
   fix_action: 'pin_or_remove_dep',
+  // Not python/javascript/typescript. This rule reads manifests, and inheriting
+  // the default language list made `rules show` claim it applied to source
+  // files it never opens.
+  languages: ['package.json', 'requirements.txt'],
   runManifest(file) {
     const findings: RawFinding[] = [];
 

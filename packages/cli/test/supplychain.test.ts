@@ -18,7 +18,8 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { readManifest, manifestKind } from '../src/engine/manifests.js';
-import { runManifestRules } from '../src/engine/rules.js';
+import { runManifestRules, RULES } from '../src/engine/rules.js';
+import { localRule } from '../src/engine/catalog.js';
 
 let dir: string;
 beforeEach(() => {
@@ -158,5 +159,32 @@ describe('reading package.json as data rather than as lines', () => {
     const line = found[0]!.line;
     const source = PKG({ safe: '1.0.0', bad: 'file:../hack' }).split('\n');
     expect(source[line - 1]).toContain('"bad"');
+  });
+});
+
+describe('how the rule describes itself', () => {
+  it('says which manifests it reads, not which languages', () => {
+    // It inherited the default python/javascript/typescript list, so
+    // `sirius rules show SIR-SEC-060` claimed it applied to source files it
+    // never opens.
+    const rule = localRule('SIR-SEC-060', '0.0.0');
+    expect(rule?.languages).toEqual(['package.json', 'requirements.txt']);
+  });
+
+  it('keeps every manifest rule in the category `rules show` checks', () => {
+    // `rules show` prints "this rule is a compiled AST matcher … it runs
+    // against the parsed syntax tree", which is true of twelve rules and false
+    // of this one. It picks the wording by category, so a manifest rule filed
+    // anywhere else would be described as something it is not.
+    for (const rule of RULES) {
+      if (rule.run) continue;
+      expect(rule.category, `${rule.id} reads manifests but is not supplychain`).toBe('supplychain');
+    }
+  });
+
+  it('is the only rule with no source pass', () => {
+    // If this ever fails, the sentence above needs a better signal than
+    // category — and so does anything else that assumes one manifest rule.
+    expect(RULES.filter((rule) => !rule.run).map((rule) => rule.id)).toEqual(['SIR-SEC-060']);
   });
 });

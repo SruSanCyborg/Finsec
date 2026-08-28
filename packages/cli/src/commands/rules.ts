@@ -7,7 +7,7 @@
  * on the `auto` branch rather than faked.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { ApiClient } from '../api/client.js';
@@ -181,7 +181,12 @@ async function showRule(ruleId: string | undefined, flags: RulesFlags, globals: 
   process.stdout.write(`${rule.id}  ${rule.severity ?? ''}  ${rule.category ?? ''}\n`);
   if (rule.message) process.stdout.write(`${rule.message}\n`);
   process.stdout.write('\n');
-  if (rule.languages?.length) process.stdout.write(`languages:   ${rule.languages.join(', ')}\n`);
+  // "applies to" for a rule that reads manifests: `languages: package.json` is
+  // a category error, and the field is the only place the distinction shows.
+  if (rule.languages?.length) {
+    const label = rule.category === 'supplychain' ? 'applies to: ' : 'languages:  ';
+    process.stdout.write(`${label} ${rule.languages.join(', ')}\n`);
+  }
   if (rule.compliance_ref?.length) process.stdout.write(`compliance:  ${rule.compliance_ref.join(', ')}\n`);
   if (rule.fix_action) process.stdout.write(`fix action:  ${rule.fix_action}\n`);
   if (rule.suppress_token) process.stdout.write(`suppress:    ${rule.suppress_token}\n`);
@@ -193,10 +198,20 @@ async function showRule(ruleId: string | undefined, flags: RulesFlags, globals: 
   else if (local) {
     // The PRD's rules are YAML; these are compiled AST matchers. Saying so is
     // better than printing a plausible YAML document that no code ever reads.
+    // One rule does not walk a tree, and saying it does would be exactly the
+    // kind of plausible-but-false line this branch keeps deleting. A manifest
+    // has no syntax tree; supply chain reads it as the line format it is.
+    const readsManifests = rule.category === 'supplychain';
     process.stdout.write(
-      `\nThis rule is a compiled AST matcher in the local engine, not a YAML\n` +
-        `document — there is no rule source to print. It runs against the parsed\n` +
-        `syntax tree, which is why it can tell an interpolated query from a safe one.\n`,
+      readsManifests
+        ? `\nThis rule is compiled into the local engine, not a YAML document — there\n` +
+            `is no rule source to print. Unlike every other rule it does not walk a\n` +
+            `syntax tree: a dependency manifest has none, so it is read as the line\n` +
+            `format it is, and a floating version is only reported when no lockfile\n` +
+            `governs it.\n`
+        : `\nThis rule is a compiled AST matcher in the local engine, not a YAML\n` +
+            `document — there is no rule source to print. It runs against the parsed\n` +
+            `syntax tree, which is why it can tell an interpolated query from a safe one.\n`,
     );
   }
 }
@@ -222,6 +237,15 @@ async function validateRule(path: string | undefined, globals: GlobalFlags): Pro
 
   const filePath = resolve(process.cwd(), path);
   if (!existsSync(filePath)) throw new CliError(`No such file: ${path}`);
+
+  // A directory is the likely typo, and letting readFileSync answer it printed
+  // `error: EISDIR: illegal operation on a directory, read` — a Node errno is
+  // not an answer to "which file did you mean?".
+  if (statSync(filePath).isDirectory()) {
+    throw new CliError(`${path} is a directory, and validate takes one rule file.`, {
+      hint: 'e.g. sirius rules validate rules/my-rule.yaml',
+    });
+  }
 
   const source = readFileSync(filePath, 'utf8');
   const { validateRuleDocument } = await import('../engine/rule-schema.js');
