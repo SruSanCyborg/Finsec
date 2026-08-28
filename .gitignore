@@ -21,3 +21,6 @@ config.toml
 # Editor
 .vscode/
 .idea/
+
+# Local demo scratch copy (recreate with: cp -r contract/fixtures/chaos-repo/. demo/)
+demo/
