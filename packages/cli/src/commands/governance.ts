@@ -534,7 +534,7 @@ async function verifyReport(path: string, expectKey?: string): Promise<void> {
     return;
   }
 
-  if (!checkInclusion(digest, evidence)) {
+  if (!checkInclusion(evidence.entry, evidence)) {
     process.stdout.write(`        LEDGER PROOF FAILED — the entry does not hash into the recorded root.\n`);
     process.exitCode = 1;
     return;

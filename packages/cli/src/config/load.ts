@@ -54,14 +54,84 @@ function readConfigFile<T>(path: string, parse: (raw: string) => unknown, schema
     throw new CliError(`${path} is not valid ${path.endsWith('.toml') ? 'TOML' : 'YAML'}`, { cause });
   }
 
+  warnAboutUnknownKeys(path, parsed, schema as unknown as { shape?: Record<string, unknown> });
+
   try {
     return schema.parse(parsed ?? {});
   } catch (cause) {
-    throw new CliError(`${path} has invalid settings`, {
-      hint: cause instanceof Error ? cause.message.split('\n')[0] : undefined,
-      cause,
-    });
+    throw new CliError(`${path} has invalid settings`, { hint: describeZodIssues(cause), cause });
   }
+}
+
+/**
+ * Says something about a key nobody will ever read.
+ *
+ * Zod objects are non-strict, so `min_complaince_score: 80` parses cleanly and
+ * applies nothing. A misspelled *gate* key means the gate silently does not
+ * exist — the config looks stricter than the run actually is, which is the
+ * direction that matters.
+ *
+ * A warning rather than an error, deliberately. A hard failure would turn a
+ * typo into a broken build for teams whose config was written against a newer
+ * version of the tool, and this file is read on every single command. Saying it
+ * once on stderr keeps machine output clean and still reaches a person.
+ *
+ * Only the top level and `policy:` are checked: those are where the gate lives,
+ * and `revenue:` is a large nested surface where a false alarm would be worse
+ * than the silence.
+ */
+function warnAboutUnknownKeys(path: string, parsed: unknown, schema: { shape?: Record<string, unknown> }): void {
+  if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return;
+  const shape = schema.shape;
+  if (!shape) return;
+
+  const unknown = Object.keys(parsed as Record<string, unknown>).filter((key) => !(key in shape));
+
+  const policy = (parsed as { policy?: unknown }).policy;
+  const policyKeys = ['fail_on_severity', 'max_new_findings', 'require_no_verified_secrets', 'min_compliance_score'];
+  if (typeof policy === 'object' && policy !== null && !Array.isArray(policy)) {
+    for (const key of Object.keys(policy as Record<string, unknown>)) {
+      if (!policyKeys.includes(key)) unknown.push(`policy.${key}`);
+    }
+  }
+
+  if (unknown.length === 0) return;
+  process.stderr.write(
+    `note: ${path} — ${unknown.length === 1 ? 'this setting is' : 'these settings are'} not recognised ` +
+      `and will be ignored: ${unknown.join(', ')}\n`,
+  );
+}
+
+/**
+ * Turns a Zod failure into something that names the key and the value.
+ *
+ * The hint was `cause.message.split('\n')[0]`, and a Zod error's message is a
+ * pretty-printed JSON array — so the first line is the opening bracket, and the
+ * whole error read:
+ *
+ *     error: sirius.yaml has invalid settings
+ *       [
+ *
+ * Which is the least useful string the program could have chosen. Every
+ * hand-written error in this CLI names the problem and the fix; this one named
+ * a punctuation mark.
+ *
+ * At most three issues, because a config with ten mistakes is usually one
+ * mistake — a mis-indented block — and printing ten lines buries the first.
+ */
+function describeZodIssues(cause: unknown): string | undefined {
+  const issues = (cause as { issues?: { path?: (string | number)[]; message?: string }[] })?.issues;
+  if (!Array.isArray(issues) || issues.length === 0) {
+    return cause instanceof Error ? cause.message.split('\n')[0] : undefined;
+  }
+
+  const described = issues.slice(0, 3).map((issue) => {
+    const where = (issue.path ?? []).join('.');
+    return where ? `${where}: ${issue.message}` : (issue.message ?? 'invalid');
+  });
+
+  const more = issues.length > described.length ? ` (and ${issues.length - described.length} more)` : '';
+  return `${described.join('; ')}${more}`;
 }
 
 /** Walks up from `from` to the filesystem root, nearest directory first. */

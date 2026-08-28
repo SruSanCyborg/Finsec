@@ -1747,3 +1747,37 @@ six lines. The first fix — `wrap="truncate-end"` with a width on the row — w
 worse: the row becomes a flex container, Ink shrinks *every* child, and the
 indent and name column collapsed on exactly the rows that were cut. Same lesson
 as D-047: decide the width, then hand Ink strings that already fit.
+
+## D-051 — The log protects the half a person reads, and config says what it ignored
+
+**`ledger verify` said "no entry was rewritten" after an entry was rewritten.**
+The leaf was `leafHash(digest)` alone, so `scan_id`, `recorded_at` and
+`findings` — everything `ledger show` prints, and everything an auditor actually
+reads — sat outside the chain. An entry could be restamped to 2020, renamed
+`clean-audit-2026`, and have its finding count zeroed, and the verifier answered
+`OK · 1 entry, every prefix consistent · so no entry was rewritten or removed`.
+
+A report could not be *swapped*, because the digest was chained and that part
+worked. But a transparency log whose human-readable half is unprotected is
+telling the truth about the half nobody reads. The leaf now covers the whole
+entry, written in fixed field order rather than through a serialiser, so the
+hash cannot move because a JSON implementation reordered keys.
+
+**A bad config value produced the message `[`.** The hint was
+`cause.message.split('\n')[0]`, and a Zod error's message is a pretty-printed
+JSON array — so the first line was the opening bracket. Every hand-written error
+in this CLI names the problem and the fix; this one named a punctuation mark. It
+now names the key and the values that were expected, at most three issues,
+because a config with ten mistakes is usually one mis-indented block and
+printing ten lines buries the first.
+
+**A misspelled key said nothing at all.** Zod objects are non-strict, so
+`policy: { min_complaince_score: 80 }` parses cleanly and applies nothing. A
+misspelled *gate* key means the gate silently does not exist — the file reads
+stricter than the run is, which is the direction that matters.
+
+A warning rather than an error, deliberately: a hard failure turns a typo into a
+broken build for anyone whose config was written against a newer version, and
+this file is read on every command. Only the top level and `policy:` are
+checked, because that is where the gate lives and `revenue:` is a large nested
+surface where a false alarm would be worse than the silence.

@@ -76,7 +76,7 @@ describe('proving one report is in the log', () => {
     for (let n = 1; n <= 9; n += 1) {
       const evidence = evidenceFor(ledger, digestOf(n));
       expect(evidence, `report ${n}`).toBeDefined();
-      expect(checkInclusion(digestOf(n), evidence!), `report ${n}`).toBe(true);
+      expect(checkInclusion(evidence!.entry, evidence!), `report ${n}`).toBe(true);
     }
   });
 
@@ -87,8 +87,10 @@ describe('proving one report is in the log', () => {
 
   it('rejects a proof carried over to a different report', () => {
     for (let n = 1; n <= 5; n += 1) add(n);
-    const evidence = evidenceFor(loadLedger(dir), digestOf(2));
-    expect(checkInclusion(digestOf(3), evidence!)).toBe(false);
+    const ledger = loadLedger(dir);
+    const evidence = evidenceFor(ledger, digestOf(2));
+    const other = ledger.entries[3]!;
+    expect(checkInclusion(other, evidence!)).toBe(false);
   });
 });
 
@@ -105,7 +107,13 @@ describe('proving the log only ever appended', () => {
     const ledger = loadLedger(dir);
     ledger.entries[2]!.digest = digestOf(99);
     // The leaf is recomputed too, so the file is not obviously wrong.
-    ledger.entries[2]!.leaf = hex(leafHash(digestOf(99)));
+    ledger.entries[2]!.leaf = hex(
+      leafHash(
+        [digestOf(99), ledger.entries[2]!.scan_id, ledger.entries[2]!.recorded_at, String(ledger.entries[2]!.findings)].join(
+          '\u0000',
+        ),
+      ),
+    );
 
     const verdict = checkLedger(ledger);
     expect(verdict.ok).toBe(false);
@@ -121,7 +129,23 @@ describe('proving the log only ever appended', () => {
 
     const verdict = checkLedger(ledger);
     expect(verdict.ok).toBe(false);
-    expect(verdict.detail).toContain('leaf does not hash its digest');
+    expect(verdict.detail).toContain('leaf does not hash its entry');
+  });
+
+  it('catches an entry whose displayed history was rewritten', () => {
+    // The half an auditor actually reads. `scan_id`, `recorded_at` and
+    // `findings` used to sit outside the chain, so an entry could be restamped
+    // to 2020, renamed `clean-audit-2026` and have its finding count zeroed
+    // while `ledger verify` answered "every prefix consistent — so no entry was
+    // rewritten or removed".
+    for (let n = 1; n <= 4; n += 1) add(n);
+    const ledger = loadLedger(dir);
+    ledger.entries[1]!.recorded_at = '2020-01-01T00:00:00.000Z';
+    ledger.entries[1]!.scan_id = 'clean-audit-2026';
+    ledger.entries[1]!.findings = 0;
+
+    const verdict = checkLedger(ledger);
+    expect(verdict.ok).toBe(false);
   });
 });
 

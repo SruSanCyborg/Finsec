@@ -60,6 +60,8 @@ export interface InclusionEvidence {
   size: number;
   root: string;
   proof: string[];
+  /** The entry proved, since the leaf covers all of it and not just the digest. */
+  entry: LedgerEntry;
 }
 
 export const ledgerPath = (root: string): string => join(root, '.sirius', 'ledger.json');
@@ -76,6 +78,27 @@ export function loadLedger(root: string): Ledger {
     // the top of it would destroy exactly the history it exists to keep.
     throw new Error(`${path} is not readable as a ledger. Move it aside rather than letting a new log overwrite it.`);
   }
+}
+
+/**
+ * The leaf for one entry — over the whole entry, not just its digest.
+ *
+ * The leaf used to be `leafHash(digest)` alone, so `scan_id`, `recorded_at` and
+ * `findings` sat outside the chain entirely. They are what `ledger show` prints
+ * and what an auditor actually reads, and all three could be rewritten freely
+ * while `ledger verify` reported "every prefix consistent — so no entry was
+ * rewritten or removed". An entry could be restamped to 2020 and renamed
+ * `clean-audit-2026` and the log still called itself intact.
+ *
+ * A report still could not be *swapped*, because the digest was chained. But a
+ * transparency log whose human-readable half is unprotected is telling the
+ * truth about the half nobody reads.
+ *
+ * The fields are written in a fixed order rather than via JSON, so the hash
+ * cannot change because a serialiser reordered keys.
+ */
+function leafFor(entry: LedgerEntry): Buffer {
+  return leafHash([entry.digest, entry.scan_id, entry.recorded_at, String(entry.findings)].join('\u0000'));
 }
 
 const leavesOf = (ledger: Ledger): Buffer[] => ledger.entries.map((entry) => unhex(entry.leaf));
@@ -97,13 +120,15 @@ export function record(
   const existing = ledger.entries.findIndex((each) => each.digest === entry.digest);
   if (existing >= 0) return { ledger, index: existing, added: false };
 
-  ledger.entries.push({
+  const recorded: LedgerEntry = {
     digest: entry.digest,
-    leaf: hex(leafHash(entry.digest)),
+    leaf: '',
     scan_id: entry.scan_id,
     findings: entry.findings,
     recorded_at: entry.recorded_at ?? new Date().toISOString(),
-  });
+  };
+  recorded.leaf = hex(leafFor(recorded));
+  ledger.entries.push(recorded);
   ledger.root = hex(treeRoot(leavesOf(ledger)));
 
   const path = ledgerPath(root);
@@ -124,13 +149,19 @@ export function evidenceFor(ledger: Ledger, digest: string): InclusionEvidence |
     size: leaves.length,
     root: hex(treeRoot(leaves)),
     proof: inclusionProof(leaves, index).map(hex),
+    entry: ledger.entries[index] as LedgerEntry,
   };
 }
 
-/** Checks a report's digest against a published root, holding no other report. */
-export function checkInclusion(digest: string, evidence: InclusionEvidence): boolean {
+/**
+ * Checks one recorded entry against a published root, holding no other entry.
+ *
+ * Takes the entry rather than the digest because the leaf now covers the whole
+ * entry. The caller has it already — it comes back from `evidenceFor`.
+ */
+export function checkInclusion(entry: LedgerEntry, evidence: InclusionEvidence): boolean {
   return verifyInclusion(
-    leafHash(digest),
+    leafFor(entry),
     evidence.index,
     evidence.size,
     evidence.proof.map(unhex),
@@ -153,8 +184,8 @@ export function checkLedger(ledger: Ledger): { ok: boolean; detail: string } {
   // Each entry's leaf must be the hash of its own digest, or the tree is built
   // over numbers that have nothing to do with the reports.
   for (const [index, entry] of ledger.entries.entries()) {
-    if (hex(leafHash(entry.digest)) !== entry.leaf) {
-      return { ok: false, detail: `entry ${index} (${entry.scan_id}): leaf does not hash its digest` };
+    if (hex(leafFor(entry)) !== entry.leaf) {
+      return { ok: false, detail: `entry ${index} (${entry.scan_id}): leaf does not hash its entry` };
     }
   }
 
