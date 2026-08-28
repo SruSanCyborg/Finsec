@@ -15,6 +15,7 @@
 
 import { formatInr, formatInrCompact } from '../money.js';
 import type { CapacityPoint, Evaluation } from '../revenue/evaluate.js';
+import type { StressReport } from '../revenue/stress.js';
 import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
@@ -1010,4 +1011,86 @@ export function renderChanges(moved: readonly SummaryChange[], palette: Palette,
   }
 
   return lines.join('\n') + '\n';
+}
+
+/**
+ * The stress report: how much of the edge survives a shifted world.
+ *
+ * Laid out so the two comparisons a reader actually wants are adjacent —
+ * `before` against `after` is what the shift cost, `after` against `retrained`
+ * is how much of it a refit would recover. A scenario the detector loses is
+ * printed in the same table and the same weight as one it wins, because a
+ * robustness report that only lists the survivals is a marketing document.
+ */
+export function renderStress(report: StressReport, palette: Palette): string {
+  const lines: string[] = [''];
+  const pct = (value: number | null): string =>
+    value === null ? 'n/a' : `${value >= 0 ? '+' : ''}${(value * 100).toFixed(1)}%`;
+
+  lines.push(
+    `  ${palette.bold('WHEN THE WORLD STOPS MATCHING THE TRAINING DATA')}   ${palette.dim(
+      `${report.seeds.length} seeds · ${Math.round(report.capacity_share * 100)}% capacity`,
+    )}`,
+  );
+  lines.push('');
+  lines.push(
+    palette.dim(
+      '    The shift is applied to the generator, not the sample, so a model fitted on the\n' +
+        '    world as it was meets one that genuinely obeys different rules. The heuristics it\n' +
+        '    is measured against are not trained on anything, so they cannot go stale.',
+    ),
+  );
+  lines.push('');
+  lines.push(
+    `     ${palette.dim('scenario'.padEnd(20))}${palette.dim('before'.padStart(8))}${palette.dim(
+      'after'.padStart(9),
+    )}${palette.dim('retrained'.padStart(11))}   ${palette.dim('ceiling   out of bounds')}`,
+  );
+
+  for (const row of report.rows) {
+    const held = (row.edge_after ?? 0) > 0;
+    const paint = held ? palette.green : palette.red;
+    const mark = held ? palette.green(palette.glyph('check')) : palette.red(palette.glyph('cross'));
+
+    lines.push(
+      `   ${mark} ${row.name.padEnd(20)}` +
+        `${palette.dim(pct(row.edge_before).padStart(7))}` +
+        `${paint(palette.bold(pct(row.edge_after).padStart(9)))}` +
+        `${palette.dim(pct(row.edge_retrained).padStart(11))}   ` +
+        `${palette.dim(`${(row.ceiling_after * 100).toFixed(0)}%`.padStart(6))}   ` +
+        (row.forbidden_touched === 0
+          ? palette.green(`${palette.glyph('check')} none`)
+          : palette.red(`${palette.glyph('cross')} ${row.forbidden_touched}`)),
+    );
+    lines.push(`     ${' '.repeat(20)}${palette.dim(row.what)}`);
+  }
+
+  lines.push('');
+  const survived = `${report.held} of ${report.rows.length}`;
+  lines.push(
+    `    ${palette.bold('The money edge held in ' + survived + ' worlds')}${palette.dim(
+      `, and the worst of them was "${report.worst}".`,
+    )}`,
+  );
+
+  const clean = report.rows.every((row) => row.forbidden_touched === 0);
+  lines.push(
+    clean
+      ? `    ${palette.green(palette.glyph('check'))} ${palette.bold(
+          'It touched nothing out of bounds in any of them.',
+        )}${palette.dim(' The money edge is a preference; that is a rule,')}\n      ${palette.dim(
+          'and a rule that only holds on the distribution you trained on is not a rule.',
+        )}`
+      : `    ${palette.red(palette.glyph('cross'))} It touched records it must not. That is the failure that matters.`,
+  );
+  lines.push('');
+  lines.push(
+    palette.dim(
+      '    Where `retrained` is worse than `after`, refitting on the shifted world did not\n' +
+        '    help — the heuristic is simply better there, and no amount of retraining fixes a\n' +
+        '    model that has nothing to say about a portfolio it was not designed for.',
+    ),
+  );
+  lines.push('');
+  return lines.join('\n');
 }

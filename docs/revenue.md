@@ -194,6 +194,58 @@ no part in the score, and the layout says so by position.
 
 ---
 
+### When the world stops matching the training data
+
+```bash
+sirius revenue stress
+```
+
+The honest objection to every number above is that the model was fitted to the
+same generator that produced its test set, so of course it works. A held-out
+split answers the weak form of that — same distribution, rows the fit never saw
+— and says nothing about the form that actually happens to a deployed detector:
+the traffic mix moves, a different gateway degrades, the book shifts toward
+mandates, and the weights are still last quarter's.
+
+So the shift is applied to the **generator**, not the sample. A model fitted on
+the world as it was meets a world that genuinely obeys different rules, measured
+against the same capacity-matched heuristics — which are not trained on anything
+and therefore cannot go stale. Six scenarios, written down before they were run:
+
+| world | before | after | retrained | out of bounds |
+|---|---|---|---|---|
+| no gateway outage at all | +2.3% | **+20.9%** | +27.7% | none |
+| book shifts to NACH mandates | +2.3% | **−10.4%** | −10.4% | none |
+| card share triples | +2.3% | **−7.6%** | −4.6% | none |
+| tickets four times larger | +2.3% | **+6.4%** | −1.8% | none |
+| failures recover 25% less often | +2.3% | **−1.9%** | −17.3% | none |
+| issuers tighten, risk blocks triple | +2.3% | **+3.0%** | +16.4% | none |
+
+`after` against `before` is what the shift cost. `after` against `retrained` is
+how much a refit would recover, which is the only number that says whether to
+retrain or to redesign.
+
+**The money edge held in three worlds of six.** It is a real edge and it is not
+robust: in a mandate-heavy book the detector loses to sorting by amount and
+retraining does not help, because in that world the heuristic is simply better.
+That is printed in the same table and the same weight as the wins, because a
+robustness report listing only survivals is a marketing document.
+
+**It touched nothing out of bounds in any of them.** That is the result worth
+the section. The money edge is a preference; not contacting a disputed record,
+not retrying an issuer's risk block, not working a shared-signal cluster is a
+rule — and a rule that only holds on the distribution you trained on is not a
+rule. Under six shifts it never broke once.
+
+Two of the scenarios are worth reading twice. Removing the gateway outage
+*improves* the edge, because the outage is where the heuristics get their easy
+wins: a cluster of large, highly recoverable failures that sorting by amount
+finds by accident. And where `retrained` is worse than `after`, refitting made
+things worse — a model with nothing to say about a portfolio it was not designed
+for cannot be trained into having something to say.
+
+---
+
 ## 2. Recovery: bounded, escalating, and auditable
 
 Choosing the intervention is a lookup, not a model. What to do about an expired

@@ -52,7 +52,7 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   {
     name: 'revenue',
     summary: 'Find, price and recover revenue at risk — `watch` runs until Ctrl-C',
-    usage: '/revenue [gen|detect|eval|recover|explain|sweep|watch|audit] [batch]',
+    usage: '/revenue [gen|detect|eval|recover|explain|sweep|stress|watch|audit] [batch]',
     keywords: [
       'gen',
       'detect',
@@ -60,7 +60,10 @@ export const SHELL_COMMANDS: ShellCommand[] = [
       'recover',
       'explain',
       'sweep',
+      'stress',
       'audit',
+      'robustness',
+      'drift',
       'payments',
       'invoices',
       'churn',

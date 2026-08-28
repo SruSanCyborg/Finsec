@@ -121,11 +121,13 @@ export async function runRevenue(
       return explainRecord(target, flags, globals);
     case 'sweep':
       return runSweep(flags, globals);
+    case 'stress':
+      return runStress(flags, globals);
     case 'watch':
       return watchBatch(target, flags, globals);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: gen, detect, eval, recover, explain, sweep, watch, audit.',
+        hint: 'Expected one of: gen, detect, eval, recover, explain, sweep, stress, watch, audit.',
       });
   }
 }
@@ -635,6 +637,42 @@ async function watchBatch(
  * different seeds matters more than it looks: subtracting two different
  * experiments produces a number that reads exactly like a result.
  */
+/**
+ * How much of the edge survives a world the model was not fitted to.
+ *
+ * The held-out split answers the weak form of "you made the data": same
+ * distribution, rows the fit never saw. This answers the form that happens —
+ * the traffic mix moves and the weights are last quarter's.
+ */
+async function runStress(flags: RevenueFlags, globals: GlobalFlags): Promise<void> {
+  const { stress } = await import('../revenue/stress.js');
+  const { costsFrom } = await import('../revenue/policy.js');
+
+  const report = stress({
+    ...(flags.seeds ? { seeds: flags.seeds } : {}),
+    ...(flags.payments ? { payments: flags.payments } : {}),
+    ...(flags.checkouts ? { checkouts: flags.checkouts } : {}),
+    ...(flags.invoices ? { invoices: flags.invoices } : {}),
+    ...(flags.capacityShare ? { capacityShare: flags.capacityShare } : {}),
+    costs: costsFrom(projectConfig().revenue),
+  });
+
+  if (flags.json) {
+    process.stdout.write(JSON.stringify(report, null, 2) + '\n');
+    return;
+  }
+
+  const capabilities = detectCapabilities({ noColor: globals.color === false });
+  const palette = paletteFor({
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: capabilities.width,
+  });
+
+  const { renderStress } = await import('../render/revenue.js');
+  process.stdout.write(renderStress(report, palette));
+}
+
 async function runSweep(flags: RevenueFlags, globals: GlobalFlags): Promise<void> {
   const { sweep, compare, comparable } = await import('../revenue/sweep.js');
   const { costsFrom } = await import('../revenue/policy.js');

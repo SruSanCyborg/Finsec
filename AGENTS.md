@@ -144,8 +144,9 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
+| **`revenue stress`** | Done — six distribution shifts applied to the generator; the money edge holds in 3 of 6, the compliance rule in 6 of 6 |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 614 passing |
+| Tests | 623 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no

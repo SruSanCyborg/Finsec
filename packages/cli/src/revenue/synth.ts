@@ -120,6 +120,40 @@ const RECOVERY_MODEL: Record<
   risk_block: { base: 0.02, selfHeal: 0.0, action: 'human_review' },
 };
 
+/**
+ * A change in the world the detector was not trained on.
+ *
+ * The honest objection to any result on synthetic data is that the model was
+ * fitted to the same generator that produced the test set, so of course it
+ * works. A held-out split answers a weaker version of that — same distribution,
+ * unseen rows — and says nothing about the version that actually happens: the
+ * traffic mix moves, a different gateway degrades, the portfolio shifts toward
+ * mandates, amounts inflate.
+ *
+ * These knobs perturb the *generator*, not the sample, so a model fitted before
+ * the shift meets a world that genuinely obeys different rules. Everything is
+ * multiplicative on the existing weights, so a shift describes a direction
+ * rather than a replacement, and a shift of 1 is the world unchanged.
+ */
+export interface DistributionShift {
+  /** Short name, used as the row label. */
+  name: string;
+  /** One sentence a person can disagree with. */
+  what: string;
+  /** Multipliers on the rail mix. */
+  rails?: Partial<Record<Rail, number>>;
+  /** Multipliers on the failure mix, applied within whichever rail is chosen. */
+  failures?: Partial<Record<FailureCode, number>>;
+  /** Multiplier on the median amount. */
+  amount?: number;
+  /** Spread of the amount distribution; the default is 1.1. */
+  amountSigma?: number;
+  /** Whether a gateway degradation is injected at all. */
+  degradation?: 'none' | 'normal';
+  /** Multiplier on how recoverable a failure actually is. */
+  recovery?: number;
+}
+
 export interface GenerateOptions {
   seed: number | string;
   payments: number;
@@ -127,6 +161,20 @@ export interface GenerateOptions {
   invoices: number;
   /** The batch's "now" — every relative time is measured back from this. */
   asOf?: Date;
+  /** A world the detector was not trained on. See `DistributionShift`. */
+  shift?: DistributionShift;
+}
+
+/** Applies multipliers to a weighted table, dropping anything scaled to zero. */
+function reweight<T extends string>(
+  table: readonly (readonly [T, number])[],
+  multipliers: Partial<Record<T, number>> | undefined,
+): readonly (readonly [T, number])[] {
+  if (!multipliers) return table;
+  const scaled = table
+    .map(([value, weight]) => [value, weight * (multipliers[value] ?? 1)] as const)
+    .filter(([, weight]) => weight > 0);
+  return scaled.length > 0 ? scaled : table;
 }
 
 export interface GeneratedBatch {
@@ -198,6 +246,7 @@ export function generateBatch(options: GenerateOptions): GeneratedBatch {
   for (let i = 0; i < options.payments; i += 1) {
     const inRing = ringIds.length < ringSize && rng.chance(ringSize / options.payments);
     const record = makePayment(rng, asOf, i, {
+      ...(options.shift ? { shift: options.shift } : {}),
       degradedPsp,
       degradedRail,
       degradeStart,
@@ -225,9 +274,13 @@ export function generateBatch(options: GenerateOptions): GeneratedBatch {
   // three days and waiting for enough of it to land in one gateway's bad hour
   // produces a batch with no incident in it perhaps four times in five — and an
   // incident nobody can rely on being there is not a fixture, it is a lottery.
-  const burst = rng.int(22, 38);
+  // A world with no gateway outage in it. The detector leans on `degraded`
+  // heavily and correctly; the question this answers is what is left when the
+  // signal it leans on is simply absent.
+  const burst = options.shift?.degradation === 'none' ? 0 : rng.int(22, 38);
   for (let i = 0; i < burst; i += 1) {
     const record = makePayment(rng, asOf, options.payments + i, {
+      ...(options.shift ? { shift: options.shift } : {}),
       degradedPsp,
       degradedRail,
       degradeStart,
@@ -314,6 +367,8 @@ interface PaymentContext {
   ringBin: string;
   /** Place this record inside the outage window rather than anywhere in the batch. */
   forceDegraded?: boolean;
+  /** A world the detector was not trained on. */
+  shift?: DistributionShift;
 }
 
 function makePayment(rng: Rng, asOf: Date, index: number, ctx: PaymentContext): RiskRecord {
@@ -326,7 +381,7 @@ function makePayment(rng: Rng, asOf: Date, index: number, ctx: PaymentContext): 
           rng.int(0, Math.max(1, ctx.degradeEnd.getTime() - ctx.degradeStart.getTime())),
       )
     : new Date(asOf.getTime() - rng.int(5, 72 * 60) * 60_000);
-  const rail = ctx.forceDegraded ? ctx.degradedRail : rng.weighted(RAILS);
+  const rail = ctx.forceDegraded ? ctx.degradedRail : rng.weighted(reweight(RAILS, ctx.shift?.rails));
   const psp = ctx.forceDegraded ? ctx.degradedPsp : rng.pick(PSPS);
 
   // Inside the degradation window the failure is the outage, not the customer.
@@ -340,7 +395,7 @@ function makePayment(rng: Rng, asOf: Date, index: number, ctx: PaymentContext): 
         ['psp_degraded', 60],
         ['network_timeout', 40],
       ])
-    : rng.weighted(FAILURES[rail]);
+    : rng.weighted(reweight(FAILURES[rail], ctx.shift?.failures));
 
   if (ctx.inRing) failure = rng.weighted([['risk_block', 70], ['do_not_honor', 30]]);
 
@@ -356,7 +411,10 @@ function makePayment(rng: Rng, asOf: Date, index: number, ctx: PaymentContext): 
     id,
     kind: 'payment',
     occurred_at: occurredAt.toISOString(),
-    amount_paise: rng.amount(rail === 'nach_mandate' ? 4200 : 1850),
+    amount_paise: rng.amount(
+      (rail === 'nach_mandate' ? 4200 : 1850) * (ctx.shift?.amount ?? 1),
+      ctx.shift?.amountSigma ?? 1.1,
+    ),
     currency: 'INR',
     party,
     rail,
@@ -372,7 +430,7 @@ function makePayment(rng: Rng, asOf: Date, index: number, ctx: PaymentContext): 
     },
   };
 
-  record.truth = truthForPayment(rng, record, degraded, ctx.inRing);
+  record.truth = truthForPayment(rng, record, degraded, ctx.inRing, ctx.shift);
   return record;
 }
 
@@ -381,9 +439,16 @@ function truthForPayment(
   record: RiskRecord,
   degraded: boolean,
   inRing: boolean,
+  shift?: DistributionShift,
 ): GroundTruth {
   const model = RECOVERY_MODEL[record.failure_code as FailureCode];
   let probability = model.base;
+
+  // A world where the same failure comes back less often. Applied first, so the
+  // floors below still win: an outage still ends and a ring is still hopeless,
+  // whatever the shift says, because those are facts about the mechanism rather
+  // than about the rate.
+  probability *= shift?.recovery ?? 1;
 
   // A customer with a long history of paying is more likely to pay this time.
   if (record.party.successful_payments >= 12) probability += 0.1;

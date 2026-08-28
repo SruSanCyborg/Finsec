@@ -66,6 +66,7 @@ echo
     "/revenue explain $RECORD" \
     "/revenue recover batch --limit 5" \
     "/revenue sweep --seeds 2 --payments 150 --checkouts 40 --invoices 30" \
+    "/revenue stress --seeds 1 --payments 150 --checkouts 40 --invoices 30" \
     "/revenue audit --verify $TRAIL" \
     "/reconcile books" \
     "/reconcile books --exceptions"
@@ -123,6 +124,7 @@ check "/revenue detect --kind"   "showing payments"
 check "/revenue eval"            "the operating threshold"
 check "/revenue explain"         "WHAT ACTUALLY HAPPENS"
 check "/revenue recover"         "hash-chained and signed"
+check "/revenue stress"           "touched nothing out of bounds in any of them"
 check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
 check "/reconcile"               "EXCEPTIONS"
