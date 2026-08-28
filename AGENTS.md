@@ -112,17 +112,29 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Area | State |
 |---|---|
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
-| `sirius scan` | Done — streaming TTY view, plain renderer, `--json`, `--sarif`, `--replay`, exit codes |
-| `sirius fix` | Done — Cerebus panel, diff, interactive apply with backup |
+| Local engine | Real. tree-sitter AST, 12 rules, fingerprints, money model |
+| `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
+| Threat stage | Done — live secret validation, git archaeology, attack paths |
+| `sirius fix` | Done — templates + a verifier that re-runs the rule; writes what it verified |
+| `rules list\|show` | Done, from the compiled catalogue. `validate`/`test` still need the API |
+| `baseline`, `suppress` | Done, stored in `.sirius/` and applied by `scan` |
+| `report` | Done — ed25519-signed JSON, `--verify` gates on 0/1/2 |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
-| `rules list\|show\|validate` | Done. `rules test` deliberately unimplemented (needs an endpoint that doesn't exist) |
-| `suppress`, `baseline`, `report`, `badge` | Done |
-| `triage` | Done — keyboard review, optimistic updates, reason required to dismiss or suppress |
-| `watch` | Done — 400ms debounce, one queued follow-up, ignores its own writes |
-| `doctor` | Done — preflight: config sources, connectivity, stream handshake, glyph rendering |
-| Tests | 116 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals, expiry parsing, credential storage, watch filtering, triage keymap) |
+| `triage` | Done against the API; **unverified without one** |
+| `watch`, `doctor`, `badge`, `explain` | Done |
+| Tests | 345 passing |
 
-All thirteen commands are implemented (`doctor` was added beyond the PRD tree; run it before a demo). A full rehearsal of the demo script runs green: scan streams in ~6s with the first finding at ~120ms, fix applies and writes .env.example, SARIF validates, report downloads. Verified as a published package too: `npm pack` produces a 68.8 kB tarball whose `sirius` bin resolves and runs, so the `npx sirius scan` zero-install demo path works.
+**Where the API is still required:** `triage`, `rules validate`, `rules test`,
+`badge`, PDF reports. Everything on the demo path runs with no backend at all.
+
+**"Implemented" is not "works".** Five features were listed Done here while
+being unreachable in the configuration everything defaults to — `fix` rejected
+its own local scans, `--validate-secrets` probed a redacted string, `rules`
+asked a server for rules compiled into the binary, and `baseline`/`suppress`
+wrote to an API that is not running. Each was found by *running* it, never by
+the suite. Two habits follow: `pnpm rehearse` drives the real shell in a real
+pty before believing any of this, and a row here says what was verified, not
+what was written.
 
 A first run on a real repo looks like:
 

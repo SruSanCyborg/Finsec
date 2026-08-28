@@ -132,7 +132,8 @@ export function buildProgram(): Command {
     .option('--reason <text>', 'why this is suppressed (required)')
     .option('--expires <date>', 'YYYY-MM-DD, so it gets revisited')
     .option('--path <glob>', 'limit the suppression to matching paths')
-    .action(async (rule: string, options: Record<string, unknown>, command: Command) => {
+        .option('--target <dir>', 'the project to record the suppression in')
+.action(async (rule: string, options: Record<string, unknown>, command: Command) => {
       const { runSuppress } = await import('./commands/governance.js');
       await runSuppress(rule, options, command.parent?.opts() ?? {});
     });
@@ -143,17 +144,20 @@ export function buildProgram(): Command {
     .argument('[subcommand]', 'set | show', 'show')
     .option('--commit <sha>', 'commit to baseline against (defaults to HEAD)')
     .option('--scan <id>', 'scan to take fingerprints from (defaults to the last one)')
-    .action(async (sub: string, options: Record<string, unknown>, command: Command) => {
+        .option('--target <dir>', 'the directory that was scanned, when it was not this one')
+.action(async (sub: string, options: Record<string, unknown>, command: Command) => {
       const { runBaseline } = await import('./commands/governance.js');
       await runBaseline(sub, options, command.parent?.opts() ?? {});
     });
 
   program
     .command('report')
-    .description('Download a signed compliance report')
+    .description('Produce or verify a signed compliance report')
     .argument('[scan-id]', 'scan to report on (defaults to the last one)')
     .option('--format <format>', 'pdf | json | sarif', 'json')
     .option('-o, --output <file>', 'where to write it')
+    .option('--verify <file>', 'check a signed report instead of producing one')
+    .option('--target <dir>', 'the directory that was scanned, when it was not this one')
     .action(async (scanId: string | undefined, options: Record<string, unknown>, command: Command) => {
       const { runReport } = await import('./commands/governance.js');
       await runReport(scanId, options, command.parent?.opts() ?? {});

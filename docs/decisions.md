@@ -417,6 +417,55 @@ problem this tool exists to find.
 
 ---
 
+## D-020 — The rest of the commands run without a backend
+
+A sweep of every command with no API running, prompted by `fix` and
+`--validate-secrets` both turning out to be dead. Four more were: `rules`,
+`baseline`, `suppress`, and `report`. All had the same cause — written when the
+CLI was a pure client, never revisited when the local engine landed and became
+the default. The status table called them all Done.
+
+**`rules list|show`** now answers from the compiled catalogue
+(`engine/catalog.ts`). A compliance linter that cannot say what it checks for,
+or which clause each check maps to, is asking to be taken on faith. `show`
+prints no `yaml_body` and invents none: the PRD's rules are YAML documents,
+these are compiled AST matchers, and it says so. `validate` and `test` still
+need the API and still say so.
+
+**`baseline` and `suppress`** now write to `.sirius/` beside the code —
+reviewable in a pull request, which is where an exception granted to a security
+finding ought to be argued. The old comment said fingerprints were "computed
+server-side — the CLI has no engine"; it has one, and it is what produces them.
+
+This exposed the real gap: the gate already knew how to act on `baseline_state`
+and the renderers knew how to show it, but **nothing ever set it**. So
+`baseline set` recorded a floor no scan read, and `--fail-on new` blocked on
+findings that were not new. `engine/policy.ts` bridges it as a stream
+transformer — suppressed findings are withheld *before* rendering, because a
+finding that is printed and then silently uncounted is the worst of both. The
+adoption story works end to end now: six known findings pass, a new leak blocks.
+
+Two safety choices worth stating. A suppression with several fields set must
+match on **all** of them — OR-ing them would make `--path tests/**` silence a
+rule everywhere. And an entry with no criteria matches nothing rather than
+everything.
+
+**`report` is now genuinely signed.** It previously downloaded a report and, on
+finding a signature, printed that it had *not* checked it — no public key was
+published anywhere. A signature nobody can verify is decoration. It is now
+built from the last scan, signed ed25519 with a key at `~/.config/sirius/`
+(0600, generated on first use), and `sirius report --verify` checks it: exit 0
+clean, 1 modified, 2 unusable — which is a CI gate. The verify output states
+what it proves (unmodified since signing) and what it does not (identity —
+the key travels inside the file, so pin `key_id`).
+
+The scan cache had to grow to support this: it held only what `fix` needed to
+resolve a rule id, so a report built from it was silently stripped of messages,
+clause references and figures. `schema_version` went to 2 so a stale cache is
+rejected rather than producing an empty compliance document.
+
+---
+
 ## Blocked on the `auto` branch
 
 Not ours to decide. Tracked here so no one re-derives them.

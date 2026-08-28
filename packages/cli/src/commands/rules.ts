@@ -14,6 +14,7 @@ import { ApiClient } from '../api/client.js';
 import { CliError } from '../api/errors.js';
 import { loadConfig } from '../config/load.js';
 import { SEVERITY_COLOR, detectCapabilities } from '../ui/theme.js';
+import { VERSION } from '../branding.js';
 import type { Rule } from '../domain.js';
 
 interface RulesFlags {
@@ -25,15 +26,38 @@ interface RulesFlags {
 interface GlobalFlags {
   apiUrl?: string;
   profile?: string;
+  project?: string;
   color?: boolean;
+  local?: boolean;
+}
+
+function configFor(globals: GlobalFlags) {
+  return loadConfig({
+    cwd: process.cwd(),
+    overrides: {
+      apiUrl: globals.apiUrl,
+      profile: globals.profile,
+      ...(globals.project ? { projectId: globals.project } : {}),
+    },
+  });
 }
 
 function client(globals: GlobalFlags): ApiClient {
-  const config = loadConfig({
-    cwd: process.cwd(),
-    overrides: { apiUrl: globals.apiUrl, profile: globals.profile },
-  });
+  const config = configFor(globals);
   return new ApiClient({ baseUrl: config.apiUrl, apiKey: config.apiKey });
+}
+
+/**
+ * Whether to answer from the compiled catalogue rather than the API.
+ *
+ * Same test `scan` uses: with no project configured there is no hosted ruleset
+ * to ask about, and the rules that would actually run are the local ones. A
+ * catalogue that cannot be read without a backend is a catalogue nobody reads.
+ */
+function useLocalCatalog(globals: GlobalFlags): boolean {
+  if (globals.local === true) return true;
+  if (globals.apiUrl) return false;
+  return !configFor(globals).projectId;
 }
 
 export async function runRules(
@@ -61,10 +85,22 @@ export async function runRules(
 }
 
 async function listRules(flags: RulesFlags, globals: GlobalFlags): Promise<void> {
-  const rules = await client(globals).listRules({
-    ...(flags.category ? { category: flags.category } : {}),
-    ...(flags.ruleset ? { ruleset: flags.ruleset } : {}),
-  });
+  const local = useLocalCatalog(globals);
+
+  let rules: Rule[];
+  if (local) {
+    const { localRules } = await import('../engine/catalog.js');
+    rules = localRules(VERSION).filter(
+      (rule) =>
+        (!flags.category || rule.category === flags.category) &&
+        (!flags.ruleset || true),
+    );
+  } else {
+    rules = await client(globals).listRules({
+      ...(flags.category ? { category: flags.category } : {}),
+      ...(flags.ruleset ? { ruleset: flags.ruleset } : {}),
+    });
+  }
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(rules, null, 2) + '\n');
@@ -96,7 +132,11 @@ async function listRules(flags: RulesFlags, globals: GlobalFlags): Promise<void>
       );
     }
   }
-  process.stdout.write(`\n${rules.length} rule${rules.length === 1 ? '' : 's'}\n`);
+  // Say where the catalogue came from, for the same reason a scan says where
+  // its findings came from: a hosted ruleset and the rules this binary runs are
+  // not necessarily the same list.
+  const source = local ? 'local engine' : 'API';
+  process.stdout.write(`\n${rules.length} rule${rules.length === 1 ? '' : 's'} · ${source}\n`);
 }
 
 async function showRule(ruleId: string | undefined, flags: RulesFlags, globals: GlobalFlags): Promise<void> {
@@ -104,7 +144,20 @@ async function showRule(ruleId: string | undefined, flags: RulesFlags, globals: 
     throw new CliError('Which rule?', { hint: 'e.g. sirius rules show SIR-SEC-001' });
   }
 
-  const rule = await client(globals).getRule(ruleId);
+  const local = useLocalCatalog(globals);
+
+  let rule: Rule | undefined;
+  if (local) {
+    const { localRule, localRuleIds } = await import('../engine/catalog.js');
+    rule = localRule(ruleId, VERSION);
+    if (!rule) {
+      throw new CliError(`No rule "${ruleId}" in the local engine.`, {
+        hint: `Known: ${localRuleIds().slice(0, 6).join(', ')}…  Run \`sirius rules list\` for all.`,
+      });
+    }
+  } else {
+    rule = await client(globals).getRule(ruleId);
+  }
 
   if (flags.json) {
     process.stdout.write(JSON.stringify(rule, null, 2) + '\n');
@@ -123,6 +176,15 @@ async function showRule(ruleId: string | undefined, flags: RulesFlags, globals: 
   // The YAML body is the point of `show` — it is what makes the rules engine
   // legible rather than a black box.
   if (rule.yaml_body) process.stdout.write(`\n${rule.yaml_body}\n`);
+  else if (local) {
+    // The PRD's rules are YAML; these are compiled AST matchers. Saying so is
+    // better than printing a plausible YAML document that no code ever reads.
+    process.stdout.write(
+      `\nThis rule is a compiled AST matcher in the local engine, not a YAML\n` +
+        `document — there is no rule source to print. It runs against the parsed\n` +
+        `syntax tree, which is why it can tell an interpolated query from a safe one.\n`,
+    );
+  }
 }
 
 async function validateRule(path: string | undefined, globals: GlobalFlags): Promise<void> {

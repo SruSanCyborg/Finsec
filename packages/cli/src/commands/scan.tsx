@@ -117,6 +117,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // Only the local engine paces: a hosted scan is already spaced out by the
   // network, and a replay carries its own recorded timing.
   let interactivePacing = false;
+  let policy: import('../engine/policy.js').PolicyOutcome | undefined;
 
   // The local engine is the default. It needs no backend, and it is what makes
   // `sirius scan .` an actual scanner rather than a client for one — the Core
@@ -157,6 +158,13 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       const { validateFrames } = await import('../engine/threat.js');
       source = validateFrames(source, target);
     }
+
+    // The project's own policy: what it has already accepted, and what it has
+    // explicitly excused. Applied before rendering, so a suppressed finding is
+    // never shown and then silently uncounted.
+    const { applyPolicy, emptyPolicyOutcome } = await import('../engine/policy.js');
+    policy = emptyPolicyOutcome();
+    source = applyPolicy(source, findProjectRoot(target)?.dir ?? target, policy);
 
     frames = pace(source, resolvePace(interactivePacing));
     scanSource = 'local engine · tree-sitter AST analysis';
@@ -336,6 +344,28 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       // whole block lands between two repaints and the reader sees only
       // whatever happened to be last.
       await writePaced(threatLines, interactivePacing ? TAIL_PACE_MS : 0);
+    }
+  }
+
+  // Said out loud. Findings withheld by a suppression are still decisions the
+  // reader is entitled to see, and a lapsed exception is one that needs
+  // retaking rather than quietly re-firing.
+  if (policy && !flags.json && !capabilities.tty) {
+    if (policy.unchanged > 0) {
+      process.stdout.write(
+        ` ${'Baseline'.padEnd(11)}${policy.unchanged} unchanged since ` +
+          `${policy.baselineCommit ? policy.baselineCommit.slice(0, 12) : 'the baseline'}\n`,
+      );
+    }
+    if (policy.suppressed.length > 0) {
+      const rules = [...new Set(policy.suppressed.map((s) => s.rule_id))].join(', ');
+      process.stdout.write(` ${'Suppressed'.padEnd(11)}${policy.suppressed.length} finding(s) — ${rules}\n`);
+    }
+    for (const entry of policy.expired) {
+      process.stdout.write(
+        ` ${'Expired'.padEnd(11)}suppression for ${entry.rule_id ?? entry.path_glob} lapsed ` +
+          `(${entry.expires_at}) — its findings are reported again\n`,
+      );
     }
   }
 

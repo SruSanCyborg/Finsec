@@ -27,10 +27,23 @@ export interface CachedFinding {
   line: number;
   severity: Severity;
   fix_action?: string;
+  /**
+   * The rest is here so a report can be produced without re-scanning.
+   *
+   * The cache used to hold only what `fix` needed to resolve a rule id, which
+   * meant `sirius report` had nothing to build a compliance document out of —
+   * no message, no clause references, no figure. Those are the report.
+   */
+  message?: string;
+  compliance_ref?: string[];
+  money_at_risk_inr?: number;
+  fingerprint?: string;
+  category?: string;
+  validity?: string;
 }
 
 export interface LastScan {
-  schema_version: 1;
+  schema_version: 2;
   scan_id: string;
   project_id: string | null;
   scanned_at: string;
@@ -51,7 +64,7 @@ export function lastScanPath(root: string): string {
 export function saveLastScan(root: string, scan: Omit<LastScan, 'schema_version' | 'scanned_at'>): void {
   const path = lastScanPath(root);
   const payload: LastScan = {
-    schema_version: 1,
+    schema_version: 2,
     scanned_at: new Date().toISOString(),
     ...scan,
   };
@@ -64,8 +77,11 @@ export function loadLastScan(root: string): LastScan | undefined {
   if (!existsSync(path)) return undefined;
   try {
     const parsed = JSON.parse(readFileSync(path, 'utf8')) as LastScan;
-    // A cache from a future version is not worth guessing at.
-    if (parsed.schema_version !== 1) return undefined;
+    // A cache from another version is not worth guessing at. A v1 cache in
+    // particular holds only what `fix` needed — no message, no clause
+    // references, no figures — so a report built from it would be silently
+    // stripped of everything that makes it a compliance document.
+    if (parsed.schema_version !== 2) return undefined;
     return parsed;
   } catch {
     // A corrupt cache is a nuisance, not an error — the user can re-scan.
@@ -82,6 +98,14 @@ export function toCached(finding: Finding): CachedFinding {
     line: finding.line,
     severity: finding.severity,
     ...(finding.fix_action ? { fix_action: finding.fix_action } : {}),
+    ...(finding.message ? { message: finding.message } : {}),
+    ...(finding.compliance_ref?.length ? { compliance_ref: finding.compliance_ref } : {}),
+    ...(finding.money_at_risk_inr ? { money_at_risk_inr: finding.money_at_risk_inr } : {}),
+    ...(finding.fingerprint ? { fingerprint: finding.fingerprint } : {}),
+    ...(finding.category ? { category: finding.category } : {}),
+    ...(finding.validity ? { validity: finding.validity } : {}),
+    // Deliberately absent: `snippet`. It carries the redacted secret, and a
+    // cache on disk is not a place to accumulate even redacted credentials.
   };
 }
 
