@@ -136,7 +136,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 565 passing |
+| Tests | 572 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -201,7 +201,13 @@ Everything is simulated and says so. There is no `--execute`.
 
 The CLI owns the two highest-value beats of the ~4-minute pitch:
 
-1. **(60s) `sirius scan .`** — streaming findings with `₹42,00,000 at risk`. The PRD calls this "the wow moment." Time-to-first-finding must be under 10s.
+1. **(60s) `sirius scan .`** — streaming findings, the PRD's "wow moment." Time-to-first-finding must be under 10s.
+
+   **Two figures are on screen and they are not the same number.** The first
+   finding line carries `₹42,00,000` — SIR-SEC-001 alone, the PRD's famous
+   figure, and it lands within a second. The footer totals `₹89,30,000` across
+   all six findings. Narrating "forty-two lakh" over a screen reading eighty-nine
+   is an avoidable stumble: lead with the finding, close on the total.
 
    The `⚠ VERIFIED LIVE` badge needs a credential the provider will actually
    accept, and the fixture's key is a non-functional placeholder — so validation
