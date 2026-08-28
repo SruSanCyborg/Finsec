@@ -1,11 +1,38 @@
 # sirius
 
-A security & compliance linter **for money-handling code**. It scans API specs and SDK code before deployment, maps every finding to a specific compliance clause (PCI-DSS v4.0, RBI DPSC, DPDP 2023, GDPR), quantifies **money-at-risk in ₹**, emits a cryptographically signed report a CI pipeline can gate on, and proposes guardrailed autofixes through a dual-LLM design called **Cerebus**.
+**A security and control layer for AI agents that can move money — and for the
+code they run on.**
+
+The lead surface is `guard`: an autonomous agent proposes a financial action, and
+sirius decides per action whether it should happen. Six checks — identity, intent
+against the authorised objective, explicit policy limits, counterparty and
+protocol risk, deviation from the agent's own measured behaviour, and whether the
+instruction behind it can be trusted — producing a graduated verdict
+(**allow / verify / constrain / block**) and a hash-chained signed record of every
+decision, including the allowed ones.
+
+This answers **CSI ORIGIN 2026 Problem Statement 7**, "Securing AI Agents That Can
+Independently Control Financial Assets". Read the brief with `sirius brief
+--plain`, or as a PDF with `sirius brief`.
+
+The original surface remains and is now supporting evidence: an agent is only as
+safe as the system it operates, so sirius also **scans that code** before
+deployment, maps every finding to a specific compliance clause (PCI-DSS v4.0, RBI
+DPSC, DPDP 2023, GDPR), quantifies **money-at-risk in ₹**, emits a
+cryptographically signed report a CI pipeline can gate on, and proposes
+guardrailed autofixes through a dual-LLM design called **Cerebus**. A third
+surface, `revenue`, prices money at risk in operations.
 
 Built for a hackathon demo. The credibility strategy is deliberate: copy proven conventions wholesale — Semgrep (YAML rules, `--baseline-commit`, SARIF, inline suppression), Snyk (`--severity-threshold`, `--fail-on`, 0/1/2/3 exit codes, expiring ignores), TruffleHog (live secret validation), Simon Willison's dual-LLM pattern.
 
 **Canonical spec:** [`docs/original-prd.md`](docs/original-prd.md) (588 lines — the full PRD, architecture, API spec, and per-surface design report).
-Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md) · [`docs/handoff-to-auto.md`](docs/handoff-to-auto.md) · [`docs/revenue.md`](docs/revenue.md)
+Distilled: [`docs/system-overview.md`](docs/system-overview.md) · [`docs/cli-surface.md`](docs/cli-surface.md) · [`docs/decisions.md`](docs/decisions.md) · [`docs/handoff-to-auto.md`](docs/handoff-to-auto.md) · [`docs/revenue.md`](docs/revenue.md) · [`docs/guard.md`](docs/guard.md)
+
+**The problem statement `guard` answers** is `Problem_Statement_7.pdf` in the repo
+root. Its constraints are not negotiable and two of them are easy to lose sight
+of: the layer must **not** require human approval for every routine transaction,
+and it is explicitly *not* conventional transaction authentication, fraud
+detection or wallet security.
 
 ---
 
@@ -135,6 +162,8 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 
 | Area | State |
 |---|---|
+| **`guard`** | Done — six stages, graduated verdicts, per-agent behavioural baselines, hash-chained signed decision trail. 95% autonomy on the fixture with every planted attack stopped and 0 of 252 ordinary actions interrupted |
+| **`brief`** | Done — the whole argument as a six-page PDF written from a live run, or the same on screen with `--plain` |
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
 | Local engine | Real. tree-sitter AST, 13 rules, taint tracking (intra- and inter-procedural), fingerprints, money model. `rule-gallery` fires every one, in Python **and JavaScript** |
 | `sirius scan` | Done — streaming, paced, `--json`, `--sarif`, `--replay`, exit codes |
@@ -155,7 +184,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`revenue stress`** | Done — six distribution shifts applied to the generator; the money edge holds in 3 of 6, the compliance rule in 6 of 6 |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 829 passing |
+| Tests | 871 passing |
 
 **The API is required for nothing.** `rules test` and PDF reports were the last
 two holdouts and both reasons were wrong. `rules test` — it did not need an
