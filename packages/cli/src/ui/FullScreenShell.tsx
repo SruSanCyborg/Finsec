@@ -47,6 +47,16 @@ const HEADER_HEIGHT = 1;
 const FOOTER_HEIGHT = 1;
 const SPINNER_INTERVAL_MS = 80;
 
+/**
+ * Lines per wheel notch. Most terminals send exactly one event per physical
+ * notch with no multiplier, so scrolling one line a notch feels broken. Three
+ * matches vim's default; SIRIUS_SCROLL_SPEED overrides it.
+ */
+const WHEEL_LINES = (() => {
+  const raw = Number.parseFloat(process.env.SIRIUS_SCROLL_SPEED ?? '');
+  return Number.isFinite(raw) && raw > 0 ? Math.max(1, Math.round(raw)) : 3;
+})();
+
 export function FullScreenShell({
   glyphs,
   capabilities,
@@ -128,8 +138,8 @@ export function FullScreenShell({
       // and is swallowed here — an unmatched sequence used to fall through to
       // the printable branch below and get typed into the prompt as garbage.
       const button = Number(mouse[1]);
-      if (button === 64) return scrollBy(-3);
-      if (button === 65) return scrollBy(3);
+      if (button === 64) return scrollBy(-WHEEL_LINES);
+      if (button === 65) return scrollBy(WHEEL_LINES);
       return;
     }
 

@@ -52,12 +52,24 @@ let teardownRegistered = false;
  */
 /** Whether to capture mouse events. Off entirely when the alt screen is off. */
 export function mouseReportingAvailable(): boolean {
-  // Opt-in, not opt-out. Capturing the mouse takes click-drag selection away
-  // from the terminal — you can no longer select and copy output, which is a
-  // core thing a terminal is for. That is too high a price for wheel
-  // scrolling now that the arrow keys scroll properly.
-  if (process.env.SIRIUS_MOUSE !== '1') return false;
+  // On by default, which is what other full-screen TUIs do and the only way the wheel
+  // actually scrolls: alternate scroll (1007) is not implemented everywhere,
+  // and where it is missing the wheel does nothing at all.
+  //
+  // The cost is that the terminal's own click-drag selection stops working
+  // while we hold the mouse. Hold the terminal's override key to select
+  // natively (Fn on Terminal.app, Option in iTerm2, Shift elsewhere), or set
+  // SIRIUS_NO_MOUSE=1 to give the mouse back entirely.
+  if (process.env.SIRIUS_NO_MOUSE === '1') return false;
   return alternateScreenAvailable();
+}
+
+/** The terminal's modifier for a one-off native selection while we hold the mouse. */
+export function nativeSelectionKey(): string {
+  const program = process.env.TERM_PROGRAM ?? '';
+  if (program === 'Apple_Terminal') return 'fn';
+  if (/iTerm/i.test(program)) return 'option';
+  return 'shift';
 }
 
 export function alternateScreenAvailable(): boolean {

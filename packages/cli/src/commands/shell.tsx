@@ -30,7 +30,13 @@ import { CliError } from '../api/errors.js';
 import { CommandPalette, SHELL_COMMANDS, filterCommands } from '../ui/CommandPalette.js';
 import { FullScreenShell } from '../ui/FullScreenShell.js';
 import { COLOR, detectCapabilities, glyphsFor } from '../ui/theme.js';
-import { alternateScreenAvailable, enterAlternateScreen, leaveAlternateScreen } from '../ui/screen.js';
+import {
+  alternateScreenAvailable,
+  enterAlternateScreen,
+  leaveAlternateScreen,
+  mouseReportingAvailable,
+  nativeSelectionKey,
+} from '../ui/screen.js';
 import { renderWordmark } from '../ui/wordmark.js';
 import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
@@ -189,6 +195,15 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         kind: 'output' as const,
       }));
       initial.push({ id: nextId++, text: 'Type / for commands. /help lists them, /exit leaves.', kind: 'note' });
+      if (mouseReportingAvailable()) {
+        // Say this up front. Losing click-drag selection without explanation
+        // reads as a broken terminal rather than a deliberate trade.
+        initial.push({
+          id: nextId++,
+          text: `Mouse wheel scrolls. Hold ${nativeSelectionKey()} to select text, or SIRIUS_NO_MOUSE=1 to disable capture.`,
+          kind: 'note',
+        });
+      }
 
       function App() {
         const { exit } = useApp();
