@@ -226,7 +226,27 @@ function report(error: unknown): ExitCodeValue {
   return ExitCode.CLI_ERROR;
 }
 
+/**
+ * Every command resolves config from the working directory, so a deleted one is
+ * fatal — but Node reports it as a bare `uv_cwd` ENOENT that says nothing about
+ * what to do. Check once, up front, and explain.
+ */
+function assertWorkingDirectory(): void {
+  try {
+    process.cwd();
+  } catch {
+    process.stderr.write(
+      '\nerror: the current directory no longer exists.\n' +
+        '  It was deleted or replaced while this shell was inside it.\n' +
+        '  Run `cd "$PWD"` — or cd somewhere that exists — and try again.\n\n',
+    );
+    process.exit(ExitCode.CLI_ERROR);
+  }
+}
+
 export async function main(argv: string[] = process.argv): Promise<void> {
+  assertWorkingDirectory();
+
   const program = buildProgram();
   program.exitOverride();
 

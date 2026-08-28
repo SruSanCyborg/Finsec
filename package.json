@@ -12,6 +12,7 @@
     "mock:rest": "prism mock contract/openapi.yaml --port 4010 --dynamic",
     "mock:ws": "node contract/mock/ws-server.mjs",
     "fixtures": "node contract/mock/generate-fixture.mjs",
+    "demo:reset": "node contract/mock/reset-demo.mjs",
     "contract:lint": "redocly lint contract/openapi.yaml",
     "contract:types": "openapi-typescript contract/openapi.yaml -o packages/cli/src/api/types.ts",
     "cli": "node packages/cli/dist/cli.js",
