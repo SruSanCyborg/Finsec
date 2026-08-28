@@ -237,6 +237,8 @@ export interface PlainReportInput {
   /** Set when findings were streamed as they arrived, so only the summary is wanted. */
   findingsAlreadyPrinted?: boolean;
   options?: RenderOptions;
+  /** Where the findings came from. Ambiguity here is how a mock passes for a scan. */
+  source?: string;
 }
 
 export function renderPlainReport({
@@ -245,6 +247,7 @@ export function renderPlainReport({
   counts,
   findingsAlreadyPrinted = false,
   options = {},
+  source,
 }: PlainReportInput): string {
   const color = options.color ?? false;
   const unicode = options.unicode ?? true;
@@ -295,6 +298,13 @@ export function renderPlainReport({
 
   if (outcome.errors.length > 0) {
     lines.push(` ${paint('Skipped'.padEnd(11), DIM, color)}${paint(`${outcome.errors.length} file(s) unparsed`, DIM, color)}`);
+  }
+
+  // Say plainly where these findings came from. Without it a replayed fixture
+  // and a real analysis look identical, which is exactly how a mock gets
+  // mistaken for a scan.
+  if (source) {
+    lines.push(` ${paint('Source'.padEnd(11), DIM, color)}${paint(source, DIM, color)}`);
   }
 
   const verdict = gate.blocked ? 'BLOCKED' : 'PASSED';

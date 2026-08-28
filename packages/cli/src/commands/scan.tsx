@@ -108,6 +108,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
   // ---- decide where frames come from
 
   let frames: AsyncIterable<WsFrame>;
+  let scanSource = '';
   let scanId: string | null = null;
   let fallbackReason: string | undefined;
 
@@ -126,9 +127,11 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     }
     const speed = process.env.SIRIUS_REPLAY_SPEED ? Number(process.env.SIRIUS_REPLAY_SPEED) : 1;
     frames = replayStream(fixture, Number.isFinite(speed) ? speed : 1);
+    scanSource = `replay · ${flags.replay} (recorded, not a live analysis)`;
   } else if (useLocalEngine) {
     const { scanDirectory } = await import('../engine/scanner.js');
     frames = scanDirectory(target, { ignorePatterns: config.exclude });
+    scanSource = 'local engine · tree-sitter AST analysis';
   } else {
     // Unreachable in practice — a missing project id routes to the local engine
     // above — but the API needs one and the type system is right to insist.
@@ -151,6 +154,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
 
     if (!scan.id) throw new CliError('The API accepted the scan but returned no scan id.');
     scanId = scan.id;
+    scanSource = `api · ${config.apiUrl.replace(/^https?:\/\//, '')}`;
 
     frames = openStream({
       scanId: scan.id,
@@ -216,6 +220,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
         counts,
         findingsAlreadyPrinted: process.env.SIRIUS_STREAM_PLAIN === '1',
         options: lineRenderOptions(capabilities),
+        source: scanSource,
       }),
     );
   }
