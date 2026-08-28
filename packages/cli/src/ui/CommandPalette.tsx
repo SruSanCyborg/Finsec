@@ -32,8 +32,16 @@ export interface ShellCommand {
 export const SHELL_COMMANDS: ShellCommand[] = [
   { name: 'scan', summary: 'Scan a path and stream findings', usage: '/scan [path] [--json] [--sarif <file>]' },
   { name: 'fix', summary: 'Apply a Cerebus fix suggestion', usage: '/fix <SIR-SEC-001> [--all] [--apply]' },
-  { name: 'triage', summary: 'Review findings interactively', usage: '/triage [--severity <level>]' },
-  { name: 'watch', summary: 'Re-scan on file change', usage: '/watch [path]' },
+  {
+    name: 'triage',
+    summary: 'Review findings interactively — takes the whole terminal, `q` comes back',
+    usage: '/triage [--severity <level>]',
+  },
+  {
+    name: 'watch',
+    summary: 'Re-scan on file change — takes the whole terminal, Ctrl-C comes back',
+    usage: '/watch [path]',
+  },
   { name: 'doctor', summary: 'Check config, connectivity, and terminal' },
   {
     name: 'explain',

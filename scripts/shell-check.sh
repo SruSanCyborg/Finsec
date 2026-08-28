@@ -73,6 +73,15 @@ echo
     printf '%s\r' "$cmd"
     sleep 5
   done
+
+  # The two that take the whole terminal, last, each with the key that quits it.
+  # A handover that failed would leave the shell unusable, so anything after
+  # these would fail too — which is why they run at the end.
+  printf '/triage\r'; sleep 6
+  printf 'q';          sleep 5
+  printf '/watch .\r'; sleep 6
+  printf '\003';       sleep 5
+  printf '/rules list\r'; sleep 4
   printf '/exit\r'
   sleep 2
 } | (cd "$STAGE" && SIRIUS_REVENUE_PACE=12 SIRIUS_SCAN_PACE=40 script -q /dev/null node "$CLI") >"$OUT" 2>&1 &
@@ -117,6 +126,11 @@ check "/revenue recover"         "hash-chained and signed"
 check "/revenue sweep"           "beat every capacity-matched heuristic"
 check "/revenue audit --verify"  "chained and unbroken"
 check "/reconcile"               "EXCEPTIONS"
+check "/triage handover"         "handed the terminal to /triage"
+check "/triage came back"        "/triage finished"
+check "/watch handover"          "handed the terminal to /watch"
+check "/watch came back"         "/watch finished"
+check "shell alive afterwards"   "12 rules · local engine"
 
 echo
 # A command that fails prints `error:` into the transcript. Any at all is worth

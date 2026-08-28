@@ -136,7 +136,7 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | **`revenue watch`** | Done — re-runs on a batch or policy change and prints only what moved |
 | **`revenue sweep`** | Done — the same evaluation over N seeded batches, `--save`/`--against` for regressions |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 546 passing |
+| Tests | 550 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
@@ -226,6 +226,14 @@ duration):
    the default money ranking puts invoices on top.
 
 Both must survive the presentation machine's terminal font (`₹`, braille spinner, box drawing) — there's an ASCII fallback behind `SIRIUS_ASCII=1`.
+
+**Full-screen commands hand over rather than refuse.** `/triage` and `/watch`
+draw their own UI, so the shell unmounts, gives them the real terminal, and
+takes it back with the transcript intact when they exit — the way `git` hands
+over to `$EDITOR`. Not a split: splitting means a pty, a terminal emulator and a
+native dependency, which is a multiplexer built for two commands. While a child
+holds the terminal the shell stops treating Ctrl-C as its own, or the keystroke
+that quits the child would end the session.
 
 **Everything on the demo path is paced.** The work finishes in a tenth of a
 second and writes fifty lines; without pacing a terminal paints once and the

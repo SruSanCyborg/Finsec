@@ -207,3 +207,45 @@ describe('the palette finds subcommands', () => {
     expect(filterCommands('/').length).toBe(SHELL_COMMANDS.length);
   });
 });
+
+/**
+ * Commands that take the whole terminal.
+ *
+ * The shell used to answer `/triage` with "leave the shell and run: sirius
+ * triage", which is a tool telling its user to go and use a different tool. It
+ * hands the terminal over now and takes it back when the child exits.
+ *
+ * The handover itself is checked in a real pty by `pnpm shell:check` — it is
+ * about process and terminal state, which nothing in-process can stand in for.
+ * What is worth asserting here is that the palette stops promising the old
+ * behaviour.
+ */
+describe('the full-screen commands', () => {
+  const entry = (name: string) => SHELL_COMMANDS.find((command) => command.name === name);
+
+  it('are still listed, not hidden', () => {
+    expect(entry('triage')).toBeDefined();
+    expect(entry('watch')).toBeDefined();
+  });
+
+  it('say how to get back rather than how to avoid them', () => {
+    expect(entry('triage')?.summary).toMatch(/comes back/);
+    expect(entry('watch')?.summary).toMatch(/comes back/);
+  });
+
+  it('name the key that quits each one, because they differ', () => {
+    // `q` in triage, Ctrl-C in watch. Guessing wrong on a full-screen app that
+    // has taken the terminal is a bad moment to be guessing.
+    expect(entry('triage')?.summary).toContain('q');
+    expect(entry('watch')?.summary).toContain('Ctrl-C');
+  });
+
+  it('no longer send the user away to run them', () => {
+    // `/exit` says "Leave the shell" and should: that is what it does. What no
+    // command may do any more is tell the user to go and run it elsewhere.
+    for (const command of SHELL_COMMANDS) {
+      const text = `${command.summary} ${command.usage ?? ''}`.toLowerCase();
+      expect(text, command.name).not.toMatch(/leave the shell and run|run it outside|start the shell with/);
+    }
+  });
+});

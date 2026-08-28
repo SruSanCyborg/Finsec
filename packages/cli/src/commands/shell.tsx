@@ -37,6 +37,7 @@ import {
   leaveAlternateScreen,
   mouseReportingAvailable,
   nativeSelectionKey,
+  withAlternateScreenSuspended,
 } from '../ui/screen.js';
 import { renderWordmark } from '../ui/wordmark.js';
 import { AUTHOR, TAGLINE, VERSION } from '../branding.js';
@@ -47,7 +48,14 @@ import type { Capabilities, Glyphs } from '../ui/theme.js';
 
 const CLI_ENTRY = join(dirname(fileURLToPath(import.meta.url)), '..', 'cli.js');
 
-/** Commands that own the terminal and cannot be captured into a transcript. */
+/**
+ * Commands that draw their own full-screen UI.
+ *
+ * Their output cannot be captured into the transcript — it is cursor movement
+ * meant for a real screen, not lines. So the shell steps aside and gives them
+ * the terminal, rather than telling the user to go and run them elsewhere,
+ * which is what it used to do.
+ */
 const NEEDS_REAL_TERMINAL = new Set(['triage', 'watch', 'shell']);
 
 /** Batching window for captured output, and the transcript's memory ceiling. */
@@ -206,10 +214,25 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
         });
       }
 
+      /** What survives an unmount: everything the user would be sorry to lose. */
+      const kept: { lines: TranscriptLine[]; history: string[] } = { lines: initial, history: [] };
+
       function App() {
         const { exit } = useApp();
-        const [lines, setLines] = useState<TranscriptLine[]>(initial);
-        const [history, setHistory] = useState<string[]>([]);
+        // Seeded from the closure, not from `initial`, so a handover — which
+        // unmounts this component and mounts a fresh one — comes back to the
+        // same transcript rather than to an empty screen.
+        const [lines, setLines] = useState<TranscriptLine[]>(kept.lines);
+        const [history, setHistory] = useState<string[]>(kept.history);
+
+        // Mirrored on every change. React state does not outlive the component;
+        // this does.
+        useEffect(() => {
+          kept.lines = lines;
+        }, [lines]);
+        useEffect(() => {
+          kept.history = history;
+        }, [history]);
         const [busy, setBusy] = useState(false);
         const [busyLabel, setBusyLabel] = useState<string | undefined>(undefined);
         const [child, setChild] = useState<ReturnType<typeof spawn> | null>(null);
@@ -315,11 +338,27 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
             return;
           }
 
+          if (parsed.name === 'shell') {
+            append('you are already in it.', 'note');
+            return;
+          }
+
           if (NEEDS_REAL_TERMINAL.has(parsed.name)) {
-            // These draw their own full-screen UI and cannot share the buffer.
-            append(`/${parsed.name} needs the whole terminal.`, 'note');
-            append(`Leave the shell and run:  sirius ${parsed.name}`, 'note');
-            append('Or start the shell with SIRIUS_NO_ALT_SCREEN=1 to run it inline.', 'note');
+            // These draw their own full-screen UI, so the shell steps aside and
+            // gives them the real terminal rather than telling the user to go
+            // and run them somewhere else.
+            // Pushed straight into the kept transcript rather than through
+            // `append`, which batches on a timer — the unmount lands first and
+            // the note is lost.
+            kept.lines = [
+              ...kept.lines,
+              {
+                id: Date.now(),
+                text: `handed the terminal to /${parsed.name}`,
+                kind: 'note',
+              },
+            ];
+            void handover(parsed.name, parsed.args);
             return;
           }
 
@@ -424,18 +463,79 @@ async function runFullScreen(capabilities: Capabilities, glyphs: Glyphs, globals
       };
 
       debug('rendering full-screen app');
-      const instance = render(<App />, { exitOnCtrlC: false });
+      let instance = render(<App />, { exitOnCtrlC: false });
       debug('render() returned');
-      instance
-        .waitUntilExit()
-        .then(() => {
-          debug('waitUntilExit resolved');
-          resolvePromise();
-        })
-        .catch((error: unknown) => {
-          debug(`waitUntilExit rejected: ${error instanceof Error ? error.stack : String(error)}`);
-          resolvePromise();
+
+      // Set while the shell is deliberately unmounting to hand over the
+      // terminal. Without it, that unmount would look exactly like the user
+      // quitting and would end the session.
+      let handingOver = false;
+
+      const watchForExit = () => {
+        instance
+          .waitUntilExit()
+          .then(() => {
+            if (handingOver) {
+              debug('unmounted for a handover');
+              return;
+            }
+            debug('waitUntilExit resolved');
+            resolvePromise();
+          })
+          .catch((error: unknown) => {
+            debug(`waitUntilExit rejected: ${error instanceof Error ? error.stack : String(error)}`);
+            if (!handingOver) resolvePromise();
+          });
+      };
+      watchForExit();
+
+      /**
+       * Steps aside so a full-screen command can own the real terminal.
+       *
+       * Not a split. Splitting would mean allocating a pty, interpreting the
+       * child's cursor movements into a buffer, and shipping a native
+       * dependency to do it — a terminal multiplexer, for two commands. What
+       * the user wants is to type `/triage` and have it work, and handing over
+       * gives exactly that: the child gets a genuine TTY, full keyboard and the
+       * whole screen, and the shell comes back with its transcript when the
+       * child exits. It is what `git` does for `$EDITOR`.
+       *
+       * The order matters. Ink is unmounted first so it stops painting *and*
+       * releases stdin — two readers on one file descriptor means each keypress
+       * goes to whichever happens to get it.
+       */
+      async function handover(name: string, args: string[]): Promise<void> {
+        handingOver = true;
+        instance.unmount();
+
+        // One tick for Ink to restore raw mode and detach its stdin listener
+        // before the child starts reading.
+        await new Promise((resolve) => setTimeout(resolve, 30));
+
+        const code = await withAlternateScreenSuspended(async () => {
+          process.stdout.write('\n');
+          return new Promise<number>((resolve) => {
+            const child = spawn(process.execPath, [CLI_ENTRY, ...inheritedFlags(globals), name, ...args], {
+              stdio: 'inherit',
+              env: { ...process.env },
+            });
+            child.on('close', (status) => resolve(status ?? 0));
+            child.on('error', () => resolve(2));
+          });
         });
+
+        // Appended *before* the remount. The fresh component seeds its state
+        // from `kept` at mount and then mirrors its own state back, so a line
+        // added afterwards is overwritten on the next render and never seen.
+        kept.lines = [
+          ...kept.lines,
+          { id: Date.now(), text: `/${name} finished (exit ${code}) — back in the shell.`, kind: 'note' },
+        ];
+
+        handingOver = false;
+        instance = render(<App />, { exitOnCtrlC: false });
+        watchForExit();
+      }
     });
   } finally {
     leaveAlternateScreen();

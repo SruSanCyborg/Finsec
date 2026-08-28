@@ -83,6 +83,9 @@ export function alternateScreenAvailable(): boolean {
 }
 
 /** Restores the terminal. Safe to call repeatedly and from a signal handler. */
+/** True while a child process owns the real terminal. See the suspend helper. */
+let suspended = false;
+
 export function leaveAlternateScreen(): void {
   if (!active) return;
   active = false;
@@ -127,6 +130,8 @@ export function enterAlternateScreen(): void {
   process.on('exit', leaveAlternateScreen);
   for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP'] as const) {
     process.on(signal, () => {
+      // A child owns the terminal: the signal was aimed at it, not at us.
+      if (suspended) return;
       leaveAlternateScreen();
       process.exit(signal === 'SIGINT' ? 130 : 143);
     });
@@ -142,13 +147,20 @@ export function enterAlternateScreen(): void {
  * Runs `fn` with the alternate screen suspended, so a child process can own the
  * real terminal — used when a command needs the genuine TTY rather than having
  * its output captured.
+ *
+ * While suspended, this process stops treating Ctrl-C as its own. The signal
+ * reaches every process in the foreground group, so without the guard below the
+ * shell would exit on the keystroke the user pressed to quit the child — losing
+ * the session to a keypress aimed at something else.
  */
 export async function withAlternateScreenSuspended<T>(fn: () => Promise<T>): Promise<T> {
   const wasActive = active;
+  suspended = true;
   if (wasActive) leaveAlternateScreen();
   try {
     return await fn();
   } finally {
+    suspended = false;
     if (wasActive) {
       active = false; // force a genuine re-enter rather than a no-op
       enterAlternateScreen();
