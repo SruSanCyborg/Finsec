@@ -2,13 +2,8 @@
  * The SIRIUS wordmark.
  *
  * Block-letter capitals in the lineage of Gemini CLI, Warp, and the
- * Daytona launcher — a terminal product's logo is the first thing a judge sees,
- * and a plain string does not read as a product.
- *
- * The identity comes from the name: Sirius is the brightest star in the night
- * sky, and a blue-white one. So the wordmark runs a blue-white gradient rather
- * than the violet used elsewhere in the design tokens, and carries a star
- * accent. That is the part that makes it ours instead of a generic ASCII banner.
+ * Daytona launcher — a terminal product's first screen is its logo, and a line
+ * of text does not read as one.
  *
  * Rendered as raw ANSI rather than Ink, because the banner prints once, outside
  * any React tree, and mounting a renderer for it would be silly.
@@ -55,16 +50,76 @@ export function wordmarkWidth(): number {
   return letters.reduce((sum, w) => sum + w, 0) + (letters.length - 1);
 }
 
-/** Sirius A is a blue-white star; the gradient runs from its white core outward. */
-const GRADIENT_START = { r: 0xe8, g: 0xf4, b: 0xff }; // near-white blue
-const GRADIENT_END = { r: 0x5a, g: 0xc8, b: 0xfa }; // --low, the token blue
+export interface Rgb {
+  r: number;
+  g: number;
+  b: number;
+}
+
+/**
+ * Three stops, all existing design tokens, swept green → blue → violet.
+ *
+ * Green leads because it means something here: `--success` is the verifier-pass
+ * colour, and this is a tool whose promise is telling you what is safe.
+ *
+ * An earlier version started at near-white and rendered grey on most terminals.
+ * A 24-bit near-white has nowhere to go when quantised down to 256 colours, so
+ * five of the six letters came out as mud. Every stop is now fully saturated,
+ * which survives the approximation.
+ */
+const GRADIENT: Rgb[] = [
+  { r: 0x04, g: 0xb5, b: 0x75 }, // --success, green
+  { r: 0x5a, g: 0xc8, b: 0xfa }, // --low, blue
+  { r: 0x7c, g: 0x3a, b: 0xed }, // --accent, violet
+];
 
 function lerp(a: number, b: number, t: number): number {
   return Math.round(a + (b - a) * t);
 }
 
-function truecolor(r: number, g: number, b: number): string {
-  return `\u001b[38;2;${r};${g};${b}m`;
+/** Samples the multi-stop gradient at `t` in [0, 1]. */
+export function gradientAt(t: number): Rgb {
+  const clamped = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+  const span = 1 / (GRADIENT.length - 1);
+  const index = Math.min(GRADIENT.length - 2, Math.floor(clamped / span));
+  const local = (clamped - index * span) / span;
+
+  const from = GRADIENT[index] as Rgb;
+  const to = GRADIENT[index + 1] as Rgb;
+
+  return {
+    r: lerp(from.r, to.r, local),
+    g: lerp(from.g, to.g, local),
+    b: lerp(from.b, to.b, local),
+  };
+}
+
+/**
+ * True colour is not universal. This machine reports `xterm-256color` with no
+ * COLORTERM, which is exactly the case that turns a 24-bit gradient to mud —
+ * so map to the 256-colour cube deliberately rather than hoping the emulator
+ * approximates well.
+ */
+function supportsTrueColor(): boolean {
+  if (/truecolor|24bit/i.test(process.env.COLORTERM ?? '')) return true;
+  // Terminals that support it without advertising COLORTERM.
+  return /iTerm|WezTerm|kitty|alacritty|vscode/i.test(process.env.TERM_PROGRAM ?? '');
+}
+
+/** RGB → nearest xterm-256 index, via the 6×6×6 colour cube (16–231). */
+export function toAnsi256(r: number, g: number, b: number): number {
+  const channel = (v: number) => {
+    if (v < 48) return 0;
+    if (v < 115) return 1;
+    return Math.min(5, Math.round((v - 35) / 40));
+  };
+  return 16 + 36 * channel(r) + 6 * channel(g) + channel(b);
+}
+
+function paint({ r, g, b }: Rgb): string {
+  return supportsTrueColor()
+    ? `\u001b[38;2;${r};${g};${b}m`
+    : `\u001b[38;5;${toAnsi256(r, g, b)}m`;
 }
 
 const RESET = '\u001b[0m';
@@ -79,43 +134,37 @@ export interface WordmarkOptions {
 }
 
 /**
- * Builds the block-letter SIRIUS, gradient applied horizontally so the colour
- * sweeps across the word rather than banding per letter.
+ * Builds the block-letter SIRIUS, gradient applied per column so the sweep is
+ * continuous across letter boundaries rather than banded per glyph.
  */
 function blockLetters({ color }: WordmarkOptions): string[] {
-  const word = WORD;
   const rows: string[] = Array.from({ length: ROWS }, () => '');
 
-  for (const [index, letter] of [...word].entries()) {
+  for (const [index, letter] of [...WORD].entries()) {
     const glyph = GLYPHS[letter];
     if (!glyph) continue;
     for (let row = 0; row < ROWS; row += 1) {
-      rows[row] += (glyph[row] ?? '') + (index === word.length - 1 ? '' : ' ');
+      rows[row] += (glyph[row] ?? '') + (index === WORD.length - 1 ? '' : ' ');
     }
   }
 
-  const total = Math.max(...rows.map((r) => r.length));
   if (!color) return rows;
 
-  // Colour per column so the sweep is continuous across letter boundaries.
+  const total = Math.max(...rows.map((r) => r.length));
+
   return rows.map((row) => {
     let out = '';
-    let currentColor = '';
+    let current = '';
     for (let col = 0; col < row.length; col += 1) {
       const char = row[col] ?? ' ';
       if (char === ' ') {
         out += char;
         continue;
       }
-      const t = total <= 1 ? 0 : col / (total - 1);
-      const next = truecolor(
-        lerp(GRADIENT_START.r, GRADIENT_END.r, t),
-        lerp(GRADIENT_START.g, GRADIENT_END.g, t),
-        lerp(GRADIENT_START.b, GRADIENT_END.b, t),
-      );
-      if (next !== currentColor) {
+      const next = paint(gradientAt(total <= 1 ? 0 : col / (total - 1)));
+      if (next !== current) {
         out += next;
-        currentColor = next;
+        current = next;
       }
       out += char;
     }
@@ -126,7 +175,7 @@ function blockLetters({ color }: WordmarkOptions): string[] {
 export interface BannerContent {
   version: string;
   tagline: string;
-  /** e.g. `project: paykit-api · authenticated` */
+  /** e.g. `project paykit-api · authenticated` */
   context: string;
   author: string;
 }
@@ -143,7 +192,10 @@ export function renderWordmark(content: BannerContent, options: WordmarkOptions)
   // title reads better than a wrapped logo.
   const compact = !unicode || width < 46;
 
-  const accent = color ? truecolor(GRADIENT_END.r, GRADIENT_END.g, GRADIENT_END.b) : '';
+  // The rule and star pick up the gradient's midpoint so the accent belongs to
+  // the same palette rather than sitting outside it.
+  const accent = color ? paint(gradientAt(0.5)) : '';
+  const tail = color ? paint(gradientAt(1)) : '';
   const dim = color ? DIM : '';
   const bold = color ? BOLD : '';
   const reset = color ? RESET : '';
@@ -156,18 +208,17 @@ export function renderWordmark(content: BannerContent, options: WordmarkOptions)
   } else {
     for (const row of blockLetters(options)) lines.push(pad + row);
     lines.push('');
-    // The rule spans exactly the wordmark, so the two edges line up rather than
-    // almost lining up — which is the difference the eye actually notices.
+    // The rule spans exactly the wordmark, so the edges line up rather than
+    // almost lining up — the difference the eye actually notices.
     const ruleChar = unicode ? '─' : '-';
     const ruleWidth = Math.max(10, Math.min(wordmarkWidth(), width - pad.length - 10));
     lines.push(
-      `${pad}${dim}${ruleChar.repeat(ruleWidth)}${reset} ${accent}${star}${reset} ${dim}v${content.version}${reset}`,
+      `${pad}${dim}${ruleChar.repeat(ruleWidth)}${reset} ${tail}${star}${reset} ${dim}v${content.version}${reset}`,
     );
   }
 
-  // The tagline and the session context are prose and can be longer than a
-  // narrow terminal; truncate rather than letting them wrap and break the
-  // block's alignment.
+  // The tagline and session context are prose and can exceed a narrow terminal;
+  // truncate rather than letting them wrap and break the block's alignment.
   const room = Math.max(8, width - pad.length);
   const fit = (text: string) => (text.length <= room ? text : `${text.slice(0, room - 1)}${unicode ? '…' : '.'}`);
 

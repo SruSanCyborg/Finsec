@@ -140,7 +140,7 @@ describe('Prompt', () => {
 
   it('recalls history with the up arrow', async () => {
     const { stdin, lastFrame } = setup(['scan .', 'doctor']);
-    stdin.write('[A');
+    stdin.write('\u001b[A');
     await settle();
 
     expect(lastFrame()).toContain('doctor');
