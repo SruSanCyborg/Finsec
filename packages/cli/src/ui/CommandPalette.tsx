@@ -91,7 +91,12 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   {
     name: 'explain',
     summary: 'Show how a money-at-risk figure was derived — for a record, /revenue explain',
-    usage: '/explain SIR-SEC-001',
+    usage: '/explain [SIR-SEC-001|score]',
+    args: [
+      { name: 'score', summary: 'how the compliance score on the footer is calculated', kind: 'subcommand' },
+      { name: 'SIR-SEC-001', summary: 'the ₹ figure for one rule, with its public anchor', kind: 'subcommand' },
+    ],
+    keywords: ['score', 'compliance', 'money'],
   },
   {
     name: 'rules',

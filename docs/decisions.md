@@ -1816,3 +1816,31 @@ re-running the scan. Three outcomes now say three different things: no template
 for this action, a template that no longer matches the line (with the fix — run
 `sirius scan` again), and the existing case where the project has no
 authenticated route to copy.
+
+## D-054 — The compliance score explains itself
+
+`sirius explain` exists because "how did you get ₹42,00,000?" is the first
+question anyone sensible asks, and "it's a heuristic" is not an answer. Asking
+the same question about the other headline number got:
+
+    error: No exposure model for "score".
+
+`Compliance 60/100` sits on the footer beside a rupee figure traceable to a
+public anchor, and was itself the one number on screen with no derivation
+anywhere. It is also the number a compliance officer asks about first.
+
+The formula was explainable the whole time — `complianceScore` in `scanner.ts`
+is twelve lines and deliberately not tuned. It was simply not reachable from the
+command whose entire job is disclosure. `sirius explain score` now prints the
+weights, the file-count scale and the reason for it, and works the example
+against the last scan: `penalty 2×12 + 2×6 + 2×2 = 40 · scale log10(max(10, 3))
+= 1.00 · score 100 − 40 ÷ 1.00 = 60`, which is the figure on the footer.
+
+It also says whose formula it is. The weighting is one of the open questions
+logged as blocking on `auto`, and this is the local engine's answer, not the
+contract's — so two sirius scans are comparable to each other and not to a score
+from another tool. A number somebody may have to defend has to name its
+authority.
+
+The test recomputes the score from the printed terms rather than trusting the
+prose: a worked example that disagrees with the footer is worse than none.
