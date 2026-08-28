@@ -114,10 +114,22 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | Contract + mock backend | Done. `openapi.yaml` validates; `smoke.mjs` asserts the mockup totals |
 | `sirius scan` | Done — streaming TTY view, plain renderer, `--json`, `--sarif`, `--replay`, exit codes |
 | `sirius fix` | Done — Cerebus panel, diff, interactive apply with backup |
-| Everything else in the command tree | Scaffolded in `--help`, throws "not implemented" |
-| Tests | 73 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals) |
+| `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
+| `rules list\|show\|validate` | Done. `rules test` deliberately unimplemented (needs an endpoint that doesn't exist) |
+| `suppress`, `baseline`, `report`, `badge` | Done |
+| `triage`, `watch` | Not started — neither is in the demo script |
+| Tests | 86 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals, expiry parsing, credential storage) |
 
-Not started: `login`/`logout`, `init`, `triage`, `watch`, `rules`, `suppress`, `baseline`, `report`, `badge`. Cut order if time runs short: `watch` → `triage` → `rules test` → `report pdf` → `badge`. Never cut: `scan` streaming, exit codes, `fix`, `--sarif`.
+Ten of twelve commands are real. Cut order if time runs short: `watch` → `triage` → `report pdf` → `badge`. Never cut: `scan` streaming, exit codes, `fix`, `--sarif`.
+
+A first run on a real repo looks like:
+
+```bash
+sirius init --project <id>     # writes sirius.yaml + .siriusignore
+sirius login --api-key <key>   # verifies, then stores at 0600
+sirius scan .
+sirius fix SIR-SEC-001
+```
 
 ---
 
