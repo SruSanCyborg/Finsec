@@ -1,0 +1,67 @@
+{
+  "schema": "sirius.batch/v1",
+  "seed": "sirius-2026",
+  "generated_at": "2026-08-27T18:03:23.856Z",
+  "as_of": "2026-08-24T18:30:00.000Z",
+  "counts": {
+    "payments": 723,
+    "checkouts": 200,
+    "invoices": 120
+  },
+  "split_rule": "sha256(id)[0] % 100 < 60 → train, else test",
+  "incidents": [
+    {
+      "kind": "psp_degradation",
+      "psp": "peninsula-gw",
+      "rail": "upi_collect",
+      "from": "2026-08-23T23:30:00.000Z",
+      "to": "2026-08-24T00:30:00.000Z",
+      "record_ids": [
+        "pay_00701",
+        "pay_00702",
+        "pay_00703",
+        "pay_00704",
+        "pay_00705",
+        "pay_00706",
+        "pay_00707",
+        "pay_00708",
+        "pay_00709",
+        "pay_00710",
+        "pay_00711",
+        "pay_00712",
+        "pay_00713",
+        "pay_00714",
+        "pay_00715",
+        "pay_00716",
+        "pay_00717",
+        "pay_00718",
+        "pay_00719",
+        "pay_00720",
+        "pay_00721",
+        "pay_00722",
+        "pay_00723"
+      ]
+    },
+    {
+      "kind": "abuse_ring",
+      "device_hash": "dev_255b2b2123",
+      "bin": "473243",
+      "from": "2026-08-22T12:30:00.000Z",
+      "to": "2026-08-24T18:30:00.000Z",
+      "record_ids": [
+        "pay_00014",
+        "pay_00026",
+        "pay_00061",
+        "pay_00108",
+        "pay_00180",
+        "pay_00228",
+        "pay_00294",
+        "pay_00306",
+        "pay_00414",
+        "pay_00434",
+        "pay_00616",
+        "pay_00656"
+      ]
+    }
+  ]
+}

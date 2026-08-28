@@ -67,3 +67,20 @@ def export():
     path = "/var/statements/%s.csv" % account
     subprocess.run("gzip " + path, shell=True)
     return {}
+
+
+# --- SIR-SEC-010, across two functions -------------------------------------
+# Neither line looks wrong on its own. `run_query` is correct code that
+# executes what it is handed; the caller is what hands it something untrusted.
+# A rule matching the shape of a statement cannot see this; a function summary
+# can, and reports it at the call, which is the line somebody has to change.
+def run_query(cur, statement):
+    cur.execute(statement)
+
+
+@bp.route("/statements/by-account", methods=["GET"])
+@login_required
+def by_account(cur):
+    account = request.args["account"]
+    run_query(cur, "SELECT amount FROM ledger_lines WHERE account = '%s'" % account)
+    return {}

@@ -67,10 +67,12 @@ describe('the rule gallery', () => {
     const expected: Record<string, number> = {
       'SIR-SEC-001': 1,
       'SIR-SEC-002': 1,
-      // The shape case in injection.py, plus two in taint.py: one traced from
-      // the request across three statements, and one coerced by `int()` that is
-      // still reported because no proven path is not a proof of safety.
-      'SIR-SEC-010': 3,
+      // The shape case in injection.py, plus three in taint.py: one traced from
+      // the request across three statements, one coerced by `int()` that is
+      // still reported because no proven path is not a proof of safety, and one
+      // that only a function summary can see — the sink is in `run_query` and
+      // the mistake is at the call.
+      'SIR-SEC-010': 4,
       // The shape case, and the same flaw traced to `request.form`.
       'SIR-SEC-011': 2,
       'SIR-SEC-020': 1,
@@ -96,10 +98,12 @@ describe('the rule gallery', () => {
     // "an attacker controls this string". A finding that claims a trace must
     // carry one, and one that has no trace must not imply safety.
     const traced = gallery.findings.filter((f) => (f as { taint?: string }).taint);
-    expect(traced.length).toBe(2);
+    expect(traced.length).toBe(3);
 
     for (const finding of traced) {
-      expect(finding.message).toContain('attacker-controlled');
+      // Two wordings, one claim: a traced finding says the input is controlled
+      // by an attacker, whether the sink is on the line or in a callee.
+      expect(finding.message.toLowerCase()).toContain('attacker-controlled');
       const path = (finding as { taint?: string }).taint as string;
       // Source, then every assignment it passed through, in order.
       expect(path).toMatch(/^HTTP request: /);

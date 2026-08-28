@@ -1372,3 +1372,47 @@ a canonicalised payload with sorted keys — close to RFC 8785 and documented as
 such rather than claimed to be it.
 
 ---
+## D-042 — Following a value into another function, by summary
+
+From the zero-AI design report's Part B, which calls a limited interprocedural
+pass "the single most impressive-yet-tractable feature". The shape it exists for
+is two lines, neither of which looks wrong on its own:
+
+```python
+def run_query(cur, q): cur.execute(q)      # a sink, with nothing untrusted in sight
+run_query(cur, request.args["q"])          # the mistake, with no sink in sight
+```
+
+A rule matching the shape of a statement cannot see this, and the intraprocedural
+pass could not either. Each function is now asked two questions **once** — if
+parameter *i* were tainted, would it reach the return value, and would it reach a
+sink — and the answers are reused at every call. That is the economy of the
+approach: a body is analysed once rather than re-analysed down every path that
+reaches it.
+
+**Per parameter, not per function.** "This function sinks its second argument"
+is a different fact from "it sinks its first", and a summary that cannot tell
+them apart reports the wrong argument at every call site. A tainted value
+arriving at a parameter that is never sunk is not this bug and is not reported.
+
+**The finding is at the call.** That is the line somebody has to change; the
+sink inside the callee is correct code that was handed something it should not
+have been. The message names both — `reaches cur.execute inside run_query()` —
+because a report saying an ordinary function call is a SQL injection leaves the
+reader to work out why on their own.
+
+**The negatives are the feature.** A pass that assumes every call passes taint
+through flags `q = escape(dirty)`, which is code doing exactly the right thing;
+one that assumes every call sinks its arguments flags the whole codebase. Both
+are worse than staying intraprocedural, so `returnsTaintFrom` gates propagation
+out of a call and `sinksParam` gates findings into one. Four of the ten tests
+are negatives.
+
+Still out of scope, and still said out loud: crossing a file, resolving a method
+on a receiver whose type is unknown, containers, and aliasing. `Finding.taint`
+being null remains "no path proven", never "safe".
+
+Measured for regressions: chaos-repo 6 findings unchanged, and nothing new in
+this repository's own source.
+
+---

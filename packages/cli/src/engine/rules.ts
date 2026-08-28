@@ -321,6 +321,29 @@ const sqlInjection: Rule = {
         }),
       );
     }
+    // Calls that hand a tainted value to a function which sinks it. The sink is
+    // in the callee and the bug is at the call, and neither line looks wrong on
+    // its own — which is exactly why a shape-matching rule cannot see this and
+    // a summary-based one can.
+    for (const site of taint?.callSites ?? []) {
+      if (!/execute|query|raw/.test(site.sink)) continue;
+      const line = file.lines[site.line - 1] ?? '';
+      findings.push({
+        rule_id: this.id,
+        severity: this.severity,
+        category: this.category,
+        message: `Attacker-controlled input reaches ${site.sink} inside ${site.callee}()`,
+        line: site.line,
+        col: line.length - line.trimStart().length + 1,
+        snippet: line.trim(),
+        compliance_ref: this.compliance_ref,
+        ...(this.fix_action ? { fix_action: this.fix_action } : {}),
+        money_at_risk_inr: estimateExposure({ ruleId: this.id, severity: this.severity }).amount,
+        tags: ['injection', 'database', 'tainted', 'interprocedural'],
+        taint: describePath(site.path),
+      });
+    }
+
     return findings;
   },
 };
