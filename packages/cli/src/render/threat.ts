@@ -93,25 +93,57 @@ export function renderThreatReport(
   }
 
   // ---- archaeology: how long has it been in history?
-  for (const finding of secrets) {
-    const origin = report.provenance.get(finding.id);
-    if (!origin) continue;
+  //
+  // Grouped, not listed. Sixteen secrets introduced by the same commit is one
+  // fact about one commit, and printing it sixteen times buries it. Each line
+  // names the file, because "SIR-SEC-002 39 days ago" tells a reader nothing
+  // they can act on.
+  const dated = secrets
+    .map((finding) => ({ finding, origin: report.provenance.get(finding.id) }))
+    .filter((entry): entry is { finding: Finding; origin: NonNullable<typeof entry.origin> } =>
+      Boolean(entry.origin),
+    )
+    .sort((a, b) => b.origin.ageDays - a.origin.ageDays);
 
-    const age =
-      origin.ageDays === 0
-        ? 'today'
-        : origin.ageDays === 1
-          ? '1 day ago'
-          : `${origin.ageDays} days ago`;
+  if (dated.length > 0) {
+    const byCommit = new Map<string, typeof dated>();
+    for (const entry of dated) {
+      byCommit.set(entry.origin.commit, [...(byCommit.get(entry.origin.commit) ?? []), entry]);
+    }
 
-    lines.push(
-      ` ${paint('leaked', DIM, color)}     ${finding.rule_id}  ` +
-        paint(`${age} in ${origin.commit} by ${origin.author}`, DIM, color),
-    );
-    if (origin.ageDays > 0) {
+    const age = (days: number) =>
+      days === 0 ? 'committed today' : days === 1 ? 'in history for 1 day' : `in history for ${days} days`;
+
+    lines.push('');
+    for (const [commit, group] of [...byCommit].slice(0, 4)) {
+      const first = group[0]!;
+      const where =
+        group.length === 1
+          ? `${first.finding.file}:${first.finding.line}`
+          : `${group.length} secrets across ${new Set(group.map((g) => g.finding.file)).size} file(s)`;
+
       lines.push(
-        `           ${paint(`in every clone since — rotating the key is the fix, deleting the line is not`, DIM, color)}`,
+        ` ${paint('in history', DIM, color)} ${paint(where, DIM, color)}`,
       );
+      lines.push(
+        `            ${paint(
+          `${age(first.origin.ageDays)} · added by ${first.origin.author} in ${commit}`,
+          DIM,
+          color,
+        )}`,
+      );
+    }
+
+    if (byCommit.size > 4) {
+      lines.push(` ${paint('', DIM, color)}           ${paint(`+ ${byCommit.size - 4} more commits`, DIM, color)}`);
+    }
+
+    // Said once, because it is one lesson, not one per finding.
+    if (dated.some((d) => d.origin.ageDays > 0)) {
+      lines.push(
+        `            ${paint('anyone who cloned the repo already has these. Rotate them —', DIM, color)}`,
+      );
+      lines.push(`            ${paint('deleting the line does not remove it from history.', DIM, color)}`);
     }
   }
 

@@ -68,7 +68,8 @@ export function FullScreenShell({
   // null means "follow the tail"; a number pins the viewport to that offset.
   const [scrollOffset, setScrollOffset] = useState<number | null>(null);
   const [spinner, setSpinner] = useState(0);
-  // Ctrl+O, the same gesture other agent CLIs use to open a transcript.
+  // Ctrl+E for 'explain'. Some agent CLIs use Ctrl+O for their transcript, but
+  // Ctrl+E reads as the verb here and leaves Ctrl+O free.
   const [expanded, setExpanded] = useState(false);
   const lastCtrlC = useRef(0);
 
@@ -126,7 +127,7 @@ export function FullScreenShell({
 
     if (key.pageUp) return scrollBy(-halfPage);
     if (key.pageDown) return scrollBy(halfPage);
-    if (key.ctrl && input === 'o') {
+    if (key.ctrl && input === 'e') {
       // Toggling changes how many lines exist, so a naive toggle jumps the
       // viewport to the tail and hides the very evidence it just revealed.
       // Anchor on the line currently at the top and keep it there.
@@ -329,7 +330,7 @@ export function FullScreenShell({
           {following
             ? busy
               ? ' ctrl-c cancel · ↑↓ scroll'
-              : ` / commands · ↑↓ scroll · ctrl-p history · ctrl-o ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
+              : ` / commands · ↑↓ scroll · ctrl-p history · ctrl-e ${expanded ? 'hide' : 'why'} · ctrl-c ctrl-c exit`
             : ` ${hiddenBelow} below · ↑↓ scroll · ctrl-g top · esc back to bottom`}
         </Text>
       </Box>

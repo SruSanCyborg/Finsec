@@ -237,7 +237,11 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
     const exposure = new Map<string, { exposure: string; provider?: string; detail?: string }>();
     const provenance = new Map<string, ReturnType<typeof findIntroduction>>();
 
+    // Archaeology only for confirmed provider keys. A high-entropy string is a
+    // guess, and pickaxing history for each one produced a page of identical
+    // lines that told the reader nothing.
     const secrets = outcome.findings.filter((f) => f.category === 'secrets');
+    const traceable = secrets.filter((f) => f.rule_id === 'SIR-SEC-001');
 
     for (const finding of secrets) {
       // Opt-in only: probing uses someone else's credential against their API.
@@ -246,6 +250,7 @@ export async function runScan(path: string, flags: ScanFlags, globals: GlobalFla
       }
       // git needs a path it can resolve from the repo, not one relative to the
       // scan target, which may be several directories inside it.
+      if (!traceable.includes(finding)) continue;
       const origin = findIntroduction(target, resolve(target, finding.file), finding.snippet ?? '');
       if (origin) provenance.set(finding.id, origin);
     }
