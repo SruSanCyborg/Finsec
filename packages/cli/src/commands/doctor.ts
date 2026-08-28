@@ -16,10 +16,13 @@
  * are checked instead.
  */
 
+import { existsSync, statSync } from 'node:fs';
+
 import { WebSocket } from 'ws';
 
 import { ApiClient } from '../api/client.js';
 import { deriveWsUrl } from '../api/stream.js';
+import { keyPath, loadOrCreateKey } from '../engine/attest.js';
 import { loadConfig, configTomlPath, findProjectRoot, loadIgnorePatterns } from '../config/load.js';
 import { maskKey } from '../config/write.js';
 import { loadLastScan } from '../session.js';
@@ -131,9 +134,11 @@ export async function runDoctor(_flags: unknown, globals: GlobalFlags): Promise<
     checks.push({ status: 'ok', label: 'ignore rules', detail: `${ignores.length} pattern(s) in .siriusignore` });
   }
 
-  // ---- the engine, which is what a local scan actually depends on
+  // ---- the engines, which is what a local run actually depends on
 
   checks.push(await probeEngine(glyphs.check));
+  checks.push(await probeRevenue(glyphs.check));
+  checks.push(probeSigningKey());
 
   // ---- connectivity
 
@@ -322,6 +327,110 @@ async function probeEngine(check: string): Promise<Check> {
       label: 'engine',
       detail: error instanceof Error ? error.message : String(error),
       hint: 'The local engine could not start, so no scan can run. Reinstall dependencies.',
+    };
+  }
+}
+
+/**
+ * Runs the revenue detector end to end on a batch generated in memory.
+ *
+ * The same argument as the scan self-test: this path is only exercised when
+ * somebody points the tool at a batch, so a preflight that says nothing about
+ * it is a preflight that lets `revenue detect` fail on stage. Cheap enough to
+ * run every time — a forty-record batch fits and scores in milliseconds.
+ *
+ * It asserts the holds as well as the scoring, because a detector that flags
+ * everything would pass a test that only counted findings, and the holds are
+ * the property this surface actually promises.
+ */
+async function probeRevenue(check: string): Promise<Check> {
+  try {
+    const { generateBatch } = await import('../revenue/synth.js');
+    const { fitModel, assessBatch, isHeld } = await import('../revenue/model.js');
+    const { analyzeBatch } = await import('../revenue/features.js');
+
+    const batch = generateBatch({ seed: 'doctor-probe', payments: 120, checkouts: 30, invoices: 20 });
+    const model = fitModel(batch.records, batch.truth);
+    const context = analyzeBatch(batch.records);
+    const { assessments } = assessBatch(batch.records, model, { context });
+
+    const flagged = assessments.filter((assessment) => assessment.flagged).length;
+    const held = assessments.filter(isHeld).length;
+
+    if (flagged === 0) {
+      return {
+        status: 'fail',
+        label: 'revenue engine',
+        detail: 'the model fitted but flagged nothing at all',
+        hint: 'Nothing would be worked on any batch. This build is not fit to run a recovery with.',
+      };
+    }
+
+    if (held === 0) {
+      return {
+        status: 'warn',
+        label: 'revenue engine',
+        detail: `${flagged} records flagged, but nothing was held`,
+        hint: 'Disputes and shared-signal clusters should always be held. Check the hold rules.',
+      };
+    }
+
+    return {
+      status: 'ok',
+      label: 'revenue engine',
+      detail:
+        `model fits on ${model.trained_on} · ${flagged} flagged, ${held} held · ` +
+        `self-test ${check}`,
+    };
+  } catch (error) {
+    return {
+      status: 'fail',
+      label: 'revenue engine',
+      detail: error instanceof Error ? error.message : String(error),
+      hint: '`revenue` and `reconcile` cannot run. Reinstall dependencies.',
+    };
+  }
+}
+
+/**
+ * The signing key behind every signed report and every audit trail.
+ *
+ * Generated on first use, so its absence is not a failure — but its *mode* is.
+ * A private key at 0644 is one `cat` away from being someone else's signature,
+ * and a trail signed with a key anyone could copy proves nothing about who ran
+ * the agent.
+ */
+function probeSigningKey(): Check {
+  const path = keyPath();
+
+  if (!existsSync(path)) {
+    return {
+      status: 'info',
+      label: 'signing key',
+      detail: 'not created yet — generated on the first signed report or recovery run',
+    };
+  }
+
+  try {
+    const mode = statSync(path).mode & 0o777;
+    const { keyId } = loadOrCreateKey(path);
+
+    if (mode !== 0o600) {
+      return {
+        status: 'fail',
+        label: 'signing key',
+        detail: `${path} is ${mode.toString(8).padStart(3, '0')}, not 600`,
+        hint: `Anyone who can read it can forge a signature. Fix with: chmod 600 ${path}`,
+      };
+    }
+
+    return { status: 'ok', label: 'signing key', detail: `${keyId} · 0600 · ${path}` };
+  } catch (error) {
+    return {
+      status: 'fail',
+      label: 'signing key',
+      detail: error instanceof Error ? error.message : String(error),
+      hint: 'Reports and audit trails cannot be signed until this key is readable.',
     };
   }
 }

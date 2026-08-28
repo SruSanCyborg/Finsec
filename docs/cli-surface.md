@@ -29,6 +29,8 @@ sirius
 │   └── --report <pdf|json>        # signed artifact
 ├── fix [finding-id] [--all] [--apply]   # Cerebus diffs, interactive accept/reject
 ├── triage                         # interactive TUI: keyboard-driven finding review
+├── revenue gen|detect|eval|recover|audit   # money at risk in operations, not code
+├── reconcile [--gen]              # ledger vs settlements vs bank statement
 ├── watch                          # re-scan on file change (like `stripe listen`)
 ├── rules [list|show|validate|test]
 ├── suppress <rule> --reason "…" --expires 2026-09-01
@@ -52,7 +54,9 @@ Added by [`decisions.md`](decisions.md): global `--api-url`, `--project`, and `s
 | `suppress` | `GET/POST /suppressions` | **S-auth only** |
 | `baseline` | `GET/POST /baselines` | **S-auth only** |
 | `report` | `GET /scans/{id}/report` | Tree says `--format pdf`, API says `pdf\|json\|sarif` |
-| `badge` | `GET /projects/{id}/badge.svg` | Public, no auth |
+| `badge` | `GET /projects/{id}/badge.svg` | Public, no auth. With no project it draws the SVG locally from the last scan (D-022) |
+| `revenue` | **none** | Wholly local (D-023): `gen` writes a seeded batch, `detect`/`eval` score and measure it, `recover` runs the bounded workflow, `audit --verify` checks the signed trail. No endpoint exists or is wanted — the API contract has no notion of a risk record |
+| `reconcile` | **none** | Wholly local (D-023): three sets of books in, a match rate and an exception list out. Exit 1 when anything is unexplained |
 
 **The K/S auth contradiction.** `scan`, `fix`, `report`, and secret validation accept **K** (Bearer API key). But `triage`, `suppress`, `baseline`, and most of `rules` hit endpoints marked **S** (session/JWT only). As specified those four commands cannot work in CI with an API key. Logged as blocked on `auto`. It bites less than it did: all four now have a local path that needs no auth at all, so the contradiction only blocks teams that want the hosted history.
 

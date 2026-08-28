@@ -123,13 +123,13 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `report` | Done — ed25519-signed JSON carrying the compliance score, `--verify` gates on 0/1/2 |
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
 | `triage` | Done both ways — decisions to `.sirius/`, or PATCHed to the API. Driven in a pty |
-| `doctor` | Done — reports against the mode the scan will actually run in, and self-tests the engine |
+| `doctor` | Done — reports against the mode the scan will actually run in, self-tests both engines, and fails on a signing key that is not 0600 |
 | `badge` | Done — writes an SVG from the last scan, or prints the hosted URL when a project is set |
 | `watch`, `explain` | Done |
 | **`revenue detect\|eval`** | Done — held-out precision/recall, ₹-weighted, calibration, false-positive cost |
 | **`revenue recover\|audit`** | Done — bounded workflow, 13 stopping rules, hash-chained signed trail |
 | **`reconcile`** | Done — 5-tier matcher over 3 sets of books, match rate + verified accuracy + exceptions |
-| Tests | 477 passing |
+| Tests | 494 passing |
 
 **Where the API is still required:** `rules test` (needs a YAML rule
 interpreter, not just an endpoint) and PDF reports. Everything else runs with no
