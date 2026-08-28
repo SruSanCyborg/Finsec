@@ -346,6 +346,12 @@ from it. Nothing on the page is typed except the prose, and where the prose
 makes a numeric claim it interpolates the same figure the table does, so the two
 cannot drift.
 
+Every figure is measured, including the test count — which used to be grepped
+out of `AGENTS.md`, making it the one number on the page nobody had run to
+obtain, and the one that went stale twice. The collector runs the suite now, and
+refuses to collect at all from a build that does not pass: a page published from
+a failing build describes something nobody can run.
+
 `pnpm artifact:check` re-collects and diffs against the committed
 `metrics.json`, naming every figure that moved and exiting 1 if any did.
 Generating the page stops it being *typed* wrong; it does not stop it going

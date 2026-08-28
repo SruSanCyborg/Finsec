@@ -92,11 +92,42 @@ try {
   const ceilingNet =
     e.baselines.find((baseline) => baseline.name === 'perfect foresight')?.cost.net_paise ?? 0;
 
-  const tests = Number(
-    /(\d+) passing/.exec(
-      execFileSync('grep', ['-o', '[0-9]* passing', join(root, 'AGENTS.md')], { encoding: 'utf8' }),
-    )?.[1] ?? 0,
-  );
+  // Measured, not read out of prose.
+  //
+  // This grepped `AGENTS.md` for "N passing", which made it the one figure on
+  // the page nobody had run to obtain — and the one that went stale twice,
+  // because the count moves whenever a test is added and the doc is updated by
+  // hand. Running the suite costs a couple of seconds and removes the last
+  // hand-maintained number from the page.
+  const vitest = () =>
+    execFileSync('npx', ['vitest', 'run', '--reporter=json', '--silent'], {
+      cwd: join(root, 'packages', 'cli'),
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    });
+
+  // A failing suite makes vitest exit non-zero, which makes execFileSync throw
+  // before anything here can say why — a raw Node stack where a sentence
+  // belongs. The report is still on stdout, so read it off the error.
+  let raw;
+  try {
+    raw = vitest();
+  } catch (error) {
+    raw = error?.stdout ?? '';
+  }
+
+  const report = raw ? JSON.parse(raw) : { numTotalTests: 0, numFailedTests: 1 };
+
+  if (report.numFailedTests > 0) {
+    process.stderr.write(
+      `${report.numFailedTests} of ${report.numTotalTests} tests failing.\n` +
+        `Refusing to collect: a page published from a build that does not pass is a page\n` +
+        `describing something nobody can run. Fix the suite, then re-run.\n`,
+    );
+    process.exit(1);
+  }
+
+  const tests = report.numTotalTests;
 
   const metrics = {
     generated_at: new Date().toISOString(),
