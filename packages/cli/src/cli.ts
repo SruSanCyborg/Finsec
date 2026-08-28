@@ -177,7 +177,7 @@ export function buildProgram(): Command {
   program
     .command('revenue')
     .description('Detect, diagnose and recover revenue at risk in a batch of records')
-    .argument('[subcommand]', 'gen | detect | eval | recover | explain | sweep | audit', 'detect')
+    .argument('[subcommand]', 'gen | detect | eval | recover | explain | sweep | watch | audit', 'detect')
     // No default: with one, `revenue explain` with no id reported `No record
     // "batch"` instead of asking which record. Each subcommand supplies its own
     // fallback, because they do not want the same one.
@@ -202,6 +202,7 @@ export function buildProgram(): Command {
     .option('--capacity-share <fraction>', 'act on this share of each split, e.g. 0.05', Number.parseFloat)
     .option('--save <file>', 'write the sweep, to compare a later run against')
     .option('--against <file>', 'compare this sweep with a saved one')
+    .option('--debounce <ms>', 'quiet period for `watch`', (v) => Number.parseInt(v, 10))
     .option('--json', 'machine-readable output')
     .action(async (subcommand: string, target: string, options: Record<string, unknown>, command: Command) => {
       const { runRevenue } = await import('./commands/revenue.js');

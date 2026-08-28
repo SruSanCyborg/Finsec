@@ -44,8 +44,20 @@ export const SHELL_COMMANDS: ShellCommand[] = [
   {
     name: 'revenue',
     summary: 'Find, price and recover revenue at risk',
-    usage: '/revenue [gen|detect|eval|recover|explain|sweep|audit] [batch]',
-    keywords: ['gen', 'detect', 'eval', 'recover', 'explain', 'sweep', 'audit', 'payments', 'invoices', 'churn'],
+    usage: '/revenue [gen|detect|eval|recover|explain|sweep|watch|audit] [batch]',
+    keywords: [
+      'gen',
+      'detect',
+      'eval',
+      'recover',
+      'explain',
+      'sweep',
+      'audit',
+      'payments',
+      'invoices',
+      'churn',
+      'tune',
+    ],
   },
   {
     name: 'reconcile',

@@ -53,6 +53,7 @@ interface RevenueFlags {
   /** `explain` takes the record id as its argument, so the batch moves to a flag. */
   batch?: string;
   seeds?: number;
+  debounce?: number;
   capacityShare?: number;
   save?: string;
   against?: string;
@@ -119,9 +120,11 @@ export async function runRevenue(
       return explainRecord(target, flags, globals);
     case 'sweep':
       return runSweep(flags, globals);
+    case 'watch':
+      return watchBatch(target, flags, globals);
     default:
       throw new CliError(`Unknown subcommand "${subcommand}".`, {
-        hint: 'Expected one of: gen, detect, eval, recover, explain, sweep, audit.',
+        hint: 'Expected one of: gen, detect, eval, recover, explain, sweep, watch, audit.',
       });
   }
 }
@@ -351,13 +354,10 @@ async function runRecovery(
   }
 
   const split = parseSplit(flags.split);
-  const { batch, model, assessments, context, capacity, inSplit } = await scoreBatch(target, flags, split);
-  const truth = loadTruth(dir);
+  const { batch, model, capacity } = await scoreBatch(target, flags, split);
 
-  const { recover } = await import('../revenue/recover.js');
+  const { runBatch } = await import('../revenue/pipeline.js');
   const { costsFrom, describeOverrides, limitsFrom, rulesFor } = await import('../revenue/policy.js');
-
-  const startedAt = batch.manifest.as_of ? new Date(batch.manifest.as_of) : new Date();
 
   // sirius.yaml first, then flags on top of it — the same precedence every
   // other setting follows. A team pins its policy in the file; an operator
@@ -368,17 +368,18 @@ async function runRecovery(
   const costs = costsFrom(config.revenue);
   const maxSteps = flags.maxSteps ?? config.revenue?.max_steps;
 
-  const result = recover({
-    records: inSplit,
-    assessments,
-    truth,
-    context,
-    batch: batch.dir,
-    startedAt,
+  // The same function `watch` calls. Two commands running the same batch two
+  // different ways is the drift this repo keeps paying for.
+  const pipeline = runBatch({
+    dir: batch.dir,
+    split,
     limits,
     costs,
+    capacity,
+    model,
     ...(maxSteps ? { maxSteps } : {}),
   });
+  const result = pipeline.recovery as NonNullable<typeof pipeline.recovery>;
 
   const trailPath = flags.output
     ? resolve(process.cwd(), flags.output)
@@ -430,6 +431,136 @@ async function runRecovery(
 
   // The rules table quotes this run's limits, not the built-in ones.
   await writePaced(renderRecovery(result.outcome, rulesFor(limits), palette, trailPath).split('\n'), pace * 3);
+}
+
+// ---- watch ------------------------------------------------------------------
+
+/**
+ * `sirius revenue watch` — re-run when the batch or the policy changes.
+ *
+ * A recovery agent is tuned, not written: somebody sets `contacts_per_day: 1`,
+ * wants to know what it cost, and today has to run the command twice and hold
+ * the difference in their head. This watches `sirius.yaml` and the batch and
+ * prints only what moved.
+ *
+ * It writes nothing. A loop that re-runs on every keystroke must not leave a
+ * hundred signed audit trails behind it, so the trail stays a return value.
+ */
+async function watchBatch(
+  target: string | undefined,
+  flags: RevenueFlags,
+  globals: GlobalFlags,
+): Promise<void> {
+  const dir = batchDir(target);
+  if (!hasTruth(dir)) {
+    throw new CliError(`${dir} has no labels, so a run against it could not be measured.`, {
+      hint: 'Generate a batch with `sirius revenue gen`.',
+    });
+  }
+
+  const { watch } = await import('node:fs');
+  const { runBatch, summarise, changes } = await import('../revenue/pipeline.js');
+  const { costsFrom, limitsFrom } = await import('../revenue/policy.js');
+  const { renderChanges } = await import('../render/revenue.js');
+
+  const capabilities = detectCapabilities({ noColor: globals.color === false });
+  const palette = paletteFor({
+    color: capabilities.color,
+    unicode: capabilities.unicode,
+    width: capabilities.width,
+  });
+
+  const split = parseSplit(flags.split);
+  const projectFile = findProjectRoot(process.cwd())?.file;
+
+  let previous: ReturnType<typeof summarise> | undefined;
+  let running = false;
+  let queued = false;
+  let timer: NodeJS.Timeout | undefined;
+  let runs = 0;
+
+  const once = async (reason: string): Promise<void> => {
+    running = true;
+    runs += 1;
+    const startedAt = Date.now();
+
+    try {
+      // Config is re-read every run: watching a policy file and then using a
+      // cached copy of it would be a loop that cannot see the thing it watches.
+      cachedConfig = undefined;
+      const config = projectConfig();
+
+      const result = runBatch({
+        dir,
+        split,
+        limits: limitsFrom(config.revenue),
+        costs: costsFrom(config.revenue),
+        ...(flags.capacity
+          ? { capacity: { max_actions: flags.capacity, rule: 'given with --capacity' } }
+          : config.revenue?.capacity
+            ? { capacity: { max_actions: config.revenue.capacity, rule: 'set in sirius.yaml' } }
+            : {}),
+        ...(flags.maxSteps ?? config.revenue?.max_steps
+          ? { maxSteps: (flags.maxSteps ?? config.revenue?.max_steps) as number }
+          : {}),
+      });
+
+      const summary = summarise(result);
+
+      if (runs === 1) {
+        process.stdout.write(
+          `\n ${palette.bold('sirius revenue watch')}  ${palette.dim(
+            `${result.inSplit.length} records · split=${split} · capacity ${summary.capacity}`,
+          )}\n`,
+        );
+        process.stdout.write(
+          `    ${palette.dim(
+            `${summary.flagged} acted on · ${summary.actions} actions · ${summary.blocked} refused · ` +
+              `${palette.rupee(summary.attributable_paise)} attributable`,
+          )}\n`,
+        );
+      } else {
+        process.stdout.write(renderChanges(changes(previous as never, summary), palette, reason));
+      }
+
+      previous = summary;
+    } catch (error) {
+      // A broken config must not kill the watcher — the next save usually fixes
+      // it, and dying on a half-typed YAML line is the worst moment to exit.
+      process.stderr.write(`  ${palette.amber('run failed')}: ${error instanceof Error ? error.message : String(error)}\n`);
+    }
+
+    process.stdout.write(
+      palette.dim(`    ${Date.now() - startedAt}ms · watching ${dir}${projectFile ? ` and ${projectFile}` : ''}. Ctrl-C to stop.\n`),
+    );
+    running = false;
+
+    if (queued) {
+      queued = false;
+      await once('another change while that was running');
+    }
+  };
+
+  const trigger = (reason: string) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      if (running) queued = true;
+      else void once(reason);
+    }, flags.debounce ?? 300);
+  };
+
+  const watchers = [watch(dir, { recursive: true }, () => trigger('the batch changed'))];
+  if (projectFile) watchers.push(watch(projectFile, () => trigger(`${basenameOf(projectFile)} changed`)));
+
+  process.on('SIGINT', () => {
+    for (const watcher of watchers) watcher.close();
+    if (timer) clearTimeout(timer);
+    process.stdout.write('\nstopped.\n');
+    process.exit(0);
+  });
+
+  await once('first run');
+  await new Promise<void>(() => {});
 }
 
 // ---- sweep ------------------------------------------------------------------

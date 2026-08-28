@@ -19,6 +19,7 @@ import type { BatchContext } from '../revenue/features.js';
 import type { Model } from '../revenue/model.js';
 import type { AuditEntry } from '../revenue/audit.js';
 import type { RecoveryOutcome } from '../revenue/recover.js';
+import type { SummaryChange } from '../revenue/pipeline.js';
 import type { Delta, SweepSummary } from '../revenue/sweep.js';
 import type { Assessment, Intervention, RiskRecord } from '../revenue/types.js';
 
@@ -903,4 +904,42 @@ export function renderComparison(deltas: readonly Delta[], palette: Palette, not
   lines.push('');
 
   return lines.join('\n');
+}
+
+/**
+ * What changed between two runs of the same batch.
+ *
+ * The whole point of watching a policy file: tighten a limit and see what it
+ * bought and what it cost side by side, rather than reading two reports and
+ * holding the difference in your head. Nothing that stayed the same is printed
+ * — a diff that lists everything is a diff nobody reads.
+ */
+export function renderChanges(moved: readonly SummaryChange[], palette: Palette, reason: string): string {
+  const lines: string[] = [];
+
+  lines.push('');
+  lines.push(` ${palette.bold('changed')}  ${palette.dim(reason)}`);
+
+  if (moved.length === 0) {
+    lines.push(`    ${palette.dim('nothing moved.')}`);
+    return lines.join('\n') + '\n';
+  }
+
+  const format = (value: number, kind: SummaryChange['kind']) =>
+    kind === 'money' ? palette.rupee(value) : String(value);
+
+  for (const change of moved) {
+    const delta = change.after - change.before;
+    const improved = change.higherIsBetter ? delta > 0 : delta < 0;
+    const paint = improved ? palette.green : palette.amber;
+    const arrow = delta > 0 ? '▲' : '▼';
+    const amount = change.kind === 'money' ? palette.rupee(Math.abs(delta)) : String(Math.abs(delta));
+
+    lines.push(
+      `    ${change.name.padEnd(20)}${palette.dim(format(change.before, change.kind).padStart(13))} ` +
+        `${palette.dim('→')} ${format(change.after, change.kind).padStart(13)}   ${paint(`${arrow} ${amount}`)}`,
+    );
+  }
+
+  return lines.join('\n') + '\n';
 }

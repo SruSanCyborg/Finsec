@@ -255,6 +255,32 @@ anything is unexplained, so a nightly close can gate on it.
 
 ---
 
+## Tuning the policy
+
+```bash
+sirius revenue watch batch
+```
+
+Re-runs when the batch or `sirius.yaml` changes, and prints **only what moved**:
+
+```
+ changed  sirius.yaml changed
+    actions taken                  82 →            64   ▼ 18
+    actions refused                37 →            39   ▲ 2
+    attributable            ₹6,65,664 →     ₹6,37,094   ▼ ₹28,570
+      contact_frequency            17 →            21   ▲ 4
+```
+
+That is what tightening `contacts_per_day` from 2 to 1 costs, stated rather than
+inferred from two reports read one after the other. Refusals break out per rule,
+because "you tightened the contact limit" should read as `contact_frequency`
+rising, not as a change in an aggregate nobody can act on.
+
+It writes nothing — the audit trail stays a return value, since a loop
+re-running on every keystroke should not leave a hundred signed trails behind
+it. `recover` and `watch` share one pipeline (`revenue/pipeline.ts`) so the two
+cannot drift.
+
 ## Is it stable, and did that change help?
 
 ```bash
