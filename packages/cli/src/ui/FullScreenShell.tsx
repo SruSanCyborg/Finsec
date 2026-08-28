@@ -533,7 +533,13 @@ export function FullScreenShell({
 
       {showPalette && matches.length > 0 ? (
         <Box flexDirection="column">
-          <CommandPalette commands={matches} selected={selected} capabilities={capabilities} max={5} />
+          {/*
+            Enough rows that a command is findable by pressing `/` rather than by
+            already knowing it exists. At five, `/guard` sat eighth and never
+            appeared — the palette listed the oldest commands and hid the newest
+            behind a count.
+          */}
+          <CommandPalette commands={matches} selected={selected} capabilities={capabilities} max={10} />
         </Box>
       ) : null}
 

@@ -48,6 +48,20 @@ export interface ShellCommand {
 
 export const SHELL_COMMANDS: ShellCommand[] = [
   {
+    name: 'guard',
+    summary: 'Govern an agent that can move money — judge every action before it lands',
+    usage: '/guard [gen|eval|explain|agents|score|trail] [feed]',
+    args: [
+      { name: 'gen', summary: 'synthesise a feed of proposed actions, attacks planted in it', kind: 'subcommand' },
+      { name: 'eval', summary: 'judge the feed and stream the decisions', kind: 'subcommand' },
+      { name: 'explain', summary: 'the whole ladder for one action, stage by stage', kind: 'subcommand' },
+      { name: 'agents', summary: 'what each agent is allowed to do, and what it has done', kind: 'subcommand' },
+      { name: 'score', summary: 'how well it did against what was actually planted', kind: 'subcommand' },
+      { name: 'trail', summary: 'verify a signed decision trail', kind: 'subcommand' },
+    ],
+    keywords: ['agent', 'autonomy', 'injection', 'policy', 'block'],
+  },
+  {
     name: 'scan',
     summary: 'Scan a path and stream findings',
     usage: '/scan [path] [--json] [--sarif <file>]',
@@ -141,20 +155,6 @@ export const SHELL_COMMANDS: ShellCommand[] = [
       'churn',
       'tune',
     ],
-  },
-  {
-    name: 'guard',
-    summary: 'Govern an agent that can move money — judge every action before it lands',
-    usage: '/guard [gen|eval|explain|agents|score|trail] [feed]',
-    args: [
-      { name: 'gen', summary: 'synthesise a feed of proposed actions, attacks planted in it', kind: 'subcommand' },
-      { name: 'eval', summary: 'judge the feed and stream the decisions', kind: 'subcommand' },
-      { name: 'explain', summary: 'the whole ladder for one action, stage by stage', kind: 'subcommand' },
-      { name: 'agents', summary: 'what each agent is allowed to do, and what it has done', kind: 'subcommand' },
-      { name: 'score', summary: 'how well it did against what was actually planted', kind: 'subcommand' },
-      { name: 'trail', summary: 'verify a signed decision trail', kind: 'subcommand' },
-    ],
-    keywords: ['agent', 'autonomy', 'injection', 'policy', 'block'],
   },
   {
     name: 'reconcile',
