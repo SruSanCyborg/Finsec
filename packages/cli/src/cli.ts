@@ -39,7 +39,7 @@ export function buildProgram(): Command {
 
   program
     .name('sirius')
-    .description('A security & compliance linter for money-handling code')
+    .description('A security & compliance linter for money-handling code\n\nRun with no arguments to open an interactive shell.')
     .version(VERSION, '-v, --version')
     .option('--api-url <url>', 'Core API base URL (env: SIRIUS_API_URL)')
     .option('--ws-url <url>', 'WebSocket origin, when it differs from --api-url (env: SIRIUS_WS_URL)')
@@ -166,6 +166,14 @@ export function buildProgram(): Command {
     });
 
   program
+    .command('shell')
+    .description('Open the interactive shell (the default when run with no arguments)')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runShell } = await import('./commands/shell.js');
+      await runShell(options, command.parent?.opts() ?? {});
+    });
+
+  program
     .command('doctor')
     .description('Check config, connectivity, and terminal before you rely on them')
     .action(async (options: Record<string, unknown>, command: Command) => {
@@ -221,6 +229,14 @@ function report(error: unknown): ExitCodeValue {
 export async function main(argv: string[] = process.argv): Promise<void> {
   const program = buildProgram();
   program.exitOverride();
+
+  // Bare `sirius` in a terminal opens the shell rather than printing help.
+  // Piped or redirected, it still prints help, so scripts and `sirius | less`
+  // behave as before.
+  const hasArgs = argv.slice(2).length > 0;
+  if (!hasArgs && process.stdout.isTTY && process.stdin.isTTY) {
+    argv = [...argv, 'shell'];
+  }
 
   try {
     await program.parseAsync(argv);
