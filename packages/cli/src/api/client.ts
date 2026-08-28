@@ -18,6 +18,7 @@ import type {
   Scan,
   ScanCreate,
   Suppression,
+  TriageUpdate,
   Validity,
 } from '../domain.js';
 
@@ -141,6 +142,13 @@ export class ApiClient {
     return this.request<FixSuggestion>(
       `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}/fix`,
       { method: 'POST' },
+    );
+  }
+
+  triageFinding(scanId: string, findingId: string, update: TriageUpdate): Promise<Finding> {
+    return this.request<Finding>(
+      `/scans/${encodeURIComponent(scanId)}/findings/${encodeURIComponent(findingId)}`,
+      { method: 'PATCH', body: update },
     );
   }
 

@@ -111,6 +111,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/scans/{id}/findings/{fid}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ScanId"];
+                fid: components["parameters"]["FindingId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Triage a finding
+         * @description Record a human decision about a finding.
+         *
+         *     x-decision: D-015 — the PRD lists this endpoint as "accept/dismiss/suppress"
+         *     but never gives it a body, and the `findings` DDL has only a `suppressed`
+         *     boolean with no column for the other two states. This defines a
+         *     `triage_state` so the three verbs are distinguishable and auditable;
+         *     `suppressed` stays derived from `triage_state == "suppressed"`.
+         */
+        patch: operations["triageFinding"];
+        trace?: never;
+    };
     "/scans/{id}/findings/{fid}/validate-secret": {
         parameters: {
             query?: never;
@@ -318,6 +347,24 @@ export interface components {
          */
         FailOn: "all" | "new" | "verified-secrets";
         /**
+         * @description `open` is the default — nobody has looked at it yet.
+         *     `accepted` means a real problem, to be fixed.
+         *     `dismissed` means not a problem here (a false positive).
+         *     `suppressed` means real but deliberately not gating, and requires a reason.
+         * @enum {string}
+         */
+        TriageState: "open" | "accepted" | "dismissed" | "suppressed";
+        TriageUpdate: {
+            triage_state: components["schemas"]["TriageState"];
+            /** @description Required when moving to `dismissed` or `suppressed`. */
+            reason?: string;
+            /**
+             * Format: date-time
+             * @description Optional expiry, so a suppression gets revisited.
+             */
+            expires_at?: string | null;
+        };
+        /**
          * @description The closed vocabulary a quarantined model may choose from.
          * @enum {string}
          */
@@ -449,8 +496,12 @@ export interface components {
             validity?: components["schemas"]["Validity"];
             /** @example 4200000 */
             money_at_risk_inr?: number | null;
-            /** @default false */
+            /**
+             * @description Derived from `triage_state == "suppressed"`. Never gates.
+             * @default false
+             */
             suppressed: boolean;
+            triage_state?: components["schemas"]["TriageState"];
             fix_action?: components["schemas"]["FixAction"];
         };
         FindingPage: {
@@ -834,6 +885,35 @@ export interface operations {
             404: components["responses"]["Problem"];
             /** @description Scan not complete, or a fix already applied */
             409: components["responses"]["Problem"];
+        };
+    };
+    triageFinding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: components["parameters"]["ScanId"];
+                fid: components["parameters"]["FindingId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TriageUpdate"];
+            };
+        };
+        responses: {
+            /** @description Updated finding */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Finding"];
+                };
+            };
+            404: components["responses"]["Problem"];
+            422: components["responses"]["Problem"];
         };
     };
     validateSecret: {

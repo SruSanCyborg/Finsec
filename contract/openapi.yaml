@@ -179,6 +179,36 @@ paths:
           $ref: '#/components/responses/Problem'
           description: Scan not complete, or a fix already applied
 
+  /scans/{id}/findings/{fid}:
+    parameters:
+      - { $ref: '#/components/parameters/ScanId' }
+      - { $ref: '#/components/parameters/FindingId' }
+    patch:
+      tags: [findings]
+      operationId: triageFinding
+      summary: Triage a finding
+      description: |
+        Record a human decision about a finding.
+
+        x-decision: D-015 — the PRD lists this endpoint as "accept/dismiss/suppress"
+        but never gives it a body, and the `findings` DDL has only a `suppressed`
+        boolean with no column for the other two states. This defines a
+        `triage_state` so the three verbs are distinguishable and auditable;
+        `suppressed` stays derived from `triage_state == "suppressed"`.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TriageUpdate' }
+      responses:
+        '200':
+          description: Updated finding
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Finding' }
+        '404': { $ref: '#/components/responses/Problem' }
+        '422': { $ref: '#/components/responses/Problem' }
+
   /scans/{id}/findings/{fid}/validate-secret:
     parameters:
       - { $ref: '#/components/parameters/ScanId' }
@@ -605,6 +635,28 @@ components:
         sets the bar. The PRD's ANSI mockup conflates the two by printing
         `gate: fail-on=high`.
 
+    TriageState:
+      type: string
+      enum: [open, accepted, dismissed, suppressed]
+      description: |
+        `open` is the default — nobody has looked at it yet.
+        `accepted` means a real problem, to be fixed.
+        `dismissed` means not a problem here (a false positive).
+        `suppressed` means real but deliberately not gating, and requires a reason.
+
+    TriageUpdate:
+      type: object
+      required: [triage_state]
+      properties:
+        triage_state: { $ref: '#/components/schemas/TriageState' }
+        reason:
+          type: string
+          description: Required when moving to `dismissed` or `suppressed`.
+        expires_at:
+          type: [string, 'null']
+          format: date-time
+          description: Optional expiry, so a suppression gets revisited.
+
     FixAction:
       type: string
       description: The closed vocabulary a quarantined model may choose from.
@@ -732,7 +784,11 @@ components:
         baseline_state: { $ref: '#/components/schemas/BaselineState' }
         validity: { $ref: '#/components/schemas/Validity' }
         money_at_risk_inr: { type: [integer, 'null'], examples: [4200000] }
-        suppressed: { type: boolean, default: false }
+        suppressed:
+          type: boolean
+          default: false
+          description: Derived from `triage_state == "suppressed"`. Never gates.
+        triage_state: { $ref: '#/components/schemas/TriageState' }
         fix_action: { $ref: '#/components/schemas/FixAction' }
 
     FindingPage:

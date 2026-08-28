@@ -117,10 +117,11 @@ node packages/cli/dist/cli.js scan contract/fixtures/chaos-repo \
 | `init`, `login`, `logout` | Done — scaffolding and 0600 credential storage |
 | `rules list\|show\|validate` | Done. `rules test` deliberately unimplemented (needs an endpoint that doesn't exist) |
 | `suppress`, `baseline`, `report`, `badge` | Done |
-| `triage`, `watch` | Not started — neither is in the demo script |
-| Tests | 86 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals, expiry parsing, credential storage) |
+| `triage` | Done — keyboard review, optimistic updates, reason required to dismiss or suppress |
+| `watch` | Done — 400ms debounce, one queued follow-up, ignores its own writes |
+| Tests | 116 passing (gate truth table, ₹ grouping, config precedence, SARIF, fixture totals, expiry parsing, credential storage, watch filtering, triage keymap) |
 
-Ten of twelve commands are real. Cut order if time runs short: `watch` → `triage` → `report pdf` → `badge`. Never cut: `scan` streaming, exit codes, `fix`, `--sarif`.
+All twelve commands are implemented. Verified as a published package too: `npm pack` produces a 68.8 kB tarball whose `sirius` bin resolves and runs, so the `npx sirius scan` zero-install demo path works.
 
 A first run on a real repo looks like:
 

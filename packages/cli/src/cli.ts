@@ -165,24 +165,30 @@ export function buildProgram(): Command {
       await runBadge(options, command.parent?.opts() ?? {});
     });
 
-  // Commands below are scaffolded but not yet implemented. They exist so that
-  // `sirius --help` shows the real surface and so nobody re-litigates the tree.
-  const planned: Array<[string, string]> = [
-    ['triage', 'Review findings interactively'],
-    ['watch', 'Re-scan on file change'],
-  ];
+  program
+    .command('triage')
+    .description('Review findings interactively (j/k move, a/d/s decide, / filter)')
+    .option('--scan <id>', 'scan to review (defaults to the last one)')
+    .option('--severity <level>', 'only review findings at this severity')
+    .option('--all', 'include findings already suppressed')
+    .action(async (options: Record<string, unknown>, command: Command) => {
+      const { runTriage } = await import('./commands/triage.js');
+      await runTriage(options, command.parent?.opts() ?? {});
+    });
 
-  for (const [name, description] of planned) {
-    program
-      .command(name, { hidden: false })
-      .description(`${description} (not yet implemented)`)
-      .allowUnknownOption()
-      .action(() => {
-        throw new CliError(`\`sirius ${name}\` is not implemented yet.`, {
-          hint: 'Implemented: scan, fix, init, login, logout, rules, suppress, baseline, report, badge.',
-        });
-      });
-  }
+  program
+    .command('watch')
+    .description('Re-scan on file change')
+    .argument('[path]', 'path to watch', '.')
+    .option('--debounce <ms>', 'quiet period after a change', (v) => Number.parseInt(v, 10))
+    .option('--severity-threshold <level>', 'minimum severity that counts', severityArg)
+    .option('--fail-on <predicate>', 'which findings block: all | new | verified-secrets', failOnArg)
+    .option('--ruleset <name>', 'ruleset to run (repeatable)', collect)
+    .option('--replay <fixture>', 'replay a recorded timeline instead of calling the API')
+    .action(async (path: string, options: Record<string, unknown>, command: Command) => {
+      const { runWatch } = await import('./commands/watch.js');
+      await runWatch(path, options, command.parent?.opts() ?? {});
+    });
 
   return program;
 }

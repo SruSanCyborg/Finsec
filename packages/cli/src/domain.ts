@@ -21,6 +21,8 @@ export type Validity = S['Validity'];
 export type VerifierStatus = S['VerifierStatus'];
 export type FailOn = S['FailOn'];
 export type FixAction = S['FixAction'];
+export type TriageState = S['TriageState'];
+export type TriageUpdate = S['TriageUpdate'];
 
 export type Scan = S['Scan'];
 export type ScanCreate = S['ScanCreate'];
