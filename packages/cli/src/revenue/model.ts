@@ -25,6 +25,7 @@ import { estimatedCost, DEFAULT_COSTS } from './cost.js';
 import type { CostModel } from './cost.js';
 import { analyzeBatch, featuresOf } from './features.js';
 import type { BatchContext } from './features.js';
+import { chooseL2, fitLogistic } from './logistic.js';
 import { splitOf } from './synth.js';
 import type { Assessment, Evidence, GroundTruth, RecordKind, RiskRecord } from './types.js';
 
@@ -122,6 +123,8 @@ export interface Model {
    */
   threshold: number;
   threshold_rule: string;
+  /** How the weights were fitted, for anyone asking what model this is. */
+  fit_rule?: string;
   /** How the records that get worked are chosen from the ones above the floor. */
   selection_rule: string;
   capacity: Capacity;
@@ -197,21 +200,48 @@ export function fitModel(
     if (rows.length >= 12) share[key] = meanShare(rows);
   }
 
-  const weights: Record<string, FeatureWeight> = {};
+  // The weights are fitted jointly, not counted per feature.
+  //
+  // This was Naive Bayes: each feature's weight was P(f|uplift)/P(f|not),
+  // estimated independently. `rail` and `failure_code` are strongly correlated,
+  // so that counted one fact twice — and once the interactions were named
+  // explicitly it counted the same fact three times, which is the opposite of
+  // what naming them was for. Logistic regression learns one set of
+  // coefficients over the whole feature space, so a correlated pair shares the
+  // weight instead of each claiming all of it.
+  //
+  // Nothing downstream changes. A coefficient is a contribution to the
+  // log-odds, exactly as log(likelihood ratio) was, so `exp(coefficient)` goes
+  // into the same `lr` field, `scoreRecord` sums the same logs, and the
+  // evidence ladder still reads "×2.4".
+  const rows = training
+    .map((record) => ({ record, label: truth.get(record.id) }))
+    .filter((row): row is { record: RiskRecord; label: GroundTruth } => Boolean(row.label))
+    .map((row) => ({ features: featuresOf(row.record, context), label: isUplift(row.label) }));
 
-  for (const feature of new Set([...positiveCounts.keys(), ...negativeCounts.keys()])) {
+  const l2 = chooseL2(rows);
+  const fit = fitLogistic(rows, { l2 });
+
+  const weights: Record<string, FeatureWeight> = {};
+  for (const [feature, coefficient] of fit.coefficients) {
     const withUplift = positiveCounts.get(feature) ?? 0;
     const without = negativeCounts.get(feature) ?? 0;
-    const pGiven = (withUplift + 1) / (positives + 2);
-    const pNot = (without + 1) / (negatives + 2);
     weights[feature] = {
-      lr: round(pGiven / pNot, 4),
+      // Bounded before exponentiating: a coefficient of 40 is a feature seen
+      // twice, and `Infinity` in the ladder is not evidence.
+      lr: round(Math.exp(Math.min(Math.max(coefficient, -8), 8)), 4),
       support: withUplift + without,
     };
   }
 
-  const baseRate = positives / Math.max(1, training.length);
+  // The intercept is the answer with no features, which is what `base_rate`
+  // means to `scoreRecord` — it turns it straight back into log-odds.
+  const baseRate = 1 / (1 + Math.exp(-fit.intercept));
   const limit = capacity ?? defaultCapacity(training.length);
+  const fitNote =
+    `logistic regression, L2 ${l2} chosen on a fold of the training half · ` +
+    `${fit.iterations} iterations${fit.converged ? '' : ' (iteration cap)'} · ` +
+    `train log-loss ${fit.log_loss.toFixed(4)}`;
 
   const uncalibrated: Model = {
     schema: 'sirius.revenue.model/v1',
@@ -228,7 +258,7 @@ export function fitModel(
     train_expected_value_paise: 0,
   };
 
-  const calibration = fitCalibration(uncalibrated, training, truth, context);
+  const calibration = refitCalibration(uncalibrated, training, truth, context);
 
   const draft: Model = {
     schema: 'sirius.revenue.model/v1',
@@ -248,6 +278,7 @@ export function fitModel(
   const chosen = chooseFloor(draft, training, truth, context, costs);
   return {
     ...draft,
+    fit_rule: fitNote,
     threshold: chosen.floor,
     threshold_rule:
       'the lowest score at which acting still paid for itself on the training split, ' +
@@ -266,7 +297,7 @@ export function fitModel(
  * batch produces the same model on any machine — which is the property that
  * makes a reported metric checkable rather than anecdotal.
  */
-function fitCalibration(
+export function refitCalibration(
   model: Model,
   training: readonly RiskRecord[],
   truth: ReadonlyMap<string, GroundTruth>,
@@ -279,6 +310,37 @@ function fitCalibration(
 
   if (rows.length < 30) return { slope: 1, intercept: 0 };
 
+  const identity: Calibration = { slope: 1, intercept: 0 };
+
+  // Kept only if it helps, measured on rows it was not fitted to.
+  //
+  // Platt scaling was a clear win over Naive Bayes, which double-counts
+  // correlated evidence and is reliably over-confident — the slope came out
+  // below 1 and the fit pulled it back. A regularised logistic fit is close to
+  // calibrated already, and squeezing a second sigmoid onto it made expected
+  // calibration error *worse* on held-out records: 8.9% against 6.6% raw. A
+  // calibration step that decalibrates is worth nothing, and shipping it
+  // because it is called calibration is how a report earns the word without
+  // the property.
+  //
+  // The comparison has to be on rows outside the fit. Scoring both on a fifth
+  // that was itself part of the fit picks the fitted curve every time — it was
+  // trained to fit those rows — which is the first way this was written and it
+  // changed nothing at all.
+  const fold = rows.filter((_, index) => index % 5 !== 0);
+  const check = rows.filter((_, index) => index % 5 === 0);
+  if (check.length < 20) return plattOn(rows);
+
+  const candidate = plattOn(fold);
+  if (calibrationErrorOn(check, candidate) > calibrationErrorOn(check, identity)) return identity;
+
+  // It helps, so refit on everything — the fold existed to make the choice, not
+  // to be the model.
+  return plattOn(rows);
+}
+
+/** Two-parameter Platt scaling of a log-odds score, by gradient descent. */
+function plattOn(rows: readonly { y: number; x: number }[]): Calibration {
   let slope = 1;
   let intercept = 0;
   const rate = 0.05;
@@ -297,6 +359,29 @@ function fitCalibration(
   }
 
   return { slope: round(slope, 4), intercept: round(intercept, 4) };
+}
+
+/** Expected calibration error: the gap between confidence and reality. */
+function calibrationErrorOn(
+  rows: readonly { y: number; x: number }[],
+  calibration: Calibration,
+): number {
+  const bins = new Map<number, { sum: number; hits: number; n: number }>();
+  for (const row of rows) {
+    const p = 1 / (1 + Math.exp(-(calibration.slope * row.x + calibration.intercept)));
+    const bin = Math.min(4, Math.floor(p * 5));
+    const cell = bins.get(bin) ?? { sum: 0, hits: 0, n: 0 };
+    cell.sum += p;
+    cell.hits += row.y;
+    cell.n += 1;
+    bins.set(bin, cell);
+  }
+
+  let error = 0;
+  for (const cell of bins.values()) {
+    error += (cell.n / rows.length) * Math.abs(cell.hits / cell.n - cell.sum / cell.n);
+  }
+  return error;
 }
 
 /** The raw scorecard total, before calibration. */

@@ -1,15 +1,15 @@
 {
-  "generated_at": "2026-08-26T14:40:12.656Z",
+  "generated_at": "2026-08-26T14:57:54.581Z",
   "seeds": {
     "batch": "sirius-2026",
     "books": "sirius-books"
   },
-  "tests": 602,
+  "tests": 603,
   "batch": {
     "records": 333,
     "capacity": 67,
     "capacity_rule": "20% of the batch — a stand-in for one cycle of operational headroom",
-    "floor": 9,
+    "floor": 16,
     "degradations": 1,
     "rings": 1,
     "ring_parties": 12,
@@ -20,85 +20,74 @@
     "records": 333,
     "trained_on": 710,
     "matrix": {
-      "true_positive": 31,
-      "false_positive": 36,
-      "true_negative": 177,
-      "false_negative": 89
+      "true_positive": 28,
+      "false_positive": 39,
+      "true_negative": 174,
+      "false_negative": 92
     },
-    "precision": "46.3%",
-    "recall": "25.8%",
-    "money_precision": "34.3%",
-    "money_recall": "78.4%",
-    "calibration_error": "2.5%",
+    "precision": "41.8%",
+    "recall": "23.3%",
+    "money_precision": "32.9%",
+    "money_recall": "76.7%",
+    "calibration_error": "2.2%",
     "calibration_warning": null,
     "calibration": [
       {
         "from": 0,
         "to": 20,
-        "count": 75,
-        "predicted": 0.0837,
-        "actual": 0.12,
+        "count": 47,
+        "predicted": 0.0826,
+        "actual": 0.0638,
         "enough": true,
-        "predicted_text": "8.4%",
-        "actual_text": "12.0%",
-        "gap_text": "+3.6pp"
+        "predicted_text": "8.3%",
+        "actual_text": "6.4%",
+        "gap_text": "-1.9pp"
       },
       {
         "from": 20,
         "to": 40,
-        "count": 94,
-        "predicted": 0.3038,
-        "actual": 0.3085,
+        "count": 145,
+        "predicted": 0.3091,
+        "actual": 0.3034,
         "enough": true,
-        "predicted_text": "30.4%",
-        "actual_text": "30.9%",
-        "gap_text": "+0.5pp"
+        "predicted_text": "30.9%",
+        "actual_text": "30.3%",
+        "gap_text": "-0.6pp"
       },
       {
         "from": 40,
         "to": 60,
-        "count": 135,
-        "predicted": 0.4803,
-        "actual": 0.4889,
+        "count": 129,
+        "predicted": 0.4647,
+        "actual": 0.5039,
         "enough": true,
-        "predicted_text": "48.0%",
-        "actual_text": "48.9%",
-        "gap_text": "+0.9pp"
+        "predicted_text": "46.5%",
+        "actual_text": "50.4%",
+        "gap_text": "+3.9pp"
       },
       {
         "from": 60,
         "to": 80,
-        "count": 27,
-        "predicted": 0.6826,
-        "actual": 0.5556,
-        "enough": true,
-        "predicted_text": "68.3%",
-        "actual_text": "55.6%",
-        "gap_text": "-12.7pp"
-      },
-      {
-        "from": 80,
-        "to": 100,
-        "count": 2,
-        "predicted": 0.85,
-        "actual": 0.5,
+        "count": 12,
+        "predicted": 0.6325,
+        "actual": 0.6667,
         "enough": false,
-        "predicted_text": "85.0%",
-        "actual_text": "50.0%",
-        "gap_text": "-35.0pp"
+        "predicted_text": "63.2%",
+        "actual_text": "66.7%",
+        "gap_text": "+3.4pp"
       }
     ],
     "forbidden": {
       "in_population": 24,
       "touched": 0
     },
-    "share_of_ceiling": "83%",
+    "share_of_ceiling": "82%",
     "cost": {
-      "recovered": "₹7,67,629",
-      "false_positive_bill": "₹63",
+      "recovered": "₹7,51,197",
+      "false_positive_bill": "₹66",
       "annoyance": "₹96",
-      "net": "₹7,67,417",
-      "forgone": "₹2,11,232"
+      "net": "₹7,50,992",
+      "forgone": "₹2,27,663"
     },
     "baselines": [
       {
@@ -158,7 +147,7 @@
       }
     ],
     "detector": {
-      "net": "₹7,67,417",
+      "net": "₹7,50,992",
       "flagged": 67,
       "harmful_touches": 0
     }
@@ -167,85 +156,85 @@
     "seeds": 8,
     "wins": 7,
     "mean": {
-      "precision": "47.2%",
-      "recall": "24.6%",
-      "money_recall": "83.5%",
-      "edge": "+1.1%",
+      "precision": "47.0%",
+      "recall": "24.5%",
+      "money_recall": "83.8%",
+      "edge": "+1.5%",
       "share_of_ceiling": "88%",
-      "calibration_error": "7.7%"
+      "calibration_error": "6.2%"
     },
     "forbidden_touched": 0,
     "heuristic_forbidden_touched": 26,
     "rows": [
       {
         "seed": "sirius-sweep-1",
-        "precision": "42.6%",
-        "recall": "23.0%",
-        "money_recall": "85.0%",
-        "edge": "+2.6%",
+        "precision": "45.6%",
+        "recall": "24.6%",
+        "money_recall": "85.5%",
+        "edge": "+3.3%",
         "ceiling": "89%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-2",
-        "precision": "44.1%",
-        "recall": "25.0%",
-        "money_recall": "86.4%",
-        "edge": "+2.6%",
-        "ceiling": "90%",
+        "precision": "41.2%",
+        "recall": "23.3%",
+        "money_recall": "84.6%",
+        "edge": "+0.4%",
+        "ceiling": "88%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-3",
-        "precision": "46.3%",
-        "recall": "25.0%",
-        "money_recall": "87.9%",
-        "edge": "-0.5%",
-        "ceiling": "91%",
+        "precision": "47.8%",
+        "recall": "25.8%",
+        "money_recall": "88.6%",
+        "edge": "+0.2%",
+        "ceiling": "92%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-4",
         "precision": "46.3%",
         "recall": "22.6%",
-        "money_recall": "77.7%",
-        "edge": "+2.3%",
-        "ceiling": "84%",
+        "money_recall": "78.1%",
+        "edge": "+2.9%",
+        "ceiling": "85%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-5",
         "precision": "51.5%",
         "recall": "24.3%",
-        "money_recall": "79.6%",
-        "edge": "+0.2%",
-        "ceiling": "86%",
+        "money_recall": "80.2%",
+        "edge": "+1.0%",
+        "ceiling": "87%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-6",
-        "precision": "46.3%",
-        "recall": "25.6%",
-        "money_recall": "82.1%",
-        "edge": "+0.8%",
-        "ceiling": "86%",
+        "precision": "47.8%",
+        "recall": "26.5%",
+        "money_recall": "83.8%",
+        "edge": "+2.8%",
+        "ceiling": "88%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-7",
-        "precision": "51.5%",
-        "recall": "26.5%",
-        "money_recall": "84.7%",
-        "edge": "+0.9%",
-        "ceiling": "89%",
+        "precision": "48.5%",
+        "recall": "25.0%",
+        "money_recall": "85.6%",
+        "edge": "+2.1%",
+        "ceiling": "90%",
         "forbidden_touched": 0
       },
       {
         "seed": "sirius-sweep-8",
-        "precision": "49.3%",
-        "recall": "24.8%",
-        "money_recall": "84.8%",
-        "edge": "+0.0%",
+        "precision": "47.8%",
+        "recall": "24.1%",
+        "money_recall": "84.1%",
+        "edge": "-0.8%",
         "ceiling": "89%",
         "forbidden_touched": 0
       }
@@ -255,39 +244,39 @@
     {
       "share": 0.03,
       "label": "capacity 3%",
-      "edge": 0.204,
-      "edge_text": "+20.4%",
-      "ceiling": 0.7221,
-      "ceiling_text": "72%",
+      "edge": 0.2292,
+      "edge_text": "+22.9%",
+      "ceiling": 0.7404,
+      "ceiling_text": "74%",
       "forbidden_touched": 0,
       "heuristic_forbidden_touched": 0
     },
     {
       "share": 0.05,
       "label": "capacity 5%",
-      "edge": 0.077,
-      "edge_text": "+7.7%",
-      "ceiling": 0.7792,
-      "ceiling_text": "78%",
+      "edge": 0.1024,
+      "edge_text": "+10.2%",
+      "ceiling": 0.7981,
+      "ceiling_text": "80%",
       "forbidden_touched": 0,
       "heuristic_forbidden_touched": 0
     },
     {
       "share": 0.1,
       "label": "capacity 10%",
-      "edge": 0.0321,
-      "edge_text": "+3.2%",
-      "ceiling": 0.8636,
-      "ceiling_text": "86%",
+      "edge": 0.0215,
+      "edge_text": "+2.1%",
+      "ceiling": 0.8549,
+      "ceiling_text": "85%",
       "forbidden_touched": 0,
       "heuristic_forbidden_touched": 5
     },
     {
       "share": 0.2,
       "label": "capacity 20%",
-      "edge": 0.0112,
-      "edge_text": "+1.1%",
-      "ceiling": 0.8812,
+      "edge": 0.0148,
+      "edge_text": "+1.5%",
+      "ceiling": 0.8843,
       "ceiling_text": "88%",
       "forbidden_touched": 0,
       "heuristic_forbidden_touched": 26
@@ -295,10 +284,10 @@
     {
       "share": 0.4,
       "label": "capacity 40%",
-      "edge": 0.0085,
-      "edge_text": "+0.9%",
-      "ceiling": 0.9245,
-      "ceiling_text": "92%",
+      "edge": 0.0119,
+      "edge_text": "+1.2%",
+      "ceiling": 0.9276,
+      "ceiling_text": "93%",
       "forbidden_touched": 0,
       "heuristic_forbidden_touched": 60
     }
@@ -306,33 +295,33 @@
   "recover": {
     "considered": 333,
     "worked": 62,
-    "actions": 82,
-    "blocked": 37,
-    "escalations": 43,
-    "entries": 385,
+    "actions": 83,
+    "blocked": 38,
+    "escalations": 46,
+    "entries": 387,
     "trail_mode": "simulated",
     "at_risk": "₹29,43,248",
-    "recovered": "₹8,87,331",
-    "anyway": "₹2,21,666",
-    "attributable": "₹6,65,664",
-    "spent": "₹852",
-    "net": "₹6,64,812",
+    "recovered": "₹8,75,765",
+    "anyway": "₹2,21,253",
+    "attributable": "₹6,54,512",
+    "spent": "₹847",
+    "net": "₹6,53,664",
     "counterfactual": "₹3,37,599",
     "blocked_by": [
       {
         "rule": "contact_frequency",
-        "count": 17
+        "count": 18
       },
       {
         "rule": "consent",
-        "count": 8
-      },
-      {
-        "rule": "cooldown",
-        "count": 5
+        "count": 9
       },
       {
         "rule": "quiet_hours",
+        "count": 4
+      },
+      {
+        "rule": "cooldown",
         "count": 4
       },
       {

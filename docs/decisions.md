@@ -833,3 +833,70 @@ reverse is not asserted: the replay describes a sixteen-file fictional
 repository and need not exhaust the catalogue.
 
 ---
+## D-029 — Logistic regression, because naming interactions broke naive Bayes
+
+The detector was naive Bayes on odds: a prior, one likelihood ratio per feature,
+contributions summed as though the features were independent. They are not.
+`rail` and `failure_code` are strongly correlated — a NACH mandate fails for
+different reasons than a card does — so the same fact was counted twice.
+
+**Amount was not a feature at all.** Ten categorical features, none of them the
+amount, so the predicted probability was independent of how much the record was
+for. Expected value is probability × amount × share, so ranking by expected
+value collapsed toward ranking by amount, and the model agreed with the
+spreadsheet heuristic because nothing in it could disagree.
+
+**Naming the interactions made naive Bayes worse, not better.** Adding
+`failure×rail` alongside `failure` and `rail` makes it count one correlated fact
+three times. That is what forced the estimator change rather than a preference
+for a fashionable model: logistic regression learns one joint set of
+coefficients, so a correlated pair shares the weight instead of each claiming
+all of it.
+
+**Nothing downstream changed.** A coefficient is a contribution to the log-odds,
+exactly as log(likelihood ratio) was, so `exp(coefficient)` goes into the same
+`lr` field, `scoreRecord` sums the same logs, and the evidence ladder still
+reads `failure=psp_degraded ×4.2`. The model stayed as legible as it was.
+
+**The first logistic version was worse than what it replaced** — +10.1% at 3%
+capacity against naive Bayes's +24.5% — and the diagnosis was three separate
+mistakes, all of them visible in the fitted model rather than guessed at:
+
+- L2 was chosen against a single held-in fifth. A few dozen rows scoring six
+  candidates picks whichever one that fifth happened to like; it landed on 0.1,
+  the second-heaviest shrinkage in the grid, and flattened the strongest weight
+  in the model to ×1.19 — flat enough that expected value collapsed onto amount
+  again. Four folds fixed it.
+- Plain gradient descent is the wrong optimiser for one-hot features whose
+  frequencies differ by two orders of magnitude. AdaGrad gives each feature its
+  own effective step.
+- It stopped on a loss delta, which a small step satisfies whether or not the
+  fit is anywhere near the optimum. It reported "converged" at 301 iterations.
+  Stopping on the gradient norm fixed it, and then large batches turned out to
+  need six thousand iterations rather than two.
+
+**Calibration is now kept only when it helps.** Platt scaling was a clear win
+over naive Bayes, which is reliably overconfident. A regularised logistic fit
+arrives close to calibrated, and a second sigmoid on top made held-out
+calibration error *worse*: 8.9% against 6.6%. The fitted curve is scored against
+the identity on rows outside the calibration fit, and the identity wins when
+Platt has not earned its place.
+
+The first version of that check scored both on a fifth of the rows the curve had
+been fitted to, which picks the fitted curve every time and changed nothing at
+all. A validation fold that was part of the fit is not a validation fold.
+
+**The honest ledger.** Better at four capacities of five (+22.9% vs +20.4% at
+3%, +10.2% vs +7.7% at 5%, +1.5% vs +1.1% at 20%, +1.2% vs +0.9% at 40%), better
+calibrated across seeds (6.2% vs 7.7%), worse at 10% capacity (+2.1% vs +3.2%),
+and worse on the single headline batch — ₹16,425 of net and four points of
+precision. The sweep is the measurement and the batch is the anecdote (D-026),
+so this ships; the anecdote is printed beside it rather than dropped.
+
+One temptation refused: an earlier, *unconverged* fit scored higher on the sweep
+than the converged one (+27.0% against +22.9% at 3% capacity) — early stopping
+acting as extra regularisation. Keeping it would have been choosing a training
+hyperparameter by its score on the held-out metric, which is the thing this
+whole surface exists to not do.
+
+---

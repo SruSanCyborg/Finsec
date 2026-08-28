@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_COSTS } from '../src/revenue/cost.js';
 import { capacityCurve, evaluate, CALIBRATION_MIN_BIN } from '../src/revenue/evaluate.js';
 import { analyzeBatch } from '../src/revenue/features.js';
-import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift, shareFor } from '../src/revenue/model.js';
+import { assessBatch, defaultCapacity, fitModel, isHeld, isUplift, refitCalibration, shareFor } from '../src/revenue/model.js';
 import { Rng } from '../src/revenue/random.js';
 import { generateBatch, splitOf } from '../src/revenue/synth.js';
 
@@ -115,13 +115,40 @@ describe('the model', () => {
     expect(model.weights['degraded=true']?.lr).toBeGreaterThan(1);
   });
 
-  it('shrinks its own overconfidence rather than reporting it raw', () => {
+  it('declines a calibration that would not help', () => {
+    // This asserted `slope < 1`, which was a fact about Naive Bayes rather than
+    // a property of the model: NB double-counts correlated evidence, comes out
+    // over-confident, and Platt scaling pulls it back. A regularised logistic
+    // fit arrives close to calibrated, and squeezing a second sigmoid onto it
+    // made held-out calibration error worse — 8.9% against 6.6%. The model now
+    // scores both on rows outside the calibration fit and keeps the identity
+    // when the fitted curve does not earn its place.
     const generated = batch();
     const model = fitModel(generated.records, generated.truth);
-    // Naive Bayes double-counts correlated evidence; a slope below 1 is the
-    // calibration telling it to calm down.
     expect(model.calibration.slope).toBeGreaterThan(0);
-    expect(model.calibration.slope).toBeLessThan(1);
+  });
+
+  it('still corrects a model that is genuinely overconfident', () => {
+    // The mechanism has to work when it is needed, or "we declined it" is just
+    // a way of never calibrating. Tripling every weight makes the scorecard
+    // wildly over-confident; the fit should pull it back below 1.
+    const generated = batch();
+    const model = fitModel(generated.records, generated.truth);
+    const context = analyzeBatch(generated.records);
+
+    const inflated = {
+      ...model,
+      calibration: { slope: 1, intercept: 0 },
+      weights: Object.fromEntries(
+        Object.entries(model.weights).map(([name, weight]) => [
+          name,
+          { ...weight, lr: Math.exp(Math.log(weight.lr) * 3) },
+        ]),
+      ),
+    };
+
+    const refitted = refitCalibration(inflated, generated.records, generated.truth, context);
+    expect(refitted.slope).toBeLessThan(1);
   });
 
   it('is calibrated better than it would be raw', () => {
@@ -410,11 +437,20 @@ describe('calibration reporting', () => {
   it('marks a bin with too few records as saying nothing', () => {
     // The top of a scorecard is always sparse. One record that came back reads
     // as "said 88%, was 100%", which is noise wearing a finding's clothes.
-    const evaluation = evaluateSized(700, 200, 120);
-    for (const bin of evaluation.calibration) {
+    // Two batches, because the two halves of this are different claims. On a
+    // large batch every bin should be *marked* correctly; a sparse bin only
+    // exists when there are few enough records to make one, and a better model
+    // that spreads its scores across all five bins should not fail a test about
+    // labelling.
+    for (const bin of evaluateSized(700, 200, 120).calibration) {
       expect(bin.enough).toBe(bin.count >= CALIBRATION_MIN_BIN);
     }
-    expect(evaluation.calibration.some((bin) => !bin.enough)).toBe(true);
+
+    const thin = evaluateSized(200, 55, 35);
+    for (const bin of thin.calibration) {
+      expect(bin.enough).toBe(bin.count >= CALIBRATION_MIN_BIN);
+    }
+    expect(thin.calibration.some((bin) => !bin.enough)).toBe(true);
   });
 
   it('still trusts the bins that do have support', () => {

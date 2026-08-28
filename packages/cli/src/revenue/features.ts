@@ -195,30 +195,79 @@ function findRings(records: readonly RiskRecord[]): Ring[] {
 export function featuresOf(record: RiskRecord, context: BatchContext): string[] {
   const features: string[] = [`kind=${record.kind}`];
 
+  // Amount, which was missing entirely.
+  //
+  // Whether a record comes back depends on how much it is for — a ₹200 failure
+  // and a ₹2,00,000 failure are not the same event, and small invoices settle
+  // at a different rate from large ones. Leaving it out made the predicted
+  // probability independent of the amount, and since expected value is
+  // probability × amount × share, ranking by expected value collapsed toward
+  // ranking by amount. The model agreed with "sort by size" because nothing in
+  // it could disagree.
+  features.push(`amount=${bucketAmount(record.amount_paise)}`);
+
   if (record.kind === 'payment') {
     features.push(`failure=${record.failure_code}`);
     features.push(`rail=${record.rail}`);
     features.push(`attempts=${bucketAttempts(record.attempts)}`);
     features.push(`degraded=${context.degraded.has(record.id)}`);
+
+    // Interactions, stated rather than assumed.
+    //
+    // Naive Bayes multiplies likelihood ratios as though features were
+    // independent, and these plainly are not: insufficient funds on a NACH
+    // mandate is a different prospect from the same code on a card, and a
+    // failure inside a gateway degradation is a different prospect from the
+    // same failure outside one. Left implicit, the correlation is double
+    // counted; named, each pair gets a weight measured from the labels.
+    features.push(`failure×rail=${record.failure_code}|${record.rail}`);
+    features.push(`failure×degraded=${record.failure_code}|${context.degraded.has(record.id)}`);
+    features.push(`failure×attempts=${record.failure_code}|${bucketAttempts(record.attempts)}`);
   }
 
   if (record.kind === 'checkout') {
     features.push(`stage=${record.drop_off_stage}`);
+    features.push(`stage×amount=${record.drop_off_stage}|${bucketAmount(record.amount_paise)}`);
   }
 
   if (record.kind === 'invoice') {
-    features.push(`overdue=${bucketOverdue(record.days_overdue ?? 0)}`);
-    features.push(`broken_promises=${Math.min(record.broken_promises ?? 0, 2)}`);
+    const overdue = bucketOverdue(record.days_overdue ?? 0);
+    const broken = Math.min(record.broken_promises ?? 0, 2);
+    features.push(`overdue=${overdue}`);
+    features.push(`broken_promises=${broken}`);
     features.push(`has_ptp=${Boolean(record.promise_to_pay_at)}`);
+    // A promise already broken twice means something different at 90 days than
+    // at 10, and ageing is the single strongest signal receivables have.
+    features.push(`overdue×broken=${overdue}|${broken}`);
   }
 
-  features.push(`tenure=${bucketTenure(record.party.tenure_days)}`);
-  features.push(`history=${bucketHistory(record.party.successful_payments)}`);
+  const tenure = bucketTenure(record.party.tenure_days);
+  const history = bucketHistory(record.party.successful_payments);
+  features.push(`tenure=${tenure}`);
+  features.push(`history=${history}`);
+  // A long-tenured customer with a thin payment history is a different risk
+  // from a new one with the same thin history.
+  features.push(`tenure×history=${tenure}|${history}`);
   features.push(`ring=${context.ringMembers.has(record.id)}`);
   features.push(`dispute=${Boolean(record.in_dispute)}`);
 
   return features;
 }
+
+/**
+ * Amount buckets, on a log scale because the amounts are log-normal.
+ *
+ * Linear buckets would put almost every record in the first one and leave the
+ * tail — which is where the money is — in a bucket of four.
+ */
+const bucketAmount = (paise: number): string => {
+  const rupees = paise / 100;
+  if (rupees < 500) return '<500';
+  if (rupees < 2_000) return '500-2k';
+  if (rupees < 10_000) return '2k-10k';
+  if (rupees < 50_000) return '10k-50k';
+  return '50k+';
+};
 
 const bucketAttempts = (n: number): string => (n <= 1 ? '1' : n === 2 ? '2' : '3+');
 

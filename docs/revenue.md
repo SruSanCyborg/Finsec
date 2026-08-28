@@ -49,11 +49,28 @@ with fewer than 20 records gets no verdict at all: the top of a scorecard is
 always sparse, and one record that happened to come back reads as "said 88%, was
 100%", which is noise wearing a finding's clothes.
 
-**The model is naive Bayes on odds** — a prior and one likelihood ratio per
-feature — because every step prints as a sentence somebody can disagree with:
-`failure=psp_degraded ×4.2`. It is overconfident, as naive Bayes is, so a
-two-parameter Platt shrink is fitted on train. The calibration table reports the
-residual gap rather than waiting to be caught.
+**The model is L2-regularised logistic regression**, fitted by AdaGrad on the
+training half, with the penalty chosen by four-fold cross-validation *inside*
+that half. Every step still prints as a sentence somebody can disagree with —
+a coefficient is a contribution to the log-odds, so `exp(coefficient)` reads
+exactly as the old likelihood ratio did: `failure=psp_degraded ×4.2`.
+
+It was naive Bayes on odds, and the reason it changed is worth stating. Naive
+Bayes multiplies one likelihood ratio per feature as though the features were
+independent, and `rail` and `failure_code` plainly are not — a NACH mandate
+fails for different reasons than a card. That counted one fact twice. Naming the
+interactions explicitly made it worse rather than better, because naive Bayes
+then counted `failure`, `rail`, *and* the pair. Logistic regression learns one
+joint set of coefficients, so a correlated pair shares the weight.
+
+**Calibration is kept only when it helps.** Naive Bayes is reliably
+overconfident and a two-parameter Platt shrink was a clear win over it. A
+regularised logistic fit arrives close to calibrated, and squeezing a second
+sigmoid onto it made held-out calibration error *worse* — 8.9% against 6.6%. The
+fit is now scored against the identity on rows it was not fitted to, and the
+identity wins when Platt has not earned its place. A calibration step that
+decalibrates is worth nothing, and shipping one because it is called calibration
+is how a report earns the word without the property.
 
 **Records are chosen by expected value under a capacity cap**, not by score.
 Ranking by probability alone lost to sorting by amount in a spreadsheet, which
@@ -63,22 +80,72 @@ re-presentments, TRAI caps contact, and analysts are finite.
 
 ### The honest result
 
-On money, across eight seeds, expected-value ranking runs close to **level**
-with sorting by amount: +0.6% at 20% capacity, +5.2% when capacity is tight at
-3%, winning on five seeds of eight. When amounts span a hundredfold and
-probabilities span threefold, size is already most of the answer, and the report
-says so instead of claiming a lift the data will not support. The tighter the
-capacity, the more the choice matters — and capacity is always tight.
+On money, across eight seeds, expected-value ranking beats sorting by amount by
+**+1.5% at 20% capacity and +22.9% when capacity is tight at 3%**, winning on
+seven seeds of eight. When amounts span a hundredfold and probabilities span
+threefold, size is already most of the answer with room to spare — and the
+tighter capacity gets, the more the choice matters. Capacity is always tight.
 
-Where the policies actually differ is **what gets touched**:
+**The edge is a function of capacity, so it is reported as one:**
+
+| capacity | edge over the best runnable heuristic | share of the ceiling |
+|---|---|---|
+| 3% | +22.9% | 74% |
+| 5% | +10.2% | 80% |
+| 10% | +2.1% | 85% |
+| 20% | +1.5% | 88% |
+| 40% | +1.2% | 93% |
+
+A single number invites "so your model is worth one percent". At the capacity it
+happened to be measured at, yes. `sirius revenue eval` prints this curve, and on
+any *one* batch several of these points are frequently zero — at tight capacity
+the highest expected value and the largest amount are often the same records.
+That is why the table above is eight seeds and not one.
+
+**What replacing naive Bayes actually bought, and what it cost.** Both are
+measured, and the losses are not omitted:
+
+| | naive Bayes | logistic |
+|---|---|---|
+| edge, 8 seeds | +1.1% | **+1.5%** |
+| edge at 3% capacity | +20.4% | **+22.9%** |
+| edge at 5% capacity | +7.7% | **+10.2%** |
+| edge at 10% capacity | **+3.2%** | +2.1% |
+| calibration error, 8 seeds | 7.7% | **6.2%** |
+| precision, 8 seeds | **47.2%** | 47.0% |
+| precision, headline batch | **46.3%** | 41.8% |
+| net, headline batch | **₹7,67,417** | ₹7,50,992 |
+
+It is better at four capacities of five and better calibrated, and it is worse
+at 10% capacity and worse on the single headline batch — ₹16,425 of net and four
+points of precision. By this surface's own rule that one batch is an anecdote
+and the sweep is the measurement (D-026), that is a net win; the anecdote going
+the other way is printed here rather than dropped.
+
+Where the policies differ most is not money at all — it is **what gets
+touched**:
 
 ```
- chase everything    ₹9,77,302  ✗ touched 24 it must not   333 acted on — over capacity
+ chase everything   INFEASIBLE  ✗ touched 24 it must not   5.0× the 67 interventions available
+                   (₹9,77,302)                             what it would net if those limits did not exist
  biggest first       ₹7,54,709  ✗ touched  1 it must not    67 acted on
  newest first        ₹6,46,092  ✗ touched  6 it must not    67 acted on
-→ this detector      ₹7,67,417  ✓ touched none              67 acted on · 83% of what was reachable
+→ this detector      ₹7,50,992  ✓ touched none              67 acted on · 82% of what was reachable
  perfect foresight   ₹9,19,507  ✗ touched  1 it must not    67 acted on — the ceiling
 ```
+
+`chase everything` nets more than the detector and more than the ceiling, and
+for a while it sat in the money column as the largest figure in the table with
+a note saying it was over capacity. Nothing in that note survives the seconds a
+reader spends deciding who won. Capacity is a feasibility test, not a
+preference: you cannot perform more interventions than you have room for, and a
+policy that cannot be run is not a competitor. Its rupees are still printed,
+one line down, as the counterfactual they are.
+
+Forbidden touches are deliberately *not* part of that test. Contacting a
+disputed record is a compliance failure, not an impossibility — folding the two
+together would let us disqualify `biggest first`, which beats us on the headline
+batch, over a single touch. That is the same trick with the sign reversed.
 
 Out of bounds means an open dispute, an issuer risk block, or a shared-signal
 cluster. Even perfect foresight breaks the rule, because it optimises money
