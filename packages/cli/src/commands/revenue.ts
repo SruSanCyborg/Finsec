@@ -24,7 +24,7 @@ import { CliError } from '../api/errors.js';
 import { findProjectRoot, loadConfig } from '../config/load.js';
 import { detectCapabilities } from '../ui/theme.js';
 import { note, truncate } from '../ui/kit.js';
-import { paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
+import { assessmentHeader, paletteFor, renderAssessment, renderEvaluation, renderIncidents } from '../render/revenue.js';
 import { evaluate } from '../revenue/evaluate.js';
 import { analyzeBatch } from '../revenue/features.js';
 import { assessBatch, defaultCapacity, fitModel, isHeld } from '../revenue/model.js';
@@ -258,9 +258,15 @@ async function detect(
   process.stdout.write(
     ` ${palette.bold('sirius revenue')}  ${palette.dim(
       `${inSplit.length} records · split=${split}${kind ? ` · showing ${kind}s` : ''}` +
-        ` · floor ${model.threshold} · room for ${capacity.max_actions}`,
+        ` · score floor ${model.threshold} · capacity ${capacity.max_actions}`,
     )}\n\n`,
   );
+
+  // Named as well as shown. `floor 16 · room for 67` put an unlabelled 67 three
+  // words from a first row whose score was also 67, and neither said what the
+  // order meant.
+  process.stdout.write(`${palette.dim('  ranked by expected recovery')}\n`);
+  process.stdout.write(`${assessmentHeader(palette)}\n`);
 
   const { writeLinesPaced, writePaced } = await import('../engine/pace.js');
   const pace = paceMs(Boolean(flags.json));

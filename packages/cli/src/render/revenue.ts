@@ -138,6 +138,17 @@ export function renderAssessment(
       : palette.dim(String(assessment.score).padStart(3));
 
   const money = palette.rupee(assessment.amount_paise).padStart(12);
+
+  // The column the list is actually sorted by.
+  //
+  // Records are ranked on expected recovery — score × amount × recovery share —
+  // and it appeared nowhere on screen. Neither visible column was monotonic
+  // (67, 46, 55, 41 … / ₹3.25L, ₹1.40L, ₹1.08L, ₹1.41L), so to anyone seeing it
+  // for the first time the list looked scrambled, on the beat where the ranking
+  // *is* the argument. A sort key the reader cannot see is indistinguishable
+  // from no sort at all.
+  const expected = held ? padVisible('', 11) : palette.dim(palette.rupee(assessment.expected_recovery_paise).padStart(11));
+
   const reason = held
     ? (assessment.evidence[0]?.detail ?? '')
     : describe(record);
@@ -147,8 +158,26 @@ export function renderAssessment(
   // that gives way. A held record's explanation is a full sentence and ran the
   // line to 118 columns; on a narrow terminal that wraps into the next record
   // and the stream stops looking like a stream.
-  const head = `  ${mark} ${score}  ${id} ${money}  `;
+  const head = `  ${mark} ${score}  ${id} ${money} ${expected}  `;
   return head + palette.dim(truncate(reason, Math.max(0, palette.width - visibleWidth(head))));
+}
+
+/**
+ * The header for the assessment rows.
+ *
+ * There were no column headers at all: an unlabelled leading number sat three
+ * words from `room for 67` in the line above, and the first row's score was
+ * also 67 — two unrelated 67s that read as one.
+ */
+export function assessmentHeader(palette: Palette): string {
+  // Built from the same widths as the row above it, in the same order: two
+  // spaces, the mark, a space and a three-wide score come to seven columns, so
+  // `  SCORE` sits exactly over them. A header that is close but not aligned is
+  // worse than none — it makes the reader distrust the columns that *are*
+  // right.
+  const head =
+    `  SCORE  ${padVisible('RECORD', 11)} ${'AMOUNT'.padStart(12)} ${'EXPECTED'.padStart(11)}  WHY`;
+  return palette.dim(truncate(head, palette.width));
 }
 
 /** The record in one phrase: what it is and why it is here. */

@@ -1781,3 +1781,24 @@ broken build for anyone whose config was written against a newer version, and
 this file is read on every command. Only the top level and `policy:` are
 checked, because that is where the gate lives and `revenue:` is a large nested
 surface where a false alarm would be worse than the silence.
+
+## D-052 — Show the column the list is sorted by
+
+`revenue detect` ranks records on expected recovery — score × amount × recovery
+share — and that number appeared nowhere on screen. Neither visible column was
+monotonic (67, 46, 55, 41 … / ₹3.25L, ₹1.40L, ₹1.08L, ₹1.41L), so to anyone
+seeing it for the first time the list looked scrambled. A sort key the reader
+cannot see is indistinguishable from no sort at all — and this is demo beat 3,
+where the ranking *is* the argument.
+
+There were also no column headers, and the header line read `floor 16 · room for
+67` immediately above a first row whose score was also 67: two unrelated 67s
+three words apart.
+
+So the row carries an `EXPECTED` column, the columns are labelled, and the line
+above says `ranked by expected recovery` in as many words. `floor`/`room for`
+became `score floor`/`capacity`, which is what they mean.
+
+The header is built from the same widths as the row, in the same order, rather
+than being spaced by eye. A header that is close but not aligned is worse than
+none: it makes a reader distrust the columns that are right.
