@@ -37,6 +37,7 @@ async def disconnect(scan_id: str, ws: WebSocket) -> None:
 async def connect_global(ws: WebSocket) -> None:
     async with _lock:
         _global_connections.add(ws)
+        print(f"[events] global connected: {len(_global_connections)} total")
 
 
 async def disconnect_global(ws: WebSocket) -> None:
@@ -49,8 +50,10 @@ async def broadcast(scan_id: str, event: dict[str, Any]) -> None:
     async with _lock:
         conns = list(_connections.get(scan_id, set())) + list(_global_connections)
     if not conns:
+        print(f"[events] broadcast {event.get('type')}: NO listeners ({len(_global_connections)} global)")
         return
     payload = json.dumps(event, default=str)
+    print(f"[events] broadcast {event.get('type')} to {len(conns)} conns ({len(_global_connections)} global)")
     for ws in conns:
         try:
             await ws.send_text(payload)

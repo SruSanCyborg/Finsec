@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useSession } from "@/lib/providers";
+import { REAL } from "@/lib/real/api";
 
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: Gauge },
@@ -116,10 +117,18 @@ export function Sidebar({ open, onClose }: { open: boolean; onClose: () => void 
       </div>
 
       <div className="border-t border-line p-4">
-        <div className="rounded-lg border border-line bg-raise p-3">
-          <p className="text-xs font-medium text-zinc-200">Mock mode active</p>
+        <div className={`rounded-lg border p-3 ${REAL ? "border-severity-pass/25 bg-severity-pass/[0.06]" : "border-line bg-raise"}`}>
+          <p className={`text-xs font-medium ${REAL ? "text-severity-pass" : "text-zinc-200"}`}>
+            {REAL ? "Live · Core API connected" : "Mock mode active"}
+          </p>
           <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">
-            Local simulation running. Set <span className="font-mono text-zinc-400">NEXT_PUBLIC_API_URL</span> to go live.
+            {REAL ? (
+              "Streaming scans, findings & alerts in real time."
+            ) : (
+              <>
+                Local simulation running. Set <span className="font-mono text-zinc-400">NEXT_PUBLIC_API_URL</span> to go live.
+              </>
+            )}
           </p>
         </div>
         <p className="mt-3 px-1 text-[10px] text-zinc-600">v0.1.0 · {email}</p>
