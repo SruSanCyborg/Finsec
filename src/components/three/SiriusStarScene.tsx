@@ -53,7 +53,6 @@ function StarSystem() {
   const ringRef = useRef<THREE.Mesh>(null);
   const ring2Ref = useRef<THREE.Mesh>(null);
   const groupRef = useRef<THREE.Group>(null);
-  const scanRef = useRef<THREE.Mesh>(null);
   const riskLightRef = useRef<THREE.PointLight>(null);
   const look = useRef(new THREE.Vector3(0, 0, 0));
 
@@ -69,64 +68,6 @@ function StarSystem() {
     ],
     []
   );
-
-  // Finding particles streaming along elliptical lanes.
-  const stream = useMemo(() => {
-    const count = sceneState.isMobile ? 60 : 140;
-    const lanes = nodeOrbits.map((o) => o.r);
-    const data = Array.from({ length: count }, (_, i) => ({
-      lane: i % lanes.length,
-      t: Math.random(),
-      speed: 0.05 + Math.random() * 0.1,
-    }));
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(new Float32Array(count * 3), 3));
-    const colors = new Float32Array(count * 3);
-    data.forEach((d, i) => {
-      const c = nodeOrbits[d.lane].color;
-      colors[i * 3] = c.r;
-      colors[i * 3 + 1] = c.g;
-      colors[i * 3 + 2] = c.b;
-    });
-    geo.setAttribute("color", new THREE.BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      map: glowTex,
-      size: 0.09,
-      vertexColors: true,
-      transparent: true,
-      opacity: 0.8,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-      sizeAttenuation: true,
-    });
-    return { points: new THREE.Points(geo, mat), data, lanes };
-  }, [glowTex, nodeOrbits]);
-
-  // Ambient starfield.
-  const field = useMemo(() => {
-    const count = sceneState.isMobile ? 150 : 380;
-    const pos = new Float32Array(count * 3);
-    for (let i = 0; i < count; i++) {
-      const r = 9 + Math.random() * 14;
-      const th = Math.random() * Math.PI * 2;
-      const ph = Math.acos(2 * Math.random() - 1);
-      pos[i * 3] = r * Math.sin(ph) * Math.cos(th);
-      pos[i * 3 + 1] = r * Math.sin(ph) * Math.sin(th) * 0.65;
-      pos[i * 3 + 2] = r * Math.cos(ph);
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
-    const mat = new THREE.PointsMaterial({
-      map: glowTex,
-      color: "#6b7280",
-      size: 0.05,
-      transparent: true,
-      opacity: 0.45,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    return new THREE.Points(geo, mat);
-  }, [glowTex]);
 
   const nodeMeshes = useRef<THREE.Mesh[]>([]);
 
@@ -153,21 +94,22 @@ function StarSystem() {
     look.current.lerp(tl, Math.min(1, dt * 2.4));
     camera.lookAt(look.current);
 
-    // Star core breathing, hotter as the scan progresses.
+    // Star core breathing, hotter as the scan progresses + webcam energy.
     const heat = clamp01((vis - 1.2) / 3.5);
+    const cam = sceneState.webcam ? sceneState.webcamMotion * 0.9 : 0;
     if (coreRef.current) {
-      const s = 1 + Math.sin(t * 1.8) * 0.04;
+      const s = 1 + Math.sin(t * 1.8) * 0.04 + cam * 0.1;
       coreRef.current.scale.setScalar(s);
       coreRef.current.rotation.y = t * 0.12;
       const m = coreRef.current.material as THREE.MeshStandardMaterial;
       m.emissive.copy(STAR).lerp(ACCENT, heat * 0.55);
-      m.emissiveIntensity = 2.2 + Math.sin(t * 1.8) * 0.4 + heat * 1.4;
+      m.emissiveIntensity = 2.2 + Math.sin(t * 1.8) * 0.4 + heat * 1.4 + cam * 1.2;
     }
     if (glowRef.current) {
       const m = glowRef.current.material as THREE.SpriteMaterial;
-      m.color.copy(STAR).lerp(ACCENT, heat * 0.6);
-      m.opacity = 0.5 + heat * 0.18 + Math.sin(t * 2.2) * 0.05;
-      glowRef.current.scale.setScalar(6.4 + Math.sin(t * 1.4) * 0.5 + heat * 1.6);
+      m.color.copy(STAR).lerp(ACCENT, heat * 0.6 + cam * 0.3);
+      m.opacity = 0.5 + heat * 0.18 + Math.sin(t * 2.2) * 0.05 + cam * 0.15;
+      glowRef.current.scale.setScalar(6.4 + Math.sin(t * 1.4) * 0.5 + heat * 1.6 + cam * 1.2);
     }
     if (innerGlowRef.current) {
       (innerGlowRef.current.material as THREE.SpriteMaterial).opacity = 0.9;
@@ -197,37 +139,6 @@ function StarSystem() {
       const pulse = 1 + Math.sin(t * 3 + ni * 1.7) * 0.18;
       mesh.scale.setScalar(pulse);
     });
-
-    // Scan sweep — a ring expanding outward during scan phases.
-    if (scanRef.current) {
-      const scanOn = vis > 0.8 && vis < 5.2;
-      scanRef.current.visible = scanOn;
-      if (scanOn) {
-        const phase = (t * 0.35) % 1;
-        scanRef.current.scale.setScalar(1.2 + phase * 5.5);
-        (scanRef.current.material as THREE.MeshBasicMaterial).opacity = (1 - phase) * 0.22;
-      }
-    }
-
-    // Finding stream.
-    const speedMul = 1 + heat * 0.5;
-    const attr = stream.points.geometry.getAttribute("position") as THREE.BufferAttribute;
-    stream.data.forEach((p, pi) => {
-      p.t += p.speed * dt * speedMul;
-      if (p.t > 1) p.t -= 1;
-      const laneR = stream.lanes[p.lane];
-      const tilt = nodeOrbits[p.lane].tilt;
-      const a = p.t * Math.PI * 2;
-      attr.setXYZ(
-        pi,
-        Math.cos(a) * laneR,
-        Math.sin(a) * laneR * Math.sin(tilt) * 1.15,
-        Math.sin(a) * laneR * Math.cos(tilt)
-      );
-    });
-    attr.needsUpdate = true;
-
-    field.rotation.y = t * 0.008;
 
     if (riskLightRef.current) {
       riskLightRef.current.intensity = heat * 6;
@@ -262,14 +173,6 @@ function StarSystem() {
           <meshStandardMaterial color="#0a0a0f" emissive={o.color} emissiveIntensity={2.4} roughness={0.35} />
         </mesh>
       ))}
-
-      <mesh ref={scanRef} rotation={[Math.PI / 2, 0, 0]} visible={false}>
-        <ringGeometry args={[0.97, 1, 64]} />
-        <meshBasicMaterial color={ACCENT} transparent opacity={0} side={THREE.DoubleSide} />
-      </mesh>
-
-      <primitive object={stream.points} />
-      <primitive object={field} />
 
       <ambientLight intensity={0.3} />
       <pointLight position={[0, 0, 0]} intensity={14} distance={16} color={STAR} />

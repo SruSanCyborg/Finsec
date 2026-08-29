@@ -6,9 +6,12 @@
 const API_URL = (
   process.env.NEXT_PUBLIC_API_URL ?? process.env.NEXT_PUBLIC_BACKEND_URL ?? ""
 ).replace(/\/$/, "");
-const WS_URL =
-  process.env.NEXT_PUBLIC_WS_URL?.replace(/\/$/, "") ??
-  API_URL?.replace(/^http/, "ws");
+// WS origin: strip any /api/v1 suffix so the stream paths below don't double it.
+const WS_URL = (
+  process.env.NEXT_PUBLIC_WS_URL ?? API_URL?.replace(/^http/, "ws")
+)
+  .replace(/\/$/, "")
+  .replace(/\/api\/v1$/, "");
 
 export const REAL = !!API_URL;
 
@@ -25,7 +28,17 @@ export async function checkHealth(): Promise<boolean> {
 
 const TOKEN_KEY = "sirius.api_token";
 
+// Module-level Clerk session token, set by the Providers bridge via
+// useAuth().getToken() — the reliable way to get the session JWT in
+// @clerk/nextjs (window.Clerk.session is not guaranteed).
+let clerkSessionToken: string | null = null;
+
+export function setClerkSessionToken(token: string | null) {
+  clerkSessionToken = token;
+}
+
 export function getApiToken(): string | null {
+  if (clerkSessionToken) return clerkSessionToken;
   if (typeof window === "undefined") return null;
   try {
     return window.localStorage.getItem(TOKEN_KEY);
@@ -65,12 +78,11 @@ export class ApiError extends Error {
 async function request<T>(
   path: string,
   init: RequestInit = {},
+  _retried = false,
 ): Promise<T> {
-  // Prefer the Clerk session token (verified server-side); fall back to the
-  // stored API key for demo/CLI mode.
-  let token = getApiToken();
-  const clerkToken = await getClerkToken();
-  if (clerkToken) token = clerkToken;
+  // The token comes from getApiToken(): the Clerk session JWT (set by the
+  // Providers bridge) takes priority, then the stored API key (demo/CLI mode).
+  const token = getApiToken();
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -79,6 +91,17 @@ async function request<T>(
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const res = await fetch(`${API_URL}${path}`, { ...init, headers, cache: "no-store" });
+  if (res.status === 401 && !_retried) {
+    // Race: the Clerk session JWT may not be set yet on first mount. Wait up to
+    // 2s for it, then retry once with the real token.
+    const deadline = Date.now() + 2000;
+    while (Date.now() < deadline && !getApiToken()) {
+      await new Promise((r) => setTimeout(r, 100));
+    }
+    if (getApiToken()) {
+      return request<T>(path, init, true);
+    }
+  }
   if (!res.ok) {
     let detail = res.statusText;
     let code: string | undefined;
@@ -120,7 +143,6 @@ import type {
   TeamMember,
   User,
 } from "@/types";
-import { getClerkToken } from "@/lib/clerk-token";
 
 export interface WireScan {
   id: string;

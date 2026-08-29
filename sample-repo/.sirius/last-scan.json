@@ -1,98 +1,61 @@
 {
   "schema_version": 3,
-  "scanned_at": "2026-08-28T20:39:41.633Z",
-  "scan_id": "e5e2ae35-80cf-42b9-96a9-3b127212cfc2",
-  "source": "api",
-  "project_id": "11111111-1111-4111-8111-111111111111 ",
-  "root": "C:\\Users\\L Kevin Daniel\\Finsec\\sample-repo",
+  "scanned_at": "2026-08-28T23:03:34.246Z",
+  "scan_id": "local-67c02f22eddf",
+  "source": "local",
+  "project_id": "",
+  "root": "C:/Users/L Kevin Daniel/Finsec/sample-repo",
   "summary": {
     "counts": {
-      "critical": 3,
+      "critical": 2,
       "high": 2,
-      "medium": 2,
-      "low": 0,
-      "info": 0
+      "medium": 2
     },
-    "money_at_risk_inr": 8310000,
-    "compliance_score": 48,
-    "files_scanned": null
+    "money_at_risk_inr": 8930000,
+    "compliance_score": 60,
+    "files_scanned": 3
   },
   "findings": [
     {
-      "id": "d8e9e2d2-38b2-4787-99b6-89396139d2f7",
-      "rule_id": "SIR-SEC-010",
-      "file": "src/ledger.py",
-      "line": 69,
-      "severity": "critical",
-      "fix_action": "parameterize_query",
-      "message": "SQL built from string formatting",
-      "compliance_ref": [
-        "PCI-DSS:6.2.4",
-        "RBI-DPSC",
-        "CWE:89"
-      ],
-      "money_at_risk_inr": 2400000,
-      "fingerprint": "3c00b66646a7bc317caf931c75f2e881",
-      "category": "injection",
-      "validity": "unknown"
-    },
-    {
-      "id": "6bd836a3-ea20-43bd-bc19-94fc56806450",
-      "rule_id": "SIR-SEC-010",
-      "file": "src/ledger.py",
-      "line": 82,
-      "severity": "critical",
-      "fix_action": "parameterize_query",
-      "message": "SQL built from string formatting",
-      "compliance_ref": [
-        "PCI-DSS:6.2.4",
-        "RBI-DPSC",
-        "CWE:89"
-      ],
-      "money_at_risk_inr": 2400000,
-      "fingerprint": "5cb7cf03501877eaca137dc4ff12a045",
-      "category": "injection",
-      "validity": "unknown"
-    },
-    {
-      "id": "2e1b78e5-dc35-4c85-b9d9-ffe53a6c0e10",
-      "rule_id": "SIR-SEC-010",
-      "file": "src/ledger.py",
-      "line": 88,
-      "severity": "critical",
-      "fix_action": "parameterize_query",
-      "message": "SQL built from string formatting",
-      "compliance_ref": [
-        "PCI-DSS:6.2.4",
-        "RBI-DPSC",
-        "CWE:89"
-      ],
-      "money_at_risk_inr": 2400000,
-      "fingerprint": "00bcae9a0e24818275363a53d405f0c3",
-      "category": "injection",
-      "validity": "unknown"
-    },
-    {
-      "id": "6f67d3ac-54ba-4532-8eaf-566e25e5eb52",
-      "rule_id": "SIR-SEC-002",
-      "file": "src/config.py",
+      "id": "local-00000001",
+      "rule_id": "SIR-SEC-001",
+      "file": "src\\config.py",
       "line": 14,
-      "severity": "high",
+      "severity": "critical",
       "fix_action": "env_lookup",
-      "message": "High-entropy string in source or config",
+      "message": "Hardcoded Stripe secret key",
       "compliance_ref": [
         "PCI-DSS:8.6.2",
-        "DPDP:8"
+        "RBI-DPSC",
+        "DPDP:8",
+        "CWE:798"
       ],
-      "money_at_risk_inr": 80000,
-      "fingerprint": "1c8ad1d7ad1016419e3143eaf0d5fcdb",
+      "money_at_risk_inr": 4200000,
+      "fingerprint": "222db01ed45d5b56c5192f3c588f7a54",
       "category": "secrets",
       "validity": "unknown"
     },
     {
-      "id": "9a6ff9e7-a037-4055-ad83-c29c87ddc5a2",
+      "id": "local-00000002",
+      "rule_id": "SIR-SEC-010",
+      "file": "src\\ledger.py",
+      "line": 88,
+      "severity": "critical",
+      "fix_action": "parameterize_query",
+      "message": "SQL built with string formatting",
+      "compliance_ref": [
+        "PCI-DSS:6.2.4",
+        "RBI-DPSC",
+        "CWE:89"
+      ],
+      "money_at_risk_inr": 2400000,
+      "fingerprint": "2e5f52e314e439d67ac99f98b3cab579",
+      "category": "injection"
+    },
+    {
+      "id": "local-00000003",
       "rule_id": "SIR-SEC-020",
-      "file": "src/webhooks.py",
+      "file": "src\\webhooks.py",
       "line": 38,
       "severity": "high",
       "fix_action": "add_auth_decorator",
@@ -102,14 +65,30 @@
         "RBI-DPSC"
       ],
       "money_at_risk_inr": 600000,
-      "fingerprint": "7733ce695271ccceed94a523d448923b",
-      "category": "auth",
-      "validity": "unknown"
+      "fingerprint": "cb0b0f9d1986a213f341fe99ce45679f",
+      "category": "auth"
     },
     {
-      "id": "db517a9e-c106-42fc-b18a-5f290b72a1a5",
+      "id": "local-00000004",
+      "rule_id": "SIR-SEC-030",
+      "file": "src\\webhooks.py",
+      "line": 52,
+      "severity": "high",
+      "fix_action": "redact_pii_log",
+      "message": "PAN, Aadhaar, or other PII written to logs",
+      "compliance_ref": [
+        "PCI-DSS:3.4.1",
+        "DPDP:8",
+        "GDPR:Art.5"
+      ],
+      "money_at_risk_inr": 1300000,
+      "fingerprint": "4e65841214ac4c67f6419f1ca059f04c",
+      "category": "logging"
+    },
+    {
+      "id": "local-00000005",
       "rule_id": "SIR-SEC-050",
-      "file": "src/webhooks.py",
+      "file": "src\\webhooks.py",
       "line": 38,
       "severity": "medium",
       "fix_action": "add_rate_limit",
@@ -119,22 +98,20 @@
         "RBI-DPSC"
       ],
       "money_at_risk_inr": 250000,
-      "fingerprint": "dc4a922bffc06522c95e0e5327b6d0b1",
-      "category": "ratelimit",
-      "validity": "unknown"
+      "fingerprint": "77ef433725ffb09562dae4778a8d8686",
+      "category": "ratelimit"
     },
     {
-      "id": "d2e78321-870b-4b20-8a55-0c5d92ef1008",
+      "id": "local-00000006",
       "rule_id": "SIR-SEC-051",
-      "file": "src/webhooks.py",
+      "file": "src\\webhooks.py",
       "line": 38,
       "severity": "medium",
       "fix_action": "add_idempotency_key",
       "message": "Money-movement POST without an idempotency key",
       "money_at_risk_inr": 180000,
-      "fingerprint": "6bf807b8073aa59878231e5678a3cd39",
-      "category": "ratelimit",
-      "validity": "unknown"
+      "fingerprint": "c5470c0e442f6cf7f856e5041a078020",
+      "category": "ratelimit"
     }
   ]
 }

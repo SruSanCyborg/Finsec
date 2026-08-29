@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -218,20 +219,72 @@ async def ingest_scan(
 
 
 async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets: list[str]) -> None:
-    """Run the local engine and persist findings. Errors are non-fatal per file."""
+    """Run the REAL CLI engine (CLI branch) via `sirius scan --json` and persist
+    findings. Falls back to the built-in scanner if the CLI is unavailable."""
     from ..core import events
+    import asyncio as _asyncio
 
     try:
         await events.broadcast(scan_id, {
             "type": "scan.started", "scan_id": scan_id, "total_files": 0,
             "ts": datetime.now(timezone.utc).isoformat(),
         })
-        result = scanner.scan_directory(target, scan_id, rulesets)
         now = datetime.now(timezone.utc)
 
-        for f in result.findings:
-            rule = RULES_BY_ID.get(f.rule_id, {})
-            category = f.category
+        cli_path = os.environ.get("SIRIUS_CLI_BIN") or str(Path(__file__).resolve().parents[3] / "cli-worktree" / "packages" / "cli" / "dist" / "cli.js")
+        result = None
+        node_bin = shutil.which("node") or r"C:\Program Files\nodejs\node.exe"
+        _diag("cli_path", cli_path)
+        _diag("node_bin", node_bin or "NONE")
+        _diag("cli_exists", str(Path(cli_path).exists()))
+        if Path(cli_path).exists() and node_bin:
+            # Use the real tree-sitter engine in LOCAL mode (no project id, no
+            # API) so it scans with its own engine instead of calling us back.
+            env = dict(os.environ)
+            env["SIRIUS_PROJECT_ID"] = ""
+            env["SIRIUS_API_URL"] = ""
+            env["SIRIUS_WS_URL"] = ""
+            env.pop("SIRIUS_API_KEY", None)
+            proc = await _asyncio.create_subprocess_exec(
+                node_bin, cli_path, "scan", target, "--json", "--severity-threshold", "info",
+                stdout=_asyncio.subprocess.PIPE,
+                stderr=_asyncio.subprocess.PIPE,
+                env=env,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=120)
+            _diag("cli_rc", str(proc.returncode))
+            _diag("cli_stdout_len", str(len(stdout)))
+            _diag("cli_stderr", stderr.decode("utf-8", "replace")[:300])
+            try:
+                cli_out = json.loads(stdout.decode("utf-8"))
+                result = _ScanResultFromCli(cli_out)
+            except Exception as exc:
+                print(f"CLI scan parse failed: {exc}")
+                result = None
+
+        if result is None:
+            # fallback: built-in scanner (regex/entropy engine)
+            sr = scanner.scan_directory(target, scan_id, rulesets)
+            result = {
+                "findings": [
+                    {
+                        "rule_id": f.rule_id, "severity": f.severity, "category": f.category,
+                        "message": f.message, "file": f.file, "line": f.line, "end_line": f.end_line,
+                        "col": f.col, "snippet": f.snippet, "compliance_ref": f.compliance_ref,
+                        "fingerprint": f.fingerprint, "money_at_risk_inr": f.money_at_risk_inr,
+                        "taint": f.taint, "fix_action": f.fix_action, "validity": f.validity,
+                    }
+                    for f in sr.findings
+                ],
+                "compliance_score": sr.compliance_score,
+                "money_at_risk_inr": sr.money_at_risk_inr,
+                "counts": sr.counts,
+                "exit_code": sr.exit_code,
+            }
+
+        for f in result["findings"]:
+            rule = RULES_BY_ID.get(f.get("rule_id", ""), {})
+            category = f.get("category", "logging")
             if category not in (
                 "secrets", "auth", "injection", "pii", "crypto", "logging", "ratelimit", "supplychain"
             ):
@@ -245,35 +298,29 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
                    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)""",
                 finding_id,
                 scan_id,
-                f.file or "unknown",
-                f.line,
-                f.end_line,
-                f.col,
-                f.severity,
-                f.rule_id,
+                f.get("file", "unknown"),
+                f.get("line", 0),
+                f.get("end_line"),
+                f.get("col"),
+                f.get("severity", "medium"),
+                f.get("rule_id", "SIR-SEC-000"),
                 category,
-                json.dumps(f.compliance_ref),
-                f.message,
-                f.snippet,
-                f.fingerprint or "",
-                "new",
-                f.validity,
-                f.money_at_risk_inr,
+                json.dumps(f.get("compliance_ref", [])),
+                f.get("message", f.get("rule_id", "")),
+                f.get("snippet"),
+                f.get("fingerprint") or "",
+                f.get("baseline_state", "new"),
+                f.get("validity", "unknown"),
+                f.get("money_at_risk_inr", 0),
                 False,
                 "open",
-                f.taint,
-                rule.get("fix_action") or f.fix_action,
+                f.get("taint"),
+                rule.get("fix_action") or f.get("fix_action"),
             )
-            # live event → web console
             row = await db.fetchrow("SELECT * FROM findings WHERE id = $1", finding_id)
             await events.broadcast(scan_id, {
                 "type": "finding",
                 "finding": _finding_row_to_schema(row).model_dump(),
-            })
-            await events.broadcast(scan_id, {
-                "type": "progress",
-                "scanned": 1, "total": result.file_count,
-                "findings_so_far": result.findings.index(f) + 1,
             })
 
         await db.execute(
@@ -281,18 +328,18 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
                                 exit_code=$4, finished_at=$5
                WHERE id=$1""",
             scan_id,
-            result.compliance_score,
-            result.money_at_risk_inr,
-            result.exit_code,
+            result["compliance_score"],
+            result["money_at_risk_inr"],
+            result["exit_code"],
             now,
         )
         await events.broadcast(scan_id, {
             "type": "scan.completed",
             "scan_id": scan_id,
-            "compliance_score": result.compliance_score,
-            "money_at_risk_inr": result.money_at_risk_inr,
-            "counts": result.counts,
-            "exit_code": result.exit_code,
+            "compliance_score": result["compliance_score"],
+            "money_at_risk_inr": result["money_at_risk_inr"],
+            "counts": result["counts"],
+            "exit_code": result["exit_code"],
             "ts": now.isoformat(),
         })
     except Exception as exc:  # worker failure → scan failed, not a 500
@@ -301,6 +348,28 @@ async def _run_scan_worker(scan_id: str, project_id: str, target: str, rulesets:
         )
         await events.broadcast(scan_id, {"type": "error", "code": "SIRIUS_ERR_SCAN", "detail": str(exc)})
         print(f"scan worker failed: {exc}")
+
+
+def _diag(key: str, value: str) -> None:
+    """Write a diagnostic line to backend/cli-diag.log (Windows-safe)."""
+    try:
+        with open(Path(__file__).resolve().parents[2] / "cli-diag.log", "a", encoding="utf-8") as f:
+            f.write(f"{key}: {value}\n")
+    except Exception:
+        pass
+
+
+def _ScanResultFromCli(out: dict) -> dict:
+    """Map the CLI's --json output to the worker's expected shape."""
+    summary = out.get("summary") or {}
+    findings = out.get("findings") or []
+    return {
+        "findings": findings,
+        "compliance_score": summary.get("compliance_score"),
+        "money_at_risk_inr": summary.get("money_at_risk_inr", 0),
+        "counts": summary.get("counts") or {},
+        "exit_code": out.get("exit_code") or (1 if (summary.get("counts") or {}).get("critical") or (summary.get("counts") or {}).get("high") else 0),
+    }
 
 
 @router.get("")

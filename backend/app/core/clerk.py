@@ -97,7 +97,10 @@ def _verify_rs256(token: str) -> dict | None:
         if exp < time.time():
             return None
         return payload
-    except Exception:
+    except Exception as exc:
+        import logging
+
+        logging.getLogger("sirius.clerk").exception("clerk verify failed: %s", exc)
         return None
 
 
@@ -158,7 +161,10 @@ async def get_current_user(request: Request):
 
 
 async def _check_api_key(token: str) -> bool:
+    # demo-key (API key) and demo-jwt (session token from /auth/token)
     if _constant_time_equal(token, SIRIUS_DEMO_API_KEY):
+        return True
+    if _constant_time_equal(token, "demo-jwt"):
         return True
     key_hash = hashlib.sha256(token.encode()).hexdigest()
     row = await db.fetchrow(
@@ -188,15 +194,51 @@ async def _demo_user() -> dict:
     return dict(row)
 
 
+async def _clerk_user_profile(clerk_user_id: str) -> dict:
+    """Fetch the user's profile from Clerk's API (email/name/avatar)."""
+    if not CLERK_SECRET_KEY:
+        return {}
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"https://api.clerk.com/v1/users/{clerk_user_id}",
+                headers={"Authorization": f"Bearer {CLERK_SECRET_KEY}"},
+            )
+            if resp.status_code != 200:
+                return {}
+            data = resp.json()
+            email = ""
+            for e in data.get("email_addresses", []):
+                if e.get("id") == data.get("primary_email_address_id"):
+                    email = e.get("email_address", "")
+                    break
+            if not email and data.get("email_addresses"):
+                email = data["email_addresses"][0].get("email_address", "")
+            return {
+                "email": email,
+                "name": data.get("first_name") or data.get("username") or "",
+                "avatar": data.get("image_url"),
+            }
+    except Exception:
+        return {}
+
+
 async def _sync_user(clerk_user_id: str, payload: dict) -> dict:
     """Find the Sirius user by clerk_user_id; create if missing. Returns the row."""
     row = await db.fetchrow("SELECT * FROM users WHERE clerk_user_id = $1", clerk_user_id)
     if row:
         return dict(row)
 
-    email = payload.get("email") or ""
-    name = payload.get("name") or payload.get("username") or email.split("@")[0] or "Sirius User"
-    avatar = payload.get("picture")
+    # The session JWT usually has no email/name — enrich from Clerk's API.
+    profile = await _clerk_user_profile(clerk_user_id)
+    email = profile.get("email") or payload.get("email") or ""
+    name = profile.get("name") or payload.get("name") or payload.get("username") or email.split("@")[0] or "Sirius User"
+    avatar = profile.get("avatar") or payload.get("picture")
+
+    if not email:
+        # No email available — fall back to a stable placeholder so the user row
+        # can still be created (email is NOT NULL UNIQUE).
+        email = f"{clerk_user_id}@clerk.sirius.dev"
 
     # Also match by email if a user was created without a clerk id (demo seed)
     existing = await db.fetchrow("SELECT * FROM users WHERE email = $1 AND clerk_user_id IS NULL", email)

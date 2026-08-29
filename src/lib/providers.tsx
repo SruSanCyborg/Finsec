@@ -9,10 +9,11 @@
 // mode. Both expose the same { user, role, isSignedIn, isLoaded } shape so the
 // rest of the app is unchanged.
 
-import { ClerkProvider, useUser, useOrganization } from "@clerk/nextjs";
+import { ClerkProvider, useUser, useAuth } from "@clerk/nextjs";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { clerkAppearance } from "@/lib/clerk-appearance";
 import { clerkConfigured } from "@/lib/clerk-available";
+import { setClerkSessionToken } from "@/lib/real/api";
 import { api } from "@/lib/mock/api";
 import type { Role, User } from "@/types";
 
@@ -49,25 +50,46 @@ const Ctx = createContext<SiriusSession>({
 // ── Clerk-backed session ─────────────────────────────────────────────────────
 
 function ClerkSessionBridge({ children }: { children: ReactNode }) {
+  // Intentionally no useOrganization(): that hook requires an active
+  // organization and throws when there isn't one, which crashes the whole
+  // provider tree for a fresh account in an incognito session. Role defaults
+  // to owner for the first user; org-based RBAC can layer on later.
   const { user: clerkUser, isLoaded: userLoaded, isSignedIn } = useUser();
-  const { membership, isLoaded: orgLoaded } = useOrganization();
+  const { getToken } = useAuth();
 
-  const role = clerkRoleToSirius(membership?.role);
-  const isLoaded = userLoaded && orgLoaded;
+  // Push the Clerk session JWT into the API client so every request is
+  // authenticated as this user (backend verifies it via JWKS).
+  useEffect(() => {
+    let active = true;
+    if (isSignedIn && getToken) {
+      getToken()
+        .then((t) => {
+          if (active) setClerkSessionToken(t ?? null);
+        })
+        .catch(() => {
+          if (active) setClerkSessionToken(null);
+        });
+    } else {
+      setClerkSessionToken(null);
+    }
+    return () => {
+      active = false;
+    };
+  }, [isSignedIn, getToken]);
 
   const user: User | null = clerkUser
     ? {
         id: clerkUser.id,
         name: clerkUser.fullName ?? clerkUser.firstName ?? clerkUser.username ?? clerkUser.primaryEmailAddress?.emailAddress ?? "You",
         email: clerkUser.primaryEmailAddress?.emailAddress ?? "",
-        role: role ?? "member",
+        role: "owner",
         color: "#22d3ee",
         mfa: false,
       }
     : null;
 
   return (
-    <Ctx.Provider value={{ user, role, isSignedIn: !!isSignedIn, isLoaded }}>
+    <Ctx.Provider value={{ user, role: user?.role, isSignedIn: !!isSignedIn, isLoaded: userLoaded }}>
       {children}
     </Ctx.Provider>
   );
@@ -123,6 +145,12 @@ export function Providers({ children }: { children: ReactNode }) {
     <ClerkProvider
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       appearance={clerkAppearance}
+      signInUrl="/login"
+      signUpUrl="/signup"
+      afterSignInUrl="/dashboard"
+      afterSignUpUrl="/dashboard"
+      signInFallbackRedirectUrl="/dashboard"
+      signUpFallbackRedirectUrl="/dashboard"
     >
       <ClerkSessionBridge>{children}</ClerkSessionBridge>
     </ClerkProvider>

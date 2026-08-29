@@ -4,4 +4,6 @@ export const sceneState = {
   mouse: { x: 0, y: 0 },
   reducedMotion: false,
   isMobile: false,
+  webcam: false,
+  webcamMotion: 0, // 0..1 — camera-driven visual intensity
 };
