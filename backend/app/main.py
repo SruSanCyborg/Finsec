@@ -11,6 +11,11 @@ import logging
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
+
+# Load backend/.env BEFORE importing app modules: config.py reads env vars at
+# import time (CLERK_SECRET_KEY, DATABASE_URL, ...), so this must run first.
+load_dotenv()
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -22,8 +27,6 @@ from .seed import seed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("sirius")
-
-load_dotenv()  # reads backend/.env when present
 
 
 @asynccontextmanager
